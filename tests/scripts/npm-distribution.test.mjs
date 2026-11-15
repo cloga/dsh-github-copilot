@@ -464,3 +464,43 @@ test('normal release requires npm and OIDC without a silent opt-out', async () =
   assert.match(release, /cmp -- "artifacts\/dsh-github-copilot-\$version\.tgz" "release-tools\/artifacts\/dsh-github-copilot-\$version\.tgz"/)
   assert.match(release, /node "release-tools\/scripts\/publish-npm\.mjs" "\$version"/)
 })
+
+test('main release survives a skipped PR-only check without bypassing the gate', async () => {
+  const ci = await readFile(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8')
+  const ready = ci.match(/^  release-ready:\r?\n([\s\S]*?)(?=^  release:)/m)?.[1]
+  const release = ci.match(/^  release:\r?\n([\s\S]*)$/m)?.[1]
+  assert.ok(ready)
+  assert.ok(release)
+  assert.match(ci, /^  documentation-impact:\r?\n[\s\S]*?    if: \$\{\{ github\.event_name == 'pull_request' \}\}/m)
+  assert.match(ready, /needs: \[verify, published-adapter, documentation-impact\]/)
+  assert.match(ready, /test "\$VERIFY_RESULT" = success/)
+  assert.match(ready, /test "\$PUBLISHED_RESULT" = success/)
+  assert.match(ready, /if \[ "\$EVENT_NAME" = pull_request \]; then\s+test "\$DOCUMENTATION_RESULT" = success\s+fi/)
+  assert.match(release, /needs: \[release-ready\]/)
+  assert.match(release, /uses: \.\/\.github\/workflows\/release\.yml/)
+  const condition = release.match(/^    if: \$\{\{ (.+) \}\}$/m)?.[1]
+  assert.ok(condition)
+  const clauses = condition.split(/\s+&&\s+/)
+  assert.deepEqual(clauses, [
+    '!cancelled()',
+    "github.event_name == 'push'",
+    "github.ref == 'refs/heads/main'",
+    "needs.release-ready.result == 'success'",
+  ])
+  for (const [cancelled, event, ref, gate, expected] of [
+    [false, 'push', 'refs/heads/main', 'success', true],
+    [true, 'push', 'refs/heads/main', 'success', false],
+    [false, 'pull_request', 'refs/heads/main', 'success', false],
+    [false, 'push', 'refs/heads/feature', 'success', false],
+    [false, 'push', 'refs/heads/main', 'failure', false],
+    [false, 'push', 'refs/heads/main', 'skipped', false],
+  ]) {
+    const values = {
+      '!cancelled()': !cancelled,
+      "github.event_name == 'push'": event === 'push',
+      "github.ref == 'refs/heads/main'": ref === 'refs/heads/main',
+      "needs.release-ready.result == 'success'": gate === 'success',
+    }
+    assert.equal(clauses.every(clause => values[clause]), expected)
+  }
+})

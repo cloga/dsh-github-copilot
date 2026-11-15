@@ -140,12 +140,22 @@ illustrative shape, **not a completed report or proof that these tools ran**:
 
 Discover the app **now** using `list_apps`, never infer it is running from old
 conversation evidence. Discovery `state` is `running`, `not-running` or `unknown`.
-When actually not running, explicit authorization for the exact launch target
-permits one controlled `start_app`, recorded as `authorized-start-app` with a
-time after discovery. Otherwise use `not-authorized` and stop. `not-needed` and
+When actually not running, check existing direct authorization before asking again.
+An applicable explicit restart/check approval includes launching the exact target;
+it need not be reissued simply because the stop or an earlier start completed.
+Follow [scoped autonomous execution](../AGENTS.md#scoped-autonomous-execution-491):
+at most one same-target recovery start after fresh confirmed-not-running discovery,
+only while still within the user's and tool's consent limits. Never start a
+duplicate, bypass a tool refusal or infer permission from user absence.
+Record the controlled `start_app` as `authorized-start-app` with a
+time after discovery. Without qualifying consent use `not-authorized` and stop
+that action, not independent safe work. `not-needed` and
 `not-authorized` use null launch times. A launch when discovery already reports
 running is invalid: do not create duplicate processes or use shell launch/focus
 workarounds. The reported authorization is not an approval grant.
+Schema 2 represents one observation chain, not an attempt ledger or retry authority.
+If recovery needs a new chain, keep the prior attempts and task-wide budgets in
+session-owned state; a replacement report cannot erase earlier failures or limits.
 
 Welcome `state` is `not-seen` (null time), `safe-skip-observed`, `safe-skip-used`,
 `auth-required` or `unknown` (positive observed time after discovery/launch).
@@ -177,8 +187,12 @@ report-consistency freshness rule, not proof of clock accuracy or a promise the
 application remains running afterwards. Recheck if waiting/CI made it stale.
 
 `interaction` is `clear` or `interrupted`. Interruption remains
-`LIVE_UI_INPUT_INTERRUPTED`; reread the app UI before the same tool/action retry
-under its existing consent and limits. Unapproved launch, missing rediscovery,
+`LIVE_UI_INPUT_INTERRUPTED`; attribute it to the tool, not verified human activity
+or intent. Reread the app UI before the same tool/action retry under its existing
+consent and limits. One tool-required interruption recovery is allowed per method,
+within the unchanged two-method limit; subsequent interruptions remain blocked.
+User disagreement with the report is new context, not a tool-permission override.
+Unapproved launch, missing rediscovery,
 and stale/stopped/welcome-only final state return distinct blocked codes, not
 product failure or success. Existing two navigation-method limits, one panel
 handoff, permission rules, installed/loaded/CI separation and GitHub-first
@@ -246,8 +260,11 @@ observations may be qualified, but final `ok`/`closeEligible` remain false.
 Known different loaded versions return `LIVE_UI_VERSION_PREREQUISITE_UNMET`
 with `request-exact-upgrade-permission`, not automation failure. A matching
 download/checksum does not prove installation or loading. If the exact required
-install/restart needs specific consent, an unavailable user leaves it blocked;
-a broad request to continue acceptance never fabricates that consent.
+install/restart lacks applicable specific consent, an unavailable user leaves it
+blocked; a broad request to continue acceptance never fabricates that consent.
+Do not request the same authorization or emit unchanged waiting replies on each
+continuation. Report the exact blocker once and preserve incomplete requirements;
+host completion reminders do not turn blocked or unverified checks into passes.
 
 ### Formal upgrade source selection
 

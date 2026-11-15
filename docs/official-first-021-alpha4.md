@@ -1,5 +1,8 @@
 # Official-first qualification: DSH 0.2.1-alpha.4
 
+> Historical qualification for this exact release, not current delivery status.
+> See [model compatibility acceptance](./model-compatibility-acceptance.md).
+
 ## Fixed target and admission
 
 Tracking: [#420](https://github.com/cloga/dsh-github-copilot/issues/420),

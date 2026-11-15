@@ -36,9 +36,60 @@ Use native DSH tools for goals, background jobs and scoped subagents. Use local 
 
 These are agent instructions and contract-drift checks, not a filesystem sandbox or a guarantee that every session uses a worktree.
 
+### Scoped autonomous execution (#491)
+
+**Keep progressing within the user's authorization; ask only at a new boundary.**
+Before asking, check the direct user instructions already available for this task.
+Retain the approved target, purpose, side effects, limits and any revocation in
+session-owned task state. Completing one step, receiving a continuation reminder,
+losing a UI window or finding the user unavailable does not by itself erase that
+authorization. A checkpoint records evidence of consent, not a new permission
+grant; respect any tool that requires fresh direct consent or cannot recover it.
+
+Proceed with safe inspection, isolated checks and bounded recovery without routine
+confirmation. An explicit "restart and check" approval covers stopping the approved
+app, starting that same target and inspecting it. If fresh discovery subsequently
+proves it is not running before that check completes, allow at most one recovery
+start under the same authorization, unless the user or tool limits consent to one
+invocation. Do not stop an app that is already running for this recovery, start a
+different target, reinstall, change settings/accounts or broaden the operation.
+Unknown app state calls for read-only discovery, not a guessed launch. Repeated
+exit is a concrete failure to investigate and report, not an unlimited restart loop.
+
+Tool consent, refusal and interruption controls take precedence. Report
+"the tool reported input interruption", not "you were operating the app";
+the report does not independently establish human activity or intent. Reobserve
+through the same supported tool before any permitted retry. An interrupted
+attempt is not proof of navigation or product failure. Preserve attempt budgets
+across continuation and compaction; do not reset them by renaming the task,
+switching tools to evade refusal, or receiving an automated completion reminder.
+
+At a genuine blocker, state the exact missing permission/capability, consequence
+and next action once, then continue any independent authorized work. Do not repeat
+the same question or unchanged waiting message. If no safe work remains, use the
+host's blocked/awaiting-input mechanism when available; otherwise give one truthful
+partial handoff and wait for changed evidence or user input. A completion reminder
+is not new consent, a retry-budget reset or evidence of success. Never mark an
+unverified requirement passed merely to end the loop.
+
+| Situation | Decision |
+|---|---|
+| Approved restart/check; exact app is confirmed stopped | Continue the approved start/check, including the one bounded recovery start when consent permits; do not ask again solely because a previous step finished. |
+| App is already running, target differs, or consent was revoked | Observe the running app; obtain new consent only for the new disruptive action, never infer it from prior installation approval. |
+| Tool reports interruption; user says they did not interact | Keep both facts separate, reread UI and follow the tool's permitted recovery; do not blame the user or bypass the tool. |
+| Genuine approval is missing and the user is absent | Keep that action blocked, do other authorized work, and do not send repeated waiting messages. |
+| Install/import checks pass but loaded version is unknown | Preserve partial status; neither a policy check nor disk evidence proves runtime acceptance. |
+
+This policy is exposed by `agent.mjs describe/plan` and checked for drift, not
+enforced by a runtime permission engine. It grants no new live-profile access and
+does not bypass tool approvals, plugin-only ownership, required reviews or CI.
+
 ## Product and architecture
 
 ### Confirmed product scope (#455, #456)
+
+Current source target: official DSH `0.2.2-rc.3`. The exact source commit and
+dependency versions are recorded in `deployment-baseline.json` and `package.json`.
 
 The native enhancement request (#460/#461) adds only reviewer-scoped Responses
 sampling compatibility and an optional canonical-account hosted-search backend.
@@ -71,8 +122,8 @@ change other paths or perform this sync automatically.
 The user-confirmed direction on 2026-11-14 supersedes conflicting legacy feature
 requirements below: this plugin is a lightweight GitHub Copilot model integration
 for DSH Desktop, not a second agent product. The qualification target is the exact
-official DSH `0.2.2-rc.3` source and published package graph; it is a candidate,
-not supported or delivered until the required CI gates pass.
+official DSH `0.2.2-rc.3` source and published package graph. Each new revision
+requires its own CI and release evidence; a previous release does not qualify it.
 
 DSH owns application login, AgentLoop, model selection, Auto, parent-model
 following, subagents, tools, Web, permissions, history, context/compaction, and
@@ -122,7 +173,24 @@ subagent invocation must be verified on `github-copilot`, not inferred from
 managed-route tests. Record enhancements that cannot safely attach to native
 APIs rather than patching Core or misrepresenting support.
 
-The last qualified release line is official DSH `0.2.1-rc.3`; its source/artifact CI passed on Windows/Linux in run `40098031196`, while Desktop artifacts/signatures remain unverified. DSH `0.2.2-rc.3` is the current requested candidate and has not passed this repository's required CI. The previous thirteen pins remain historical evidence, not current support or release gates. Do not treat either prerelease as a production Core upgrade recommendation. DSH's built-in `llm-pi-ai` owns the canonical GitHub Copilot provider, OAuth, grant format, token exchange, refresh, and normal model transport.
+For official DSH `0.2.2-rc.3`, plugin `0.1.0-alpha.14.dsh.0.2.2.rc.3`
+at `5d82df760683eeae7bb0413c946e4d25daef2049` passed the Windows/Linux
+source/artifact CI in [run 43691055529](https://github.com/cloga/dsh-github-copilot/actions/runs/43691055529)
+and was published to GitHub Releases and npm. This evidence is limited to that
+revision; later changes require their own CI and publication evidence.
+Desktop signatures, installation, loaded state, OAuth and supplier calls are not
+established. The `desktopCandidateQualified: false` contract
+tracks the unverified Desktop artifact/live-acceptance layer, not a failed CI.
+Earlier pins are historical evidence, not current support gates. A prerelease
+is not a production Core upgrade recommendation. DSH's built-in `llm-pi-ai`
+owns the canonical GitHub Copilot provider, OAuth, grant format, token exchange,
+refresh, and normal model transport.
+
+Historical [#483](https://github.com/cloga/dsh-github-copilot/issues/483):
+releases through alpha.12 could reject native schema-default compatibility
+maps, blocking hosted-search proof and reviewer-only temperature omission.
+The alpha.13 release includes a narrow fix; confirm live behavior independently.
+Do not suggest profile edits as a workaround.
 
 The following is a historical architecture inventory, not a requirement to keep
 every surface as a product feature; apply the confirmed scope above when deciding
@@ -229,7 +297,8 @@ Keep the native UI and its canonical quota/search attribution. Existing
 `github-copilot-preview` behavior and Session account overrides remain
 separately plugin-owned legacy behavior; they are not required for native
 switching. Disposal removes only plugin registrations. Native model selections
-and explicit `web.searchProvider=github-copilot-hosted` still need user-selected
+remain native; plugin-only model selections and explicit
+`web.searchProvider=github-copilot-hosted` need user-selected
 replacements before uninstall; missing configured Web backends return
 `WEB_PROVIDER_CONFIGURED_MISSING`, not automatic fallback. Uninstall leaves the
 last selected grant in the native canonical record. No automatic
@@ -239,7 +308,7 @@ Login environments (#424) use only pinned native pi-ai OAuth for GitHub.com and
 validated single-label `tenant.ghe.com` Enterprise Cloud hosts. Preserve host
 binding through identity, duplicate checks, reauthorization and native refresh/
 discovery/request auth. Plugin identity rejects redirects; native OAuth redirect
-control is unavailable in pi-ai 1.1.0 and must not be claimed or emulated with a
+control is unavailable in pi-ai 1.3.0 and must not be claimed or emulated with a
 global Fetch patch/second flow. GHES and Enterprise quota remain unsupported.
 See `src/copilot-login-environment.ts` and `docs/copilot-accounts.md`.
 
@@ -255,9 +324,9 @@ Account display names survive freshness expiry in bounded Host memory, never cre
 
 Additional plugin-owned `github-copilot/account-<opaque-id>` records are written directly by official pi-ai OAuth through public account-bound stores. Only an explicit user-confirmed switch may project a selected normalized grant into the canonical record as specified above; preserve the former canonical grant before the first replacement. Never intercept Core credential reads, introduce a separate credential service, patch Core, or implement another wire/catalog. Native `Models.getAuth()` and DSH `modifyRecord()` remain the refresh and serialization owners.
 
-Settings store only the opaque global account selector and explicit `sessionAccounts` rows. Missing/invalid selectors or records fail explicitly, without another-account fallback. Models manages reauthorization/removal and the global default; Credits may select an already authorized account for this Session's subsequent turns, restore global inheritance or run add-only authorization without selecting it (#305/#318). An explicit choice equal to the default remains explicit. Freeze account ownership before Auto assessment and request admission, holding mutation fences until native `turn/end`/disposal; later Session/default changes never redirect running steps, retries or search. Account-local credentials, metadata, quota, proof cancellation and native adapter composition must remain isolated. Keep one public adapter/controller registration, with no second wire/catalog or Core changes. Reauthorization/removal of a pinned record stays blocked; global-default selection may continue independently.
+Settings store only the opaque global account selector and explicit `sessionAccounts` rows. Missing/invalid selectors or records fail explicitly, without another-account fallback. Models manages account authorization and the global default; Credits may select an already authorized managed-route account for this Session's subsequent turns or restore global inheritance (#305/#318). An explicit choice equal to the default remains explicit. Freeze account ownership before request admission, holding mutation fences until native `turn/end`/disposal; later Session/default changes never redirect running steps, retries or search. Account-local credentials, metadata, quota, proof cancellation and native adapter composition must remain isolated. Keep one public adapter/controller registration, with no second wire/catalog or Core changes. Reauthorization/removal of a pinned record stays blocked; global-default selection may continue independently.
 
-Account selection shows the current account and a compact Switch dropdown with no account search, never a flat unbounded account list. Mark the current choice, scroll long lists internally and place Add at the bottom. Saved-account reauthorization/removal remains in a separate management disclosure. One Models Manage disclosure contains account management and cross-account exact-ID model preferences. Continuation settings belong beside account controls. Persist the initial default-on epoch and later global changes with path-level CAS; only unseeded Sessions born after a known epoch inherit it, never retroactively enroll existing/unknown/forked histories. Normal Client continuation uses only the persistent Session policy; no next-turn-only or temporary-recovery duration choices. Explicit-off account changes require persistent-enable/keep-off/cancel choices, then fresh account revision readback before CAS. Exact replay failures offer loss-disclosed persistent Enable/Cancel when off, diagnostics without repeated authorization when on. Missing policy evidence fails explicitly, never a temporary authorization fallback. Retain old next-turn/recovery strict Remote contracts and Host admission for compatibility; failure-evidence expiry does not disable the persistent policy. No automatic send/retry, history writes, private Settings navigation or inferred encrypted account origin. The approved synthetic mock and current navigation limit are documented in [account management](./docs/account-management-experience.md).
+Account selection shows the current account and a compact Switch dropdown with no account search, never a flat unbounded account list. Mark the current choice and scroll long lists internally; Add and saved-account reauthorization/removal remain in Models, not Credits. One Models Manage disclosure contains account management and cross-account exact-ID model preferences. Continuation settings belong beside account controls. Persist the initial default-on epoch and later global changes with path-level CAS; only unseeded Sessions born after a known epoch inherit it, never retroactively enroll existing/unknown/forked histories. Normal Client continuation uses only the persistent Session policy; no next-turn-only or temporary-recovery duration choices. Explicit-off account changes require persistent-enable/keep-off/cancel choices, then fresh account revision readback before CAS. Exact replay failures offer loss-disclosed persistent Enable/Cancel when off, diagnostics without repeated authorization when on. Missing policy evidence fails explicitly, never a temporary authorization fallback. Retain old next-turn/recovery strict Remote contracts and Host admission for compatibility; failure-evidence expiry does not disable the persistent policy. No automatic send/retry, history writes, private Settings navigation or inferred encrypted account origin. The approved synthetic mock and current navigation limit are documented in [account management](./docs/account-management-experience.md).
 
 Use hidden volatile `sessionAccounts` with path-level SettingsForms CAS, readback and restart evidence. Session account Remotes use explicit viewed IDs, native Agent lookup and strict codecs, never automatic Client scope. Credits uses that Session's account for identity/quota, rejecting mismatched or late results. Historical Account is an additive assistant-actions disclosure beside native Usage, captured only after a real ordinary native chunk; bounded Host-lifetime evidence becomes unknown after restart/eviction and is never reconstructed from today's settings. No new durable events, history/default/model/Usage writes, automatic account fallback, replay deletion or message retry. See [the requirements and acceptance gates](./docs/copilot-accounts.md).
 
@@ -272,8 +341,14 @@ Alpha.25 admits native `subagent/descriptor` v3, already v3 in the retained rc.1
 - `src/index.ts`: authorization bootstrap, dependency-gated Host entry, settings registration, listener, and `ctx.web` provider composition.
 - `src/authorization-controller.ts`: sign-in/status/sign-out and route mutation.
 - `src/copilot-grant.ts`, `src/copilot-auth.ts`: strict grant normalization and narrow pi-ai `CredentialStore` adapter; canonical compatibility and explicitly selected account records follow the account-binding contract.
-- `src/client.ts`: `settings.models.provider-card` account UI, a `plugins.bundle.config` provider-routing page with Models/footer/section fallback, and independently managed optional Chat integration.
-- `src/web-search-routing-config.ts`, `src/web-search-routing-card.ts`: plugin-owned cross-provider live routing settings and the plugin-detail control surface. The user-facing page exposes only primary and fallback providers. Routing is stored directly under the existing `github-copilot` settings namespace at `searchRouting`, mutating both leaves via nested paths `['searchRouting', 'searchProvider']` and `['searchRouting', 'defaultSearchProvider']` in one CAS call; legacy separate routing namespaces are read as fallback only. Revisions coordinate between routing and legacy `searchModel` resets so subsequent edits do not false-conflict. Hosted-search safety settings remain schema-owned rather than a routine tuning form. The Models fallback retains routing only.
+- `src/client.ts`: account and model controls, the native search-model setting,
+  and additive optional Chat integration through public slots.
+- `src/native-copilot-access.ts`, `src/native-copilot-search.ts`,
+  `src/native-search-model-card.ts`: proof-bound canonical hosted search in
+  DSH's existing Web service and its explicit model choice.
+- `src/web-search-routing-config.ts`, `src/web-search-routing-card.ts`: retained
+  legacy routing code and compatibility exports; the old routing UI and facade
+  are not mounted current behavior. Never reactivate them implicitly.
 - `tests/fixtures/reasoning-presentation-core.fixture.ts`: native blank-reasoning rendering acceptance and independent Auto/Usage mount evidence. Do not restore the retired plugin renderer/provenance projection or change messages, replay indexes or Usage.
 - `src/remote.ts`: Typert Remote contribution. Never add credential payloads here.
 - `src/copilot-usage-host.ts`, `src/copilot-usage-remote.ts`, `src/copilot-usage-card.ts`, `src/copilot-usage-ui.ts`: bounded Host quota snapshots, an independent strict namespace and reversible composer presentation. No real account fetches in tests, private Client store/DOM injection, quota-specific credential owner or general model wire.
@@ -292,11 +367,12 @@ Alpha.25 admits native `subagent/descriptor` v3, already v3 in the retained rc.1
 - `src/model-protocol.ts`: explicit Core capability detection and conservative legacy fallback.
 - `src/responses-reasoning.ts`, `src/responses-reasoning-text.ts`: selected-model effort mapping and public summary assembly.
 - `src/tool-schema-compat.ts`: Copilot-only prompt-assembly filter for unusable escalation arguments; Goal schemas remain native.
-- `src/plan.ts`: Copilot-only, fail-closed hosted-search candidate lifecycle.
-- `src/auto-assessment-evidence.ts`: bounded request-local semantic classifier milestones copied into strict ephemeral turn evidence; no prompts, replay, credentials or error bodies. Total includes preparation; adapter start and first text are not HTTP dispatch/byte timings. Keep one configured monotonic deadline (30s default, 1000–120000ms) checked at preparation/native request/result boundaries and 128-token compact output; delayed timer settlement is not a real-time guarantee. The user-approved budget trial is not calibrated latency or proof of past timeout causes. Empty classifier setting retains metadata-driven automatic selection; a nonempty exact account ID preserves proof/exclusion/text/headroom guards, never a virtual Auto ID or silent alternate-model fallback. Both native volatile Config leaves affect future assessments and preserve admitted turns. Prefer eligible supplier-advertised reasoning-off classifiers, but request off only when supplier and public prepared-model effort agree; unsupported native controls stay unchanged. No guessed optimal/latency ranking, benchmark requests, adaptive timeout, cooldown or cross-turn cache without reviewed observations.
-- `src/probe.ts`: bounded native-search capability proof.
-- `src/wire.ts`, `src/wire-anthropic.ts`: inline hosted-search streaming.
-- `src/traditional-search.ts`: `github-copilot-hosted` `ctx.web` provider.
+- `src/plan.ts`, `src/probe.ts`, `src/wire.ts`, `src/wire-anthropic.ts`,
+  `src/traditional-search.ts`: retained historical hosted-search and routing
+  implementation; current registration is owned by `src/native-copilot-search.ts`.
+- `src/auto-assessment-evidence.ts`: retained historical classifier evidence;
+  plugin-owned Auto assessment and routing are not mounted. Preserve bounded,
+  content-free evidence without reactivating them.
 - `src/serialize.ts`, `src/sse.ts`, `src/failure.ts`: protocol conversion and bounded error handling.
 - `src/response-error-body.ts`, `src/request-body-timeout.ts`, `src/request-upload-evidence.ts`: bounded clone-only HTTP error evidence and safe managed upload-timeout guidance. Request-scoped public Node diagnostic events supply numeric local body-write/header/ALPN evidence only after an exact verified `408/user_request_timeout`; absent events, multiple native requests and work limits stay explicit. Always dispose subscriptions when Fetch settles, without changing its arguments, Response/errors, dispatcher, proxy or retry owner. Local body-write completion is not upload duration, kernel ACK, supplier receipt or execution; its absence does not prove incomplete upload. Native failure classification/retry metadata stay unchanged; final JSON bytes are not tokens or a payload limit. A separate explicit opt-in compression setting is default-off and never activated by a 408; never infer overflow, auto-compact, trim history, switch models or add retries from a 408.
 - `src/responses-request-compression.ts`: asynchronous `node:zlib` gzip at `Z_BEST_SPEED` only for exact account-proven official Copilot HTTPS `/responses` JSON POSTs through the existing public Fetch seam. `github-copilot.responsesRequestCompression` defaults false; enforce the 256 KiB minimum, 32 MiB compression-work bound and both 5%/4 KiB savings thresholds. Skips retain the original request with a fixed reason, and cancellation/account/deadline fences run before dispatch. No custom Fetch, other protocol, explicit `auto`/WebSocket, DNS/proxy/dispatcher changes, context-admission or replay changes, resend after an encoding rejection, or new retry. Gzip is wire encoding, not compaction or proof of supplier receipt.
@@ -309,6 +385,10 @@ Alpha.25 admits native `subagent/descriptor` v3, already v3 in the retained rc.1
 - `lib/`: generated release output; never edit it.
 
 ## Non-negotiable invariants
+
+The following two classifier and context-projection paragraphs are historical
+constraints on retained plugin Auto code, not a current runtime feature or
+authorization to reactivate it.
 
 Auxiliary classifier disable proof accepts explicit supplier `off` or the
 selected protocol's native `none` (Responses/Completions) or `disabled`
@@ -351,12 +431,17 @@ evidence is content-free and ephemeral, never a new persistent population.
 - Copilot OAuth grant writes must rebuild only pi-ai's documented provider fields as a fresh plain JSON object; unrelated extension values never reach DSH credential storage.
 - Settings changes are path-level. Never replace the whole `llm-pi-ai` section or unrelated provider profiles.
 - Native sign-out deletes only `llm-pi-ai/github-copilot` and keeps plugin account records, the selector and route settings. A selected plugin account remains saved and must be explicitly applied again after sign-out; a missing selected slot fails explicitly, never automatic canonical fallback.
-- Hosted search serves either an eligible initiating `github-copilot` / managed `github-copilot-preview` route, or provider-owned independent search selected by the web-search router. Independent search preserves a nonempty explicit `searchModel` override; otherwise the Host considers at most three eligible Responses models from current account route facts, in deterministic ID order, without a static model list. Metadata alone is not search proof, and the final user query is sent once after candidate proof, never replayed across models. Both paths require an account-available model and supported search protocol; custom inline transport remains legacy-canonical only. Never substitute the global chat default or another Session's identity. The default `probe: true` path requires successful capability proof; `probe: false` is an explicit trust override, not an implicit fallback. Any request containing a file block, including one nested in tool-result content, must bypass the custom wire through `next()` so Core retains file projection ownership.
+- The explicitly selected `github-copilot-hosted` backend uses the canonical native Copilot account and account-proven Responses models also present in the native catalog. Its configured model or deterministic first eligible model receives one fixed capability probe followed by one user query, without fallback or replay. Enforce the 25-second deadline, four-operation limit and account/configuration/disposal fences; metadata alone is not search proof. The old plugin router and custom inline transport are historical, not active alternatives. If that legacy wire is ever deliberately restored, file blocks, including nested tool-result files, must still delegate through `next()` so Core owns file projection.
 - Misconfiguration and API drift fail loudly with a named missing seam. Do not fall back to process-local secrets or implicit machine state.
 - Host, Client, and Remote package entries must stay independently buildable and exported.
 - The package must self-provide authorization when Core omits it, reuse an existing service without duplicate registration, and never activate the integration body before authorization is available.
 
 ## Session and migration ownership (V3, alpha.8, #99)
+
+The following legacy managed-route/search design is historical. The plugin
+router and managed Auto are retired, and removing the canonical native route is
+not the current direction. Do not execute the old migration proposal; use the
+confirmed scope above and the [current README](./README.md).
 
 - One global Host account supplies many models; selected/history-backed Sessions retain independent model context. Auto-mode native search derives from the captured initiating Session's effective request-header/config or explicit `GenerateOptions`, never another Session or future global default C. Fixed/fallback Copilot search uses the explicit provider-owned `searchModel` override when nonempty, otherwise bounded automatic account-owned Responses selection; it never borrows the Chat model, another Session's selection or the global chat default. `Agent.options` is the activation seed, not selected Session-model evidence; `installModelSelection` overrides request/assembly; Core records the effective `Session.requestHeader().config` before tools. Without proven request context, traditional search is unavailable. A newly selected pending model must not reuse the old request header as current prompt guidance. Per-owner plan caches prevent different-model A/B reuse/cancellation; metadata remains shared.
 - The ordinary Web search card selects only the primary and fallback providers and saves both routing leaves in one CAS mutation in the existing `github-copilot` namespace at `['searchRouting', 'searchProvider']` and `['searchRouting', 'defaultSearchProvider']`. It must not depend on Copilot model discovery, account credentials or a model selection to save routing. Capture traced Settings/routing Remote faces once per UI registration so parent renders do not reset drafts. Preserve a legacy nonempty `searchModel` override; display it read-only and reset it only through an explicit, separate narrow CAS setting `searchModel: ''`, never as a routing-save side effect. Because routing and `searchModel` share the `github-copilot` namespace and revision, successful mutation of either updates the other's expected revision to avoid false CAS conflicts while preserving unsaved drafts. Saving settings does not prove hosted-search capability.
@@ -367,6 +452,9 @@ evidence is content-free and ephemeral, never a new persistent population.
 - Code does not automatically migrate settings, credentials or history; only a user-confirmed account switch updates the canonical credential as described above. After plugin release, approved Ops migration may compare-and-swap only the reviewed user-native `llm-pi-ai.providers.github-copilot` path after ruling out base/journal conflicts, then read back settings and registry. No hidden groups, bulk rewrites or credential copying outside the explicit switch. Search allowlist updates to the managed ID require a separate reviewed Ops edit; never silently broaden old lists.
 
 ## Live migration readiness (alpha.9, #101)
+
+Historical readiness evidence only: it is not an authorization or current plan
+to remove the native provider or migrate settings.
 
 - Use no-argument `githubCopilot.migrationStatus()` for fresh live-Agent evidence; generic `session/list` may be stale and plugin inventory alone has no loaded-version evidence. `src/migration-status.ts` reads public leaves synchronously and reports loaded build `plugin.name/version`, `protocolVersion: 1`, `observedAt`, capability flags and completeness flags. Missing/unknown/incomplete is not safe absence.
 - Capabilities are `agentsList`, `sessionProjections`, `settingsCas`, `providerRegistry`, `defaultSelection`; `complete.sessions/defaultSelection/routes` describes evidence completeness, not migration approval. Effective selection uses pending projection, request-header config, then default only for genuinely empty Sessions with known projection state. Running `activeRequestSelection` is the latest recorded header, not proven in-flight LLM work. Native effective configuration and native/managed registration are separate flags.
@@ -392,9 +480,22 @@ The retained upstream baselines and current qualification target are:
 - Official tag `dsh-v0.2.0-rc.2`, commit `639ed015397290b3745d163aafe02ffee4aa3f84`; the signed installed Windows Desktop descriptor identifies the rc.2 shared peer graph.
 - Official tag `dsh-v0.2.1-alpha.4`, commit `86a402200d95fecef4529d969836f1fe13c6cb0d`; historical alpha.16 source/npm qualification only.
 - Official tag `dsh-v0.2.1-alpha.5`, commit `1517a4dbca0a2789ff1d41ba439600f8547d23fa`; exact source/npm qualification is separate from unverified candidate Desktop artifacts/signatures.
-- Official tag `dsh-v0.2.1-rc.3`, commit `1f81c047fc48fa190a683e469daa699857e9afe8`; prerelease target with a public `WebRuntime` Volatile-provider contract change. Source and published artifacts require exact CI qualification; Desktop artifacts/signatures remain unverified.
+- Official tag `dsh-v0.2.1-rc.3`, commit `1f81c047fc48fa190a683e469daa699857e9afe8`; historical prerelease with a public `WebRuntime` Volatile-provider contract change.
+- Official tag `dsh-v0.2.2-rc.3`, commit `38a6a5c965aa99ab525161efb7cc5cf1fe62fced`; current source and published-package qualification target.
 
-The release admission, development dependency and CI targets are exact official `0.2.1-rc.3`; the earlier thirteen pins remain historical evidence only. CI runs unchanged tagged-source and isolated exact published-npm-artifact fixtures on Windows and Linux. Public APIs require pi-ai `1.1.0`, Cordis `4.0.5`, cordis-plugin-loader `1.0.6`, schemastery `3.18.5` and storage-domain-compatible Zod `4.4.3`. The current fixture must await serialized `agent/created`, avoid new synchronous Session-history reads, and preserve MCP/PTC/workflow/Sandbox/Shell/image-offload/Team ownership. Native gateway fixtures bind an explicit public owner Peer and interactive Client carrier; Session-controller fixtures register native resources. Synthetic identities never authorize live access. Neither source nor synthetic tests prove live endpoints, plugin activation, publication or loaded runtime state. See the [rc.3 qualification evidence](./docs/official-first-021-rc3.md); passing source/artifact CI does not authorize Core implementation rewrites or experimental durable records.
+Release admission, development dependencies and CI target the exact current
+Core in `package.json`; prior pins are historical. The exact pi-ai,
+Cordis, loader, schemastery and Zod versions also come from package metadata.
+CI runs unchanged tagged-source and isolated published-artifact fixtures on
+Windows and Linux. Fixtures await serialized `agent/created`, avoid new
+synchronous Session-history reads, and preserve MCP/PTC/workflow/Sandbox/Shell/
+image-offload/Team ownership. Native gateway fixtures bind an explicit public
+owner Peer and interactive Client carrier; Session-controller fixtures register
+native resources. Synthetic identities never authorize live access. Source or
+synthetic tests alone do not prove live endpoints, plugin activation,
+publication or loaded runtime state. The [0.2.1-rc.3 review](./docs/official-first-021-rc3.md)
+is historical; passing source/artifact CI never authorizes Core rewrites or
+experimental durable records.
 
 These pins document compatibility evidence. They do not authorize creating another controlled Core patch or making one a prerequisite for new plugin fixes.
 
@@ -412,9 +513,9 @@ These pins document compatibility evidence. They do not authorize creating anoth
 - Remote results: the nine ordinary authorization/model-preference methods retain the Zod v4 `GitHubCopilotAuthorizationView` strict codec required by rc.2 and accepted by rc.1. The tenth no-argument `migrationStatus()` method has a separate strict `GitHubCopilotMigrationStatus` codec; it does not change the ordinary auth contract.
 - Single-model saves use the additive `setModelExcluded(modelId, excluded)` Remote with an independent strict `GitHubCopilotModelPreferencesView` result. Preserve the ten existing descriptor identities/codecs. Do not read credentials, discover models or enumerate Sessions on this mutation path; confirm native CAS persistence before returning.
 
-When upgrading DSH or pi-ai, inspect the exact tagged public exports and update the baseline, compatibility guard, tests, and docs together. Apply the **official-first policy**: compare each customization's purpose against exact official source/contracts, classify complete/partial/unverified support, choose retain/migrate/retire, and record the remaining gap plus a concrete retirement trigger. Unverified parity is not evidence of absence. Prefer official behavior only after configuration/data migration, safety and runtime acceptance are reviewed; remove redundant paths and their obsolete tests without losing user-visible acceptance coverage. The current comparison is [official-first alpha.2](./docs/official-first-016-alpha2.md).
+When upgrading DSH or pi-ai, inspect the exact tagged public exports and update the baseline, compatibility guard, tests, and docs together. Apply the **official-first policy**: compare each customization's purpose against exact official source/contracts, classify complete/partial/unverified support, choose retain/migrate/retire, and record the remaining gap plus a concrete retirement trigger. Unverified parity is not evidence of absence. Prefer official behavior only after configuration/data migration, safety and runtime acceptance are reviewed; remove redundant paths and their obsolete tests without losing user-visible acceptance coverage. The [alpha.2 comparison](./docs/official-first-016-alpha2.md) is historical, not the current release qualification.
 
-For alpha.25, source markers, local rc.1-backed focused tests and fifteen scoped exact-source runtime tests passed (alpha.2 contracts 8, Remote 1 and Session-context 6). Full local `pnpm verify` passed: 1373 Vitest tests with 2 expected skips, 176 tooling tests, typechecks, build and package smoke; pack/tarball verification passed. The scoped tests use a supplemental resolver with official TypeScript `6.0.3`, declared `mime-types@3.0.2` and `ws@8.21.0`, and shared Zod `^4.4.3`, without source/dependency patches, not the full official-root-helper closure. Broad frozen dependency installation is blocked by the configured mirror's HTTP 404 for `node-addon-require-builtin@0.1.6`, and candidate CI qualification has not executed. Keep these limits separate from live Desktop, published-artifact, OAuth and model-call compatibility; none is claimed.
+For historical alpha.25, source markers, local rc.1-backed focused tests and fifteen scoped exact-source runtime tests passed (alpha.2 contracts 8, Remote 1 and Session-context 6). Full local `pnpm verify` passed: 1373 Vitest tests with 2 expected skips, 176 tooling tests, typechecks, build and package smoke; pack/tarball verification passed. The scoped tests used a supplemental resolver with official TypeScript `6.0.3`, declared `mime-types@3.0.2` and `ws@8.21.0`, and shared Zod `^4.4.3`, without source/dependency patches, not the full official-root-helper closure. That historical local mirror lacked `node-addon-require-builtin@0.1.6`; the observation is not the current CI status. Keep historical limits separate from live Desktop, published-artifact, OAuth and model-call compatibility.
 
 ## Code and documentation conventions
 
@@ -467,8 +568,9 @@ plugin version. Attempt safe authorized checks on an already-running Desktop;
 unreliable local npm is not a reason to skip them. Use existing computer-use
 tools, never shell activation or a repository script as an App controller.
 Begin with current app discovery, not a historical "already open" claim. If not
-running, start only with explicit launch authorization via controlled `start_app`
-using the exact approved target; then verify discovery and fresh UI, not merely
+running, start only with explicit launch authorization (including an applicable
+restart/check approval retained under scoped autonomous execution) via controlled
+`start_app` using the exact approved target; then verify discovery and fresh UI, not merely
 the launch receipt. Do not start an already-running app again. A welcome screen
 is not automatically an auth blocker: inspect an official safe skip first. DSH's
 Add API Key -> Set up later path does not submit/store a key or authenticate;
@@ -476,17 +578,22 @@ use it only when actually exposed, within tool permission rules. Never infer
 Copilot account invalidity from welcome UI or bypass real authentication/warnings.
 Welcome dismissal may replace the window: rediscover app/window and read its fresh
 tree before acting, rather than retrying a stale window on an empty immediate diff.
-Honor user-input interruption: reread UI before retrying the same permitted action.
+Honor tool-reported input interruption without inferring human intent: reread UI
+before retrying the same permitted action.
 Before handoff, freshly discover the current app and inspect the target panel or
 workspace, reporting the observation time only; past success does not establish
 current running state or guarantee the app remains running later.
 An action receipt or empty immediate diff is not a navigation failure: obtain
 a fresh post-action `get_window_state` observation first. Keep one attempt per
-supported navigation method, at most two different methods, then report precise
+supported navigation method, at most two different methods. A tool-required
+interruption recovery may retry that same method once after fresh observation;
+it is not a new method or an unlimited retry exemption. Then report precise
 `automation-blocked` and request the named panel once. User absence or an
 unanswered request never grants permission or proves the panel opened.
 App unavailable, restart/install, account/OAuth/paid actions outside explicit
-permission stay blocked. Do not repeat exhausted methods on ordinary continuation.
+permission stay blocked; first check whether the needed action is already covered
+by scoped authorization. Do not repeat exhausted methods on ordinary continuation
+or repeat an unchanged blocker message.
 Record only fixed action/outcome codes, numeric times and version/source facts;
 never upload identities, credentials or conversation content. Unknown loaded
 version permits qualified observations only, not a version-specific fix claim.
@@ -548,7 +655,17 @@ Then run `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.
 
 If a historical/approved local installation attempt is blocked solely by an enterprise registry or network policy while GitHub Actions can obtain unchanged pinned packages from an authorized official registry, record it as **local validation blocked**, not passed. Do not repeat dependency recovery, switch sources, or expand permissions. A PR may proceed with that limitation disclosed; the complete required GitHub CI matrix, including install, tests, build and package checks, is authoritative before merge. Never weaken or skip CI, substitute dependencies, bypass organizational restrictions, claim unrun local gates succeeded, or tag/release a revision whose required CI is not green. If CI has the same failure, resolve it through approved infrastructure rather than bypassing it.
 
-The release CI matrix targets only exact official `0.2.1-rc.3` on Windows and Linux; earlier pins are not support gates. It runs the unchanged tagged-source runtime fixture, optional native Chat fixture, exact published-artifact adapter fixture and all 28 native reviewer regressions without skips. This is a required gate, not evidence that an unexecuted qualification passed. `verify:upstream` is static seam-marker evidence. `verify:controlled-core` exclusively installs a temporary config fixture, refuses an existing target, and removes only its own file; it is not full plugin activation. Published-artifact synthetic adapter fixtures do not prove live provider transport. The release job must wait for the complete reusable CI matrix on the tagged revision, then verify its own packed bytes before publishing.
+The release CI matrix targets only the exact current Core on Windows and Linux;
+earlier pins are not support gates. It runs the unchanged tagged-source runtime
+fixture, optional native Chat fixture, exact published-artifact adapter fixture
+and the reviewer regressions required by the current CI workflow without skips.
+This is a required gate, not evidence that an unexecuted qualification passed.
+`verify:upstream` is static seam-marker evidence. `verify:controlled-core`
+exclusively installs a temporary config fixture, refuses an existing target,
+and removes only its own file; it is not full plugin activation. Published-artifact
+synthetic adapter fixtures do not prove live provider transport. The release job
+must wait for the complete reusable CI matrix on the tagged revision, then
+verify its own packed bytes before publishing.
 
 ### Evidence and side effects
 
@@ -567,7 +684,7 @@ The release CI matrix targets only exact official `0.2.1-rc.3` on Windows and Li
 | Last metadata display | Same-account data may display during TTL refresh/loading/error but never authorize requests; credential/account/permission invalidation or proof expiry immediately revokes evidence; TTL does not extend tokens |
 | Last-success timestamp (alpha.7, #97) | Show `snapshot.discoveredAt` once beside count outside Manage: English relative text, full LOCAL date/time/zone tooltip and accessible semantic `time`; missing/invalid/no account hides it, future uses absolute text. Pending/error retains last success, successful refresh replaces it and sign-out clears it. One mounted 60s display-only timer makes no RPC/status/discovery calls and is disposed with timestamp/unmount; cache/discovery lifecycle unchanged |
 | Definitive `UNKNOWN_MODEL` | One bounded metadata refresh, never message replay or automatic model switching; generic HTTP/network errors are not guessed to be unknown models |
-| README screenshot | `copilot-search-routing.png` shows the current built plugin-detail routing card with synthetic providers in an isolated browser fixture. It proves only the current presentation surface, not live credentials, provider availability, search success or Desktop activation. |
+| Historical routing screenshot | `copilot-search-routing.png` records a retired plugin-detail routing card with synthetic providers; it does not depict the current UI or prove live search or Desktop activation. |
 | Host attach/restart | Does not repair or rewrite the stored native profile; search proofs stay lazy and do not start at attach |
 | Background credential/reset notifications | Invalidate evidence and clear Client state with read-only status; no forced discovery on every token event; next Models open/use ensures metadata |
 | Eligible model/search request | May resolve/refresh credentials and run bounded capability proof; changes during proof must fail closed rather than reuse another account's proof |
@@ -576,6 +693,10 @@ The release CI matrix targets only exact official `0.2.1-rc.3` on Windows and Li
 Never say GPT-6/search works merely because settings, typecheck or a package import passes. Report the layers separately. Keep synthetic credentials in fixtures; no real sign-in, logout or API call just to produce test evidence. Do not recommend disabling capability proof as a routine repair. Preserve logs locally and report only redacted facts; route security-sensitive findings through SECURITY.md.
 
 ## Changing capabilities
+
+The plugin-owned Auto and parent-follow implementations described in historical
+paragraphs below are not mounted current behavior. Preserve retained data and
+compatibility code, but do not reactivate their routing or UI.
 
 Auto routing, assessment, cost weights, continuity and assistance changes must
 first read and validate `docs/auto-iteration-review.json` using
@@ -645,7 +766,7 @@ Retain native Host agent lookup/access checks and strict codecs. Failed reads
 must remain distinct from successfully read missing evidence; Retry reads the
 same turn only and never replays inference. See #249.
 
-Parent-model following uses the profile-wide `github-copilot.followParentModel` switch (default false), with a single control in the plugin-detail page (#234). Never require per-session enrollment for the ordinary experience. Preserve legacy `parentModelFollow` bindings independently, including when the broad switch is off. `src/parent-model-follow.ts` and the Auto Host integration use public projections and per-turn scoped routing, never descriptor/history/default writes. Child-owned explicit selections win; enabling authorizes replacement of creation-time route snapshots, not removal of later picker history. Only supported native spawn children and managed Copilot parents participate; roots, other providers, fork descriptors and historical dedicated policies remain native. Missing eligible parent evidence fails explicitly. Settings changes preserve admitted turns, and Client saves use one path-level CAS without credentials/discovery. See `docs/parent-model-follow.md` for requirements/mockup and `docs/automatic-model-routing.md` for exact-source evidence.
+Historical parent-model following used the profile-wide `github-copilot.followParentModel` switch and a plugin-detail control (#234). That routing and control are retired; DSH owns current parent/child behavior. Preserve legacy `parentModelFollow` data without reactivating the plugin policy, mutating descriptors/history/defaults or silently migrating settings. See `docs/parent-model-follow.md` and `docs/automatic-model-routing.md` for historical evidence.
 
 Model preferences must survive the Client's owned-field projection before strict decoding. `excludedModelIds` is a hidden volatile Config leaf, read via `readInlineConfig`; exercise native SettingsForms CAS, fiber preservation and restart persistence, not only map-backed settings mocks. Missing preference settings leave model rows read-only with named diagnostics and status-only Retry. Unknown exclusion state is not an empty exclusion set. Discovery diagnostics stay in a separate Manage disclosure. Selected models are excludable without scanning Sessions/defaults; the legacy `lockedModelIds` wire leaf stays empty. Check exclusion at new-turn admission through public `agent/request`, preserving only the same Session/turn/model and exact native request signal for subsequent steps/retries. Clear admission on `turn/end`. Direct/unbound requests and new turns remain excluded; never rewrite selections/history or switch models silently. Account/token/metadata/cancellation guards remain independent and revocable.
 
@@ -657,7 +778,16 @@ Auto intent continuity (#293) uses the strict `githubCopilotAutoModelIntent` pub
 
 1. Identify the owning seam using `agent-contract.json`; do not duplicate an upstream owner.
 2. Add or update focused tests before changing deployment claims.
-3. Update both READMEs when user behavior, setup, migration, or boundaries change.
+3. Review both READMEs and every affected domain document against source for
+   user behavior, setup, migration, limitations, and evidence changes. Update
+   both READMEs and the relevant `docs/*.md` in the same PR for user-facing
+   changes, beyond version-only edits. For unchanged behavior, explain why.
+   The PR `Documentation impact` declaration is checked against changed files
+   and rechecked when edited; it cannot judge semantic accuracy or relevance.
+   An agent or human reviewer must check those claims against source and retain
+   dated historical evidence. Record findings in the PR. This is not a new
+   human-only approval gate; agents may complete the review and proceed when
+   actual GitHub review/CI requirements and authorization boundaries are met.
 4. Update `deployment-baseline.json`, `agent-contract.json` and their verifiers when the corresponding contract changes.
 5. Build before package smoke; never hand-edit `lib/`.
 

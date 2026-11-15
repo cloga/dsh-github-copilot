@@ -3,6 +3,7 @@ name: CI
 on:
   workflow_call:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
   push:
     branches:
       - main
@@ -130,6 +131,25 @@ jobs:
           version="$(node -p "require('./package.json').version")"
           pnpm exec node scripts/verify-install-smoke.mjs --archive "artifacts/dsh-github-copilot-$version.tgz" --host-modules node_modules
 
+  documentation-impact:
+    name: documentation-impact
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Fetch pull-request base
+        run: git fetch --no-tags origin "$GITHUB_BASE_REF:refs/remotes/origin/$GITHUB_BASE_REF"
+      - name: Check documentation impact against the PR diff
+        run: node scripts/verify-documentation-impact.mjs
+
   published-adapter:
     name: Published adapter (${{ matrix.os }})
     # The isolated npm fixture has no project workspace configuration.
@@ -185,7 +205,7 @@ jobs:
 
   release-ready:
     name: release-ready
-    needs: [verify, published-adapter]
+    needs: [verify, published-adapter, documentation-impact]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -195,9 +215,14 @@ jobs:
         env:
           VERIFY_RESULT: ${{ needs.verify.result }}
           PUBLISHED_RESULT: ${{ needs.published-adapter.result }}
+          DOCUMENTATION_RESULT: ${{ needs.documentation-impact.result }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           test "$VERIFY_RESULT" = success
           test "$PUBLISHED_RESULT" = success
+          if [ "$EVENT_NAME" = pull_request ]; then
+            test "$DOCUMENTATION_RESULT" = success
+          fi
       - uses: actions/checkout@v6
         if: ${{ github.event_name == 'pull_request' }}
         with:
@@ -213,7 +238,8 @@ jobs:
 
   release:
     needs: [release-ready]
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.release-ready.result == 'success' }}
+    # A PR-only ancestor is skipped on pushes; keep the explicit green gate without implicit skip propagation.
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.release-ready.result == 'success' }}
     permissions:
       contents: write
       id-token: write

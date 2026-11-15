@@ -95,8 +95,8 @@ returning models reuse them without becoming selected. Newly discovered models
 are enabled unless excluded, but must satisfy authenticated metadata and admission
 checks. Unknown/stale availability is not verified availability or definitive
 absence. Do not discover every account solely to render a union catalog.
-Fixed unavailable selections require explicit user correction; Auto uses only
-eligible unexcluded models of the admitted account.
+Fixed unavailable selections require explicit user correction. Current Auto
+selection is DSH-owned; the historical plugin Auto policy is retired.
 
 ## Continuation and explicit-off recovery
 

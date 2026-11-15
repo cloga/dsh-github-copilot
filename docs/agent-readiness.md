@@ -2,8 +2,24 @@
 
 > **Historical audit:** dated follow-ups preserve plans and validation blockers
 > at the time, not current setup requirements or release status. Start with
-> [AGENTS.md](../AGENTS.md), current README and the
-> [rc.2 review](./official-first-020-rc2.md).
+> [AGENTS.md](../AGENTS.md), the [current README](../README.md) and
+> [model compatibility acceptance](./model-compatibility-acceptance.md).
+
+## Current documentation-impact follow-up
+
+For PRs changing runtime, tooling, release-significant metadata, workflows or
+the agent contract, `documentation-impact` requires a reviewable PR declaration.
+Choose `Behavior: user-facing` or `Behavior: unchanged` and explain the impact.
+For user-facing changes, list both changed READMEs and at least one changed
+`docs/*.md` file; version-only edits do not satisfy the check. It re-runs on PR
+body edits and `release-ready` requires it for PRs. Documentation-only changes
+without those paths do not require a declaration, and push/release workflows do
+not consume a PR body.
+
+The check verifies the declaration's structure and committed file changes, not
+whether the chosen documents are relevant, correct or complete. Reviewers must
+compare source behavior, limitations and evidence with every affected document.
+Retain explicitly labeled historical records rather than rewriting old results.
 
 Tracking: [#73](https://github.com/cloga/dsh-github-copilot/issues/73). Audited baseline: `d9d0954` (2026-09-05). This is an evidence inventory, not a blanket certification of live Copilot behavior.
 
@@ -63,7 +79,7 @@ The provider integration introduced in `0.4.0-alpha.5` replaces the older indepe
 - **Last-success display (#97):** `snapshot.discoveredAt` appears beside the model count outside **Manage**, without a duplicate inside. Past times use English relative text; the tooltip and accessible semantic `time` expose the full local date, time and time zone. Missing/invalid timestamps or no account hide it; future times use an absolute label. One mounted 60-second display-only timer updates the relative text without RPC/status/discovery, and is disposed when the timestamp disappears or the view unmounts. Pending/failed refresh keeps the last success time; successful refresh replaces it and sign-out clears it. Cache/discovery and authorization rules are unchanged.
 - **Honest integration limit:** the published provider-card slot is additive and cannot replace Core **Edit/Delete**. Normal plugin discovery needs no manual model definitions, but the native editor stays available. Embedding account controls does not merge/remove canonical `github-copilot` and managed `github-copilot-preview`, or automatically copy credentials, rewrite configuration/history or migrate selection. The later explicit native account switch is the only credential-projection exception; see [account ownership](./copilot-accounts.md). Any optional real route removal still requires the [separate reviewed migration](./single-route-migration.md).
 - **Acceptance still required:** test missing/idle/stale/error/loading open-time ensure versus fresh-cache no-request, shared Host flight, TTL/cooldown boundaries, display-only stale data, immediate revocation, definitive unknown-model refresh without replay, Manage-only manual refresh and visible Retry. Retain provider/footer/old-Core fallback, overlapping-owner transfer, final-unmount cleanup and once-per-explicit-login tests. Read the implementation PR's actual results before claiming these checks passed; documentation is not runtime or live OAuth evidence.
-- **Browser/media evidence:** `copilot-search-routing.png` shows the current built plugin-detail routing card in isolated Edge with synthetic providers. It is presentation evidence only, not proof of live credentials, provider availability, search success or Desktop activation. Host TTL/cooldown timing and account-control lifecycle remain unit-test evidence rather than screenshot evidence.
+- **Historical browser/media evidence:** `copilot-search-routing.png` showed the now-retired plugin-detail routing card in isolated Edge with synthetic providers. It is not a current UI, live credentials, provider availability, search success or Desktop activation claim. Host TTL/cooldown timing and account-control lifecycle remain unit-test evidence rather than screenshot evidence.
 
 ## Session-scoped Copilot follow-up (#99, planned alpha.8)
 

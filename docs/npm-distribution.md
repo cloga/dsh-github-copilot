@@ -27,7 +27,8 @@ continue. No old release/tag is renamed or reused.
 
 `deployment-baseline.json.releaseLines` is the explicit selection map. It retains
 published anchors Core `0.2.0-rc.2` → plugin `0.4.2-alpha.15` and Core
-`0.2.1-alpha.4` → plugin `0.4.2-alpha.16`; the alpha.5 line is **pending**.
+`0.2.1-alpha.4` → plugin `0.4.2-alpha.16`. A static `pending` entry records
+the source snapshot, not permanent proof that its version is unpublished.
 Run `node scripts/select-core-release.mjs <exact-Core>` in a current source
 checkout or verified package. This read-only command looks up the mapped exact
 GitHub Release and npm version; it verifies the non-draft release, prerelease
@@ -35,7 +36,10 @@ flag, named tarball/checksum assets and exact npm `engines.dsh` before returning
 an npm spec and Release/archive URLs. A missing pending entry reports pending;
 a Release without observable npm bytes reports incomplete; unknown Core
 versions fail explicitly. Network/auth/invalid metadata errors stop without a
-recommendation. This map is a reviewed snapshot, not an automatic updater hook.
+recommendation. The selector checks metadata and named assets; it does not run
+CI, download and hash the assets, compare npm tarball bytes, or verify a loaded
+Desktop. Check those separately. This map is a reviewed snapshot, not an
+automatic updater hook.
 
 Release validation checks the suffix against exact `engines.dsh`, baseline and
 Core peer metadata. It permits a lower numeric plugin version only for a new
@@ -85,6 +89,11 @@ repair publication.
 
 The non-cancelling repository release concurrency group serializes publication.
 External publishers must coordinate; dist-tags are not atomic CAS.
+
+On an uncancelled main push, the caller requires a successful `release-ready`
+gate even though the PR-only documentation check is skipped. Cancelled runs and
+failed or skipped gates cannot invoke publication; PRs still require the
+documentation check. Eligibility is not proof of publication.
 
 After the complete compatibility gate, pack once with
 `pnpm --config.ignore-scripts=true pack --pack-destination artifacts`.

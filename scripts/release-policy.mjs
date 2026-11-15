@@ -8,7 +8,8 @@ const PACKAGE_NAME = 'dsh-github-copilot'
 const importantPaths = new Set([
   'cordis.patch.yml', 'deployment-baseline.json',
   'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml',
-  'scripts/check-search-composition.mjs', 'scripts/release-policy.mjs', 'scripts/select-core-release.mjs',
+  'scripts/autonomy-evaluation.mjs', 'scripts/check-search-composition.mjs',
+  'scripts/release-policy.mjs', 'scripts/select-core-release.mjs', 'tests/fixtures/autonomy-evaluation.json',
   'tsconfig.json', 'tsconfig.tests.json', 'tsdown.config.ts', 'vitest.config.ts',
 ])
 const importantPrefixes = ['src/', 'lib/']

@@ -1,7 +1,7 @@
 # High-cost Auto: requirements and evidence
 
-> Historical documentation for earlier releases. The `0.2.2-rc.3` candidate
-> retires plugin-owned Auto and its high-cost control. Existing preferences
+> Historical documentation for earlier releases. The integration targeting DSH
+> `0.2.2-rc.3` retires plugin-owned Auto and its high-cost control. Existing preferences
 > are not deleted.
 
 Tracking: #333. Evidence-review workflow: #332.

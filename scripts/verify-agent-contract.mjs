@@ -11,11 +11,57 @@ export function verifyCurrentCoreTemplate(template, release) {
   }
 }
 
+export function verifyCurrentCoreDocument(text, release) {
+  const targets = [...text.matchAll(/^Current source target: official DSH `([^`]+)`/gm)]
+  if (targets.length !== 1 || targets[0][1] !== release) {
+    throw new Error('Agent contract: current-Core document must match package engines.dsh exactly once')
+  }
+}
+
+export function verifyDocumentationReview(policy, template, workflow) {
+  if (policy?.implementation !== 'scripts/verify-documentation-impact.mjs'
+    || JSON.stringify(policy.impact) !== JSON.stringify(['user-facing', 'unchanged'])
+    || JSON.stringify(policy.requiredDocuments) !== JSON.stringify(['README.md', 'README.zh.md', 'docs/*.md'])
+    || policy.detailsRequired !== true || policy.versionOnlyInsufficient !== true
+    || policy.rerunOnBodyEdit !== true || policy.semanticReview !== 'agent-or-human-required'
+    || !template.includes('### Documentation impact') || !template.includes('- Behavior:')
+    || !template.includes('- Docs:') || !template.includes('- Details:')
+    || !workflow.includes('types: [opened, synchronize, reopened, edited]')
+    || !workflow.includes('node scripts/verify-documentation-impact.mjs')
+    || !workflow.includes('needs: [verify, published-adapter, documentation-impact]')
+    || !workflow.includes('test "$DOCUMENTATION_RESULT" = success')) {
+    throw new Error('Agent contract: documentation impact review or CI gate is missing')
+  }
+}
+
+export function verifyCurrentTaskStatus(contract) {
+  const statuses = {
+    autointent: 'retired-legacy-only',
+    autorouting: 'retired-legacy-only',
+    models: 'native-selection-managed-route-no-plugin-auto-or-follow',
+    search: 'native-web-canonical-backend-legacy-router-retired',
+    client: 'native-controls-legacy-router-not-mounted',
+  }
+  if (Object.entries(statuses).some(([name, status]) => {
+    const task = contract.tasks?.[name]
+    return task?.runtimeStatus !== status || typeof task.riskContext !== 'string'
+      || !task.riskContext.toLowerCase().includes('historical')
+  })
+    || typeof contract.tasks?.continuation?.accountUiBoundary !== 'string'
+    || !contract.tasks.continuation.accountUiBoundary.includes('no add-only OAuth entry in Chat')
+    || !contract.tasks.search.read?.includes('src/native-copilot-search.ts')
+    || !contract.tasks.search.tests?.includes('tests/native-copilot-search.spec.ts')
+    || !contract.tasks.client.read?.includes('src/native-search-model-card.ts')) {
+    throw new Error('Agent contract: current task status and historical routing boundaries must remain explicit')
+  }
+}
+
 export async function verifyAgentContract(root = repositoryRoot) {
   const contract = JSON.parse(await readFile(resolve(root, 'agent-contract.json'), 'utf8'))
   const pkg = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
   const require = (condition, message) => { if (!condition) throw new Error(`Agent contract: ${message}`) }
   require(contract.schemaVersion === 1, 'unsupported schemaVersion')
+  verifyCurrentTaskStatus(contract)
   const review = contract.tasks?.autorouting?.iterationReview
   require(review?.report === 'docs/auto-iteration-review.json'
     && review.policy === 'docs/evidence-driven-iteration.md'
@@ -27,8 +73,9 @@ export async function verifyAgentContract(root = repositoryRoot) {
   const productScope = contract.boundaries?.confirmedProductScope
   require(productScope?.source === 'user-confirmed #455/#456 on 2026-11-14'
     && productScope.product === 'lightweight-native-github-copilot-model-integration'
-    && productScope.desktopCandidate === '0.2.2-rc.3'
+    && productScope.desktopCandidate === pkg.engines.dsh
     && productScope.desktopCandidateQualified === false
+    && productScope.desktopCandidateQualificationScope === 'desktop-artifact-and-live-acceptance'
     && JSON.stringify(productScope.retirePluginOwned) === JSON.stringify([
       'auto', 'parent-model-follow', 'hosted-search-routing',
     ])
@@ -94,6 +141,25 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && Object.entries(workspaceRequirements).every(([key, value]) => workspace[key] === value)
     && agentGuide.includes('## Session isolation and temporary artifacts (#442)'),
   'workspace isolation must preserve user files, authorized worktrees and delivery tool boundaries')
+  const autonomy = contract.boundaries?.autonomousExecution
+  const autonomyRequirements = {
+    mode: 'scoped-authorization-follow-through',
+    authorization: 'retain-explicit-target-scope-limits-until-complete-or-revoked',
+    routineWork: 'safe-inspection-and-bounded-recovery-without-repeat-prompts',
+    restartRecovery: 'one-same-target-start-if-confirmed-stopped-and-within-consent',
+    toolPolicy: 'never-override-tool-consent-or-refusal',
+    interruption: 'tool-report-not-human-intent',
+    retryBudget: 'preserve-across-continuations',
+    blockers: 'report-once-continue-independent-work',
+    completion: 'verified-or-explicitly-blocked-never-fabricated-success',
+    enforcement: 'advisory-contract-drift-only',
+  }
+  require(autonomy && Object.keys(autonomy).length === Object.keys(autonomyRequirements).length
+    && Object.entries(autonomyRequirements).every(([key, value]) => autonomy[key] === value)
+    && agentGuide.includes('### Scoped autonomous execution (#491)')
+    && agentGuide.includes('Tool consent, refusal and interruption controls take precedence.')
+    && /Do not repeat\s+the same question or unchanged waiting message\./.test(agentGuide),
+  'autonomous execution must retain scoped consent, bounded recovery, tool controls and truthful non-repeating handoffs')
   require(agentGuide.includes('### Confirmed product scope (#455, #456)')
     && agentGuide.includes('When any later legacy detail in this guide conflicts with this confirmed scope'),
   'the confirmed product scope must be authoritative over historical guide details')
@@ -122,6 +188,7 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && contract.tasks.accounts?.tests?.includes('tests/scripts/copilot-login-environment.test.mjs')
     && contract.tasks.accounts?.loginEnvironmentBoundary?.includes('tenant.ghe.com')
     && contract.tasks.accounts?.loginEnvironmentBoundary?.includes('Native OAuth redirect control is unavailable')
+    && contract.tasks.accounts?.loginEnvironmentBoundary?.includes(`pi-ai ${pkg.dependencies['@earendil-works/pi-ai']}`)
     && contract.tasks.accounts?.loginEnvironmentBoundary?.includes('GHES and Enterprise quota remain unsupported')
     && agentGuide.includes('Login environments (#424)'),
   'login environments must preserve native OAuth, strict tenant hosts and explicit unsupported boundaries')
@@ -154,6 +221,9 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && contract.tasks.compatibility?.read?.includes('src/responses-request-compression.ts')
     && contract.tasks.compatibility?.tests?.includes('tests/responses-request-compression.spec.ts'),
   'managed Responses gzip must remain default-off, bounded and lossless through its public Fetch seam')
+  require(contract.tasks.compatibility?.risk?.includes(`official dsh-v${pkg.engines.dsh}`)
+    && contract.tasks.compatibility?.risk?.includes(`pi-ai ${pkg.dependencies['@earendil-works/pi-ai']}`),
+  'compatibility guidance must match the exact current Core and pi-ai versions')
   require(contract.tasks.continuation?.processingBoundary?.includes('never recursively traverse')
     && contract.tasks.continuation?.processingBoundary?.includes('atomic baseline commit')
     && contract.tasks.continuation?.tests?.includes('tests/fixtures/compaction-pressure-core.fixture.ts')
@@ -190,6 +260,10 @@ export async function verifyAgentContract(root = repositoryRoot) {
   await file(review.policy)
   const template = await readFile(resolve(root, '.github/PULL_REQUEST_TEMPLATE.md'), 'utf8')
   verifyCurrentCoreTemplate(template, pkg.engines.dsh)
+  verifyCurrentCoreDocument(agentGuide, pkg.engines.dsh)
+  for (const path of ['docs/model-compatibility-acceptance.md', 'docs/image-input-compatibility.md']) {
+    verifyCurrentCoreDocument(await readFile(resolve(root, path), 'utf8'), pkg.engines.dsh)
+  }
   const acceptance = contract.acceptance
   require(acceptance?.mode === 'evidence-consistency-only'
     && acceptance.policy === 'docs/agent-acceptance.md'
@@ -222,7 +296,7 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && executionPolicy.operations['scripts-test'].maxFailures === 2
     && JSON.stringify(executionPolicy.operations['scripts-test'].argv) === JSON.stringify([
       'node', '--test', 'tests/scripts/agent.test.mjs', 'tests/scripts/acceptance.test.mjs',
-      'tests/scripts/environment-guardrails.test.mjs',
+      'tests/scripts/environment-guardrails.test.mjs', 'tests/scripts/autonomy-evaluation.test.mjs',
     ])
     && executionPolicy.operations?.['ci-evidence']?.environment === 'github-actions-evidence'
     && executionPolicy.operations['ci-evidence'].maxFailures === 2
@@ -239,9 +313,12 @@ export async function verifyAgentContract(root = repositoryRoot) {
   await file('agent-execution-policy.json')
   await file('docs/environment-evidence-guardrails.md')
   require(contract.tasks.tooling.read.includes('agent-execution-policy.json')
+    && contract.tasks.tooling.read.includes('scripts/autonomy-evaluation.mjs')
+    && contract.tasks.tooling.read.includes('docs/agent-autonomy-evaluation.md')
     && contract.tasks.tooling.read.includes('scripts/environment-guard.mjs')
     && contract.tasks.tooling.read.includes('docs/environment-evidence-guardrails.md')
     && contract.tasks.tooling.tests.includes('tests/scripts/environment-guardrails.test.mjs')
+    && contract.tasks.tooling.tests.includes('tests/scripts/autonomy-evaluation.test.mjs')
     && contract.tasks.tooling.risk.includes('cannot prevent direct shell bypass')
     && agentGuide.includes('cannot prevent direct shell bypass')
     && agentGuide.includes('Do not retry local dependency restoration'),
@@ -261,6 +338,11 @@ export async function verifyAgentContract(root = repositoryRoot) {
   }
   const ciWorkflow = await readFile(resolve(root, '.github/workflows/ci.yml'), 'utf8')
   const releaseWorkflow = await readFile(resolve(root, '.github/workflows/release.yml'), 'utf8')
+  verifyDocumentationReview(contract.tasks.tooling.documentationReview, template, ciWorkflow)
+  require(contract.tasks.tooling.read.includes('scripts/verify-documentation-impact.mjs')
+    && contract.tasks.tooling.tests.includes('tests/scripts/agent.test.mjs')
+    && contract.tasks.tooling.risk.includes('agent or human semantic review remains required'),
+  'documentation impact must retain its implementation, regression and semantic-review boundary')
   require(ciWorkflow.includes('verify:') && ciWorkflow.includes('runs-on: ${{ matrix.os }}')
     && ciWorkflow.includes('os: [ubuntu-latest, windows-latest]')
     && ciWorkflow.includes('name: Published adapter (${{ matrix.os }})')
