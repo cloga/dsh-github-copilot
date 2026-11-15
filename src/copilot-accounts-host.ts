@@ -339,12 +339,13 @@ export class CopilotAccountsHost {
       if ((accountId !== undefined || activeAccountId !== 'canonical') && !accounts.some(row => row.id === activeAccountId && row.configured)) {
         fail('COPILOT_ACCOUNTS_SELECTED_MISSING')
       }
-      if (accountId === undefined && activeAccountId !== 'canonical') {
+      const routeProblem = this.routeDiagnostic()
+      if (accountId === undefined && activeAccountId !== 'canonical' && routeProblem === undefined) {
         if (await this.nativeCredentialMismatch(activeAccountId)) problem = 'COPILOT_ACCOUNTS_NATIVE_CREDENTIAL_MISMATCH'
         else accounts = accounts.filter(row => row.id !== 'canonical')
       }
       const retainedFailure = accountId !== undefined || this.lastFailure === 'COPILOT_ACCOUNTS_BUSY' ? undefined : this.lastFailure
-      problem ??= retainedFailure ?? this.routeDiagnostic() ?? (this.busy() ? 'COPILOT_ACCOUNTS_BUSY' : undefined)
+      problem ??= retainedFailure ?? routeProblem ?? (this.busy() ? 'COPILOT_ACCOUNTS_BUSY' : undefined)
     } catch (error) { problem = diagnostic(error, 'COPILOT_ACCOUNTS_CREDENTIALS_UNAVAILABLE') }
     if (accountId === undefined && this.lastFailure === 'COPILOT_ACCOUNTS_COMMIT_UNCERTAIN') problem = this.lastFailure
     const recovery = (problem === 'COPILOT_ACCOUNTS_SELECTED_MISSING'
