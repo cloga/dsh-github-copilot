@@ -145,6 +145,26 @@ it('does not dispatch duplicate sync actions before React renders the busy state
   await act(async () => { apply.resolve({ ok: true, value: { state: 'ready', modelCount: 1 } }) })
 })
 
+it('blocks model edits immediately when sync starts, before React renders the busy state', async () => {
+  const face = remote()
+  const apply = deferred<Awaited<ReturnType<Props['remote']['applyNativeModelSync']>>>()
+  face.prepareNativeModelSync.mockResolvedValue({ ok: true, value: {
+    state: 'ready', planId: '12345678-1234-4234-8234-123456789012',
+    enabledCount: 1, syncableCount: 1, addedIds: ['first'], removedIds: [], updatedIds: [],
+    outputTokenDefaults: [{ id: 'first', maxTokens: 8192 }], skipped: [],
+  } })
+  face.applyNativeModelSync.mockReturnValue(apply.promise)
+  await mount({ remote: face, models, preferences })
+  await openPreferences()
+  await act(async () => {
+    document.querySelector<HTMLButtonElement>('[data-dsh-github-copilot-native-model-sync-apply]')!.click()
+    row('first').click()
+  })
+  expect(face.applyNativeModelSync).toHaveBeenCalledOnce()
+  expect(face.setModelExcluded).not.toHaveBeenCalled()
+  await act(async () => { apply.resolve({ ok: true, value: { state: 'ready', modelCount: 1 } }) })
+})
+
 it('consumes the preview after an uncertain apply instead of offering the same plan again', async () => {
   const face = remote()
   face.prepareNativeModelSync.mockResolvedValue({ ok: true, value: {
