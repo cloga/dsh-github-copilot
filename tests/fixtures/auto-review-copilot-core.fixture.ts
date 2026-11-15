@@ -492,8 +492,8 @@ describe('native Auto reviewer Copilot compatibility', () => {
         { agent, turn: 1, step: 1, signal: controller.signal }, async () => selection)
       expect(owner.turns.evidence(agent.session, 1)).toBeUndefined()
       const dispatch = async (marked: boolean, purpose?: 'auto-review') => {
-        const call = await ctx.llm.prepareCall(selection)
-        const options = { ...call.config, temperature: 0.37, messages: [],
+        const call = await ctx.llm.prepareCall({ ...selection, temperature: 0.37 })
+        const options = { ...call.config, messages: [],
           sessionId: agent.session.id, signal: controller.signal, ...purpose === undefined ? {} : { purpose } }
         let chunks = 0
         for await (const _chunk of call.stream(marked ? markAgentLoopRequest(options) : options)) chunks++
