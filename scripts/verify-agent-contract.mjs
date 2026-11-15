@@ -116,7 +116,7 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && contract.tasks.accounts?.tests?.includes('tests/session-accounts-host.spec.ts')
     && contract.tasks.accounts?.risk?.includes('Freeze before Auto assessment')
     && contract.tasks.accounts?.risk?.includes('No durable account events')
-    && agentGuide.includes('Approved multi-account ownership extension (#297)'),
+    && agentGuide.includes('Approved multi-account ownership extension (#297, #474)'),
   'account ownership must preserve native authorization, shared storage, Session turn freezing and bounded historical evidence')
   require(contract.tasks.accounts?.read?.includes('src/copilot-login-environment.ts')
     && contract.tasks.accounts?.tests?.includes('tests/scripts/copilot-login-environment.test.mjs')

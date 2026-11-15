@@ -8,14 +8,14 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.1.0-alpha.9.dsh.0.2.2.rc.3"
+    "version": "0.1.0-alpha.11.dsh.0.2.2.rc.3"
   },
   "releaseLines": [
     { "core": "0.2.0-rc.2", "version": "0.4.2-alpha.15", "status": "published" },
     { "core": "0.2.1-alpha.4", "version": "0.4.2-alpha.16", "status": "published" },
     { "core": "0.2.1-alpha.5", "version": "0.1.0-alpha.2.dsh.0.2.1.alpha.5", "status": "published" },
     { "core": "0.2.1-rc.3", "version": "0.1.0-alpha.5.dsh.0.2.1.rc.3", "status": "published" },
-    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.9.dsh.0.2.2.rc.3", "status": "pending" }
+    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.11.dsh.0.2.2.rc.3", "status": "pending" }
   ],
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -461,40 +461,45 @@
         {"file": "tests/session-accounts-host.spec.ts", "name": "ignores identity completion after the turn ends"},
         {"file": "tests/copilot-usage-card.spec.ts", "name": "switches only subsequent Session turns inside Credits and can restore inheritance"},
         {"file": "tests/fixtures/remote-core.fixture.ts", "name": "binds Session account choices and historical reads through native Client and %s Host gateways"},
-        {"file": "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "name": "persists independent native credentials and SettingsForms CAS across profile restart without cross-account OAuth writes"}
+        {"file": "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "name": "persists independent accounts and SettingsForms CAS across restart with native sign-out recovery"}
       ]
     },
     {
       "id": "independent-copilot-accounts",
       "required": true,
       "evidenceScope": "synthetic-public-services-native-adapter-and-ui-not-live-oauth-or-provider-access",
-      "activation": "managed-route-explicit-account-selector-with-independent-native-coexistence",
+      "activation": "confirmed-profile-wide-native-canonical-switch-with-independent-native-route",
       "sourceMarkers": [
         {"file": "src/copilot-accounts-host.ts", "marker": "async ensureIdentityFor(accountId: string)"},
         {"file": "src/copilot-login-environment.ts", "marker": "COPILOT_LOGIN_HOST_PATTERN"},
         {"file": "src/copilot-accounts-host.ts", "marker": "event.verificationUri !== copilotVerificationUri(host)"},
         {"file": "docs/copilot-accounts.md", "marker": "Native OAuth redirect control is unavailable"},
-        {"file": "AGENTS.md", "marker": "Approved multi-account ownership extension (#297)"},
+        {"file": "AGENTS.md", "marker": "Approved multi-account ownership extension (#297, #474)"},
+        {"file": "src/copilot-accounts-host.ts", "marker": "await this.writeGrant('canonical', previousCanonical, selectedGrant)"},
+        {"file": "docs/copilot-accounts.md", "marker": "The user-approved native switch (#474) applies the selected saved grant"},
         {"file": "src/remote.ts", "marker": "...copilotAccountsRemote.descriptors"},
         {"file": "src/copilot-accounts-card.ts", "marker": "removeAccount(accountId: string, expectedRevision: number)"},
         {"file": "src/copilot-account-presentation.ts", "marker": "account data and credentials never travel between surfaces"},
         {"file": "docs/copilot-accounts.md", "marker": "A mutable active-account lookup inside each store method is forbidden"}
       ],
       "tests": [
-        {"file": "tests/native-account-coexistence.spec.ts", "name": "keeps native requests, credentials and selection independent before, during and after multi-account enhancement"},
+        {"file": "tests/native-account-coexistence.spec.ts", "name": "applies confirmed account switches to native credentials and retains the native route after disposal"},
         {"file": "tests/scripts/copilot-login-environment.test.mjs", "name": "compares numeric identities within their host without relabeling legacy GitHub.com evidence"},
         {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "authorizes native GHE environments with host-scoped duplicates and immutable reauthorization hosts"},
         {"file": "tests/copilot-accounts-card.spec.ts", "name": "chooses a validated GHE environment without selecting an account or changing GitHub.com login"},
         {"file": "tests/copilot-identity-refresh.spec.ts", "name": "renews expired identity once for account %s without changing metadata-only reads"},
         {"file": "tests/copilot-account-identity-cache.spec.ts", "name": "hydrates saved inactive names without activating them, then reuses them"},
         {"file": "tests/account-dropdown.spec.ts", "name": "backs translucent native menu tokens with opaque Canvas and uses a dark elevation shadow"},
-        {"file": "tests/copilot-account-identity-cache.spec.ts", "name": "retains inactive verified names after freshness expiry without reads or network in status"},
+        {"file": "tests/copilot-account-identity-cache.spec.ts", "name": "retains inactive verified names after freshness expiry without identity discovery in status"},
         {"file": "tests/copilot-usage-card.spec.ts", "name": "settles quota before a slow identity renewal and uses nonforcing ensure on visible refresh cadence"},
         {"file": "tests/copilot-usage-card.spec.ts", "name": "freezes the effective account when following is unchecked and restores following through the same CAS"},
         {"file": "tests/copilot-usage-card.spec.ts", "name": "retains confirmed following when consent is cancelled and disables it during confirmation"},
         {"file": "tests/copilot-usage-card.spec.ts", "name": "disables following when the Session selection cannot be read instead of treating it as a fixed account"},
         {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "never writes a captured A refresh into B after an external selection change"},
         {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "runs fresh switch identity and model preflight concurrently but commits only after both settle"},
+        {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "switches the native credential slot and preserves both accounts for later switches"},
+        {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "lets the user explicitly reconcile a selected account with externally changed native credentials"},
+        {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "rolls back the canonical grant and its temporary backup when selector CAS fails unchanged"},
         {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "permits record-bound requests during selector switching without admitting global requests or credential mutations"},
         {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "cancels and drains sibling switch preflight before releasing its mutation fence"},
         {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "rejects a changed credential identity during overlapping switch checks without saving"},
@@ -503,8 +508,9 @@
         {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "preserves uncertain commit ahead of missing-slot recovery"},
         {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "rechecks externally started canonical authorization before selector CAS"},
         {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "retains canonical admission through polling and cancellation settlement"},
-        {"file": "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "name": "persists independent native credentials and SettingsForms CAS across profile restart without cross-account OAuth writes"},
+        {"file": "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "name": "persists independent accounts and SettingsForms CAS across restart with native sign-out recovery"},
         {"file": "tests/copilot-accounts-card.spec.ts", "name": "requires a separate confirmation and uses the captured selector revision"},
+        {"file": "tests/copilot-accounts-card.spec.ts", "name": "requires confirmation before applying the selected account to mismatched native credentials"},
         {"file": "tests/copilot-accounts-card.spec.ts", "name": "reauthorizes the existing slot without requesting a new account or switching"},
         {"file": "tests/copilot-usage-card.spec.ts", "name": "shows current identity only in details without a Chat switching control"},
         {"file": "tests/copilot-usage-card.spec.ts", "name": "refuses to combine account B identity with account A quota"},
@@ -1410,7 +1416,7 @@
         {"file": "tests/auto-allocation-evidence.spec.ts", "name": "keeps legacy-only summaries v1 and separates mixed-policy decisions explicitly"},
         {"file": "tests/auto-allocation-evidence.spec.ts", "name": "counts each turn once, bounds retention and never recovers missing evidence after removal"},
         {"file": "tests/client.spec.ts", "name": "does not expose retired Auto cost controls or treat saved cost marks as model availability"},
-        {"file": "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "name": "persists independent native credentials and SettingsForms CAS across profile restart without cross-account OAuth writes"}
+        {"file": "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "name": "persists independent accounts and SettingsForms CAS across restart with native sign-out recovery"}
       ]
     },
     {

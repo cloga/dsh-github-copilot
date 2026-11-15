@@ -216,6 +216,18 @@ it('does not show zero counts or enable sync when preparation is blocked', async
   expect(face.applyNativeModelSync).not.toHaveBeenCalled()
 })
 
+it('explains an account mismatch without requiring the canonical account selector', async () => {
+  const face = remote()
+  face.prepareNativeModelSync.mockResolvedValue({ ok: true, value: {
+    state: 'blocked', code: 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH',
+    enabledCount: 0, syncableCount: 0, outputTokenDefaults: [], addedIds: [], removedIds: [], updatedIds: [], skipped: [],
+  } })
+  await mount({ remote: face, models, preferences })
+  await openPreferences()
+  expect(document.body.textContent).toContain('The selected Copilot account does not match the native provider account')
+  expect(document.querySelector<HTMLButtonElement>('[data-dsh-github-copilot-native-model-sync-apply]')!.disabled).toBe(true)
+})
+
 it('rechecks an expired plan without automatically retrying the write', async () => {
   const face = remote()
   const firstPlan = {

@@ -100,6 +100,7 @@ function runtime(options: {
   accountModels?: readonly { id: string; name: string; api: string }[]
   nativeSyncModels?: readonly AccountModelDescriptor[]
   nativeSyncAccount?: string
+  nativeSyncCanonicalMatches?: boolean
   routeSecrets?: readonly { path: readonly string[]; set: boolean }[]
   githubCopilotUserSettings?: Record<string, unknown>
   githubCopilotEffectiveSettings?: Record<string, unknown>
@@ -259,6 +260,8 @@ function runtime(options: {
     services.set('githubCopilotAccounts', { host: {
       capture,
       acquire: vi.fn(() => ({ binding: capture(), release: vi.fn() })),
+      nativeCredentialMatches: vi.fn(async (accountId: string) =>
+        options.nativeSyncCanonicalMatches ?? accountId === 'canonical'),
     } })
   }
   const ctx = new Context()
@@ -653,6 +656,60 @@ describe('GitHubCopilotAuthorizationController', () => {
       state: 'error', code: 'NATIVE_MODEL_SYNC_PLAN_STALE',
     })
     expect(stale.mutate).not.toHaveBeenCalled()
+  })
+  it('allows native model sync when the selected saved account is already applied to the canonical credential', async () => {
+    const harness = runtime({
+      configured: true, nativeSyncAccount: 'saved-account', nativeSyncCanonicalMatches: true,
+      nativeSyncModels: [syncModel('model')], providerProfile: { api: 'openai-responses' },
+    })
+    const preview = await harness.controller.previewNativeModelSync()
+    expect(preview).toMatchObject({ state: 'ready', syncableCount: 1 })
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toEqual({
+      state: 'ready', modelCount: 1,
+    })
+    const accountHost = harness.services.get('githubCopilotAccounts') as {
+      host: { nativeCredentialMatches: ReturnType<typeof vi.fn> }
+    }
+    expect(accountHost.host.nativeCredentialMatches).toHaveBeenCalledWith('saved-account')
+  })
+  it('prepares a saved-account sync only when it matches the native credential, without forcing discovery', async () => {
+    for (const matches of [true, false]) {
+      const harness = runtime({
+        configured: true, nativeSyncAccount: 'saved-account', nativeSyncCanonicalMatches: matches,
+        nativeSyncModels: [syncModel('model')], providerProfile: { api: 'openai-responses' },
+      })
+      const source = harness.services.get('githubCopilotPreview') as {
+        discoverNativeModelSync: ReturnType<typeof vi.fn>
+      }
+      await expect(harness.controller.prepareNativeModelSync()).resolves.toMatchObject(matches
+        ? { state: 'ready', syncableCount: 1 }
+        : { state: 'blocked', code: 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH' })
+      expect(source.discoverNativeModelSync).not.toHaveBeenCalled()
+      expect(harness.mutate).not.toHaveBeenCalled()
+    }
+  })
+  it('rejects a preference change while checking the native credential before writing', async () => {
+    const harness = runtime({
+      configured: true, nativeSyncAccount: 'saved-account', nativeSyncCanonicalMatches: true,
+      nativeSyncModels: [syncModel('model')], providerProfile: { api: 'openai-responses' },
+    })
+    const preview = await harness.controller.prepareNativeModelSync()
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    const accountHost = harness.services.get('githubCopilotAccounts') as {
+      host: { nativeCredentialMatches: ReturnType<typeof vi.fn> }
+    }
+    accountHost.host.nativeCredentialMatches
+      .mockResolvedValueOnce(true)
+      .mockImplementationOnce(async () => {
+        await harness.mutate('github-copilot', [{ op: 'set', path: ['excludedModelIds'], value: ['model'] }], 0)
+        return true
+      })
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toEqual({
+      state: 'error', code: 'NATIVE_MODEL_SYNC_PLAN_STALE', modelCount: 0,
+    })
+    expect(harness.mutate).toHaveBeenCalledExactlyOnceWith(
+      'github-copilot', [{ op: 'set', path: ['excludedModelIds'], value: ['model'] }], 0)
   })
   it('does not assume canonical ownership when the account service is unavailable', async () => {
     const harness = runtime({

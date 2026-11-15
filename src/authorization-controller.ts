@@ -677,9 +677,11 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
     const lease = this.acquireNativeModelSyncLease()
     if (lease === null) return empty('error', 'NATIVE_MODEL_SYNC_ACCOUNT_UNAVAILABLE')
     try {
-      if (lease.binding.accountId !== 'canonical') {
-        return empty('blocked', 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH')
-      }
+      const nativeAccountMatches = await this.nativeCredentialMatchesSelected(lease.binding.accountId)
+      try { lease.binding.assertCurrent() }
+      catch { return empty('blocked', 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH') }
+      if (nativeAccountMatches === undefined) return empty('error', 'NATIVE_MODEL_SYNC_ACCOUNT_UNAVAILABLE')
+      if (!nativeAccountMatches) return empty('blocked', 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH')
       try {
         const settings = service<RouteSettings>(this.ctx, 'settings', ['describe', 'mutate'])
         if (settingsSnapshot(settings).current === undefined) {
@@ -694,7 +696,11 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       }
       try { lease.binding.assertCurrent() }
       catch { return empty('blocked', 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH') }
-      if (!this.nativeSyncUsesCanonicalAccount()) return empty('blocked', 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH')
+      const discoveredAccountMatches = await this.nativeCredentialMatchesSelected(lease.binding.accountId)
+      try { lease.binding.assertCurrent() }
+      catch { return empty('blocked', 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH') }
+      if (discoveredAccountMatches === undefined) return empty('error', 'NATIVE_MODEL_SYNC_ACCOUNT_UNAVAILABLE')
+      if (!discoveredAccountMatches) return empty('blocked', 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH')
       const snapshot = source.nativeModelSyncSnapshot()
       if (snapshot === undefined) return empty('error', 'NATIVE_MODEL_SYNC_MODELS_UNAVAILABLE')
       const proofCurrent = snapshot.isCurrent
@@ -710,6 +716,11 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       catch { return empty('error', 'NATIVE_MODEL_SYNC_NATIVE_CATALOG_UNAVAILABLE') }
       try { lease.binding.assertCurrent() }
       catch { return empty('blocked', 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH') }
+      const currentAccountMatches = await this.nativeCredentialMatchesSelected(lease.binding.accountId)
+      try { lease.binding.assertCurrent() }
+      catch { return empty('blocked', 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH') }
+      if (currentAccountMatches === undefined) return empty('error', 'NATIVE_MODEL_SYNC_ACCOUNT_UNAVAILABLE')
+      if (!currentAccountMatches) return empty('blocked', 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH')
       const currentSnapshot = source.nativeModelSyncSnapshot()
       if (this.ctx.get('githubCopilotPreview') !== source || !proofCurrent()
         || currentSnapshot === undefined || currentSnapshot.generation !== snapshot.generation
@@ -807,7 +818,11 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
     const lease = this.acquireNativeModelSyncLease()
     if (lease === null) return failed('NATIVE_MODEL_SYNC_ACCOUNT_UNAVAILABLE')
     try {
-      if (lease.binding.accountId !== 'canonical') return failed('NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH')
+      const nativeAccountMatches = await this.nativeCredentialMatchesSelected(lease.binding.accountId)
+      try { lease.binding.assertCurrent() }
+      catch { return failed('NATIVE_MODEL_SYNC_PLAN_STALE') }
+      if (nativeAccountMatches === undefined) return failed('NATIVE_MODEL_SYNC_ACCOUNT_UNAVAILABLE')
+      if (!nativeAccountMatches) return failed('NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH')
       if (lease.binding.generation !== plan.accountGeneration) return failed('NATIVE_MODEL_SYNC_PLAN_STALE')
       const source = this.ctx.get('githubCopilotPreview')
       const snapshot = source?.nativeModelSyncSnapshot()
@@ -845,6 +860,21 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       const latestPreferences = modelPreferencesView(this.ctx, accountModelsView(this.ctx))
       if (latestPreferences.state !== 'ready' || !latestPreferences.writable
         || latestPreferences.revision !== plan.preferencesRevision || !plan.proofCurrent()) {
+        return failed('NATIVE_MODEL_SYNC_PLAN_STALE')
+      }
+      try { lease.binding.assertCurrent(); plan.nativeCatalog.assertCurrent() }
+      catch { return failed('NATIVE_MODEL_SYNC_PLAN_STALE') }
+      const currentAccountMatches = await this.nativeCredentialMatchesSelected(lease.binding.accountId)
+      try { lease.binding.assertCurrent() }
+      catch { return failed('NATIVE_MODEL_SYNC_PLAN_STALE') }
+      if (currentAccountMatches === undefined) return failed('NATIVE_MODEL_SYNC_ACCOUNT_UNAVAILABLE')
+      if (!currentAccountMatches) return failed('NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH')
+      const admissionPreferences = modelPreferencesView(this.ctx, accountModelsView(this.ctx))
+      const admissionSnapshot = source?.nativeModelSyncSnapshot()
+      if (admissionPreferences.state !== 'ready' || !admissionPreferences.writable
+        || admissionPreferences.revision !== plan.preferencesRevision || !plan.proofCurrent()
+        || this.ctx.get('githubCopilotPreview') !== source || admissionSnapshot === undefined
+        || admissionSnapshot.generation !== plan.generation || admissionSnapshot.fetchedAt !== plan.fetchedAt) {
         return failed('NATIVE_MODEL_SYNC_PLAN_STALE')
       }
       try { lease.binding.assertCurrent(); plan.nativeCatalog.assertCurrent() }
@@ -896,9 +926,11 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
     catch { return null }
   }
 
-  private nativeSyncUsesCanonicalAccount(): boolean {
-    try { return this.ctx.get('githubCopilotAccounts')?.host.capture().accountId === 'canonical' }
-    catch { return false }
+  private async nativeCredentialMatchesSelected(accountId: string): Promise<boolean | undefined> {
+    const accounts = this.ctx.get('githubCopilotAccounts')
+    if (accounts === undefined) return undefined
+    try { return await accounts.host.nativeCredentialMatches(accountId) }
+    catch { return undefined }
   }
 
   /** Explicit model discovery: may refresh OAuth and GET the account catalog, never changes selection. */

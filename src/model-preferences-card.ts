@@ -45,7 +45,7 @@ function preferenceMessage(code: string): string {
 function nativeSyncMessage(code: string): string {
   switch (code) {
     case 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH':
-      return 'Switch the global Copilot account to the canonical account used by the native provider before syncing.'
+      return 'The selected Copilot account does not match the native provider account. Verify the account before syncing.'
     case 'NATIVE_MODEL_SYNC_ACCOUNT_UNAVAILABLE':
       return 'Could not verify the current Copilot account. No native settings were changed.'
     case 'NATIVE_MODEL_SYNC_DISCOVERY_UNAVAILABLE':
@@ -368,7 +368,7 @@ export function GitHubCopilotModelPreferencesPanel(props: {
       paddingBlock: '12px', borderBlock: '1px solid color-mix(in srgb, currentColor 18%, transparent)' } },
       createElement('strong', null, 'Native provider model list'),
       createElement('p', { style: { ...nativeCaptionStyle, margin: 0 } },
-        'Sync enabled models from the current canonical account. The native provider’s built-in catalog is replaced by this saved list, which remains after the plugin is unloaded or uninstalled. Credentials, model selection, and conversation history do not change; managed image admission checks and tool-schema filtering do not transfer.'),
+        'Sync enabled models from the verified account used by the native provider. The native provider’s built-in catalog is replaced by this saved list, which remains after the plugin is unloaded or uninstalled. Credentials, model selection, and conversation history do not change; managed image admission checks and tool-schema filtering do not transfer.'),
       syncPreparing ? createElement('p', { role: 'status', style: { ...nativeCaptionStyle, margin: 0 } },
         'Checking the current model list…') : !availabilityKnown
         ? createElement('p', { role: 'status', style: { ...nativeCaptionStyle, margin: 0 } },

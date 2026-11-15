@@ -7,10 +7,10 @@ This file is the authoritative entry point for humans and coding agents. Read it
 This repository follows a **plugin-only** policy: implement fixes in `dsh-github-copilot` through existing published public Core/pi-ai APIs. This rule applies to agents, subagents, scripts, installers and release plans, not just the final diff.
 
 - Do not edit DSH Core source, create Core implementation worktrees, prepare Core commits/PRs/releases, or rebuild/install a modified Core to complete this project's work.
-- Do not patch deployed Core or dependency artifacts in `node_modules`, ship hidden Core patches, replace Core prototypes/private registries, or mutate shared upstream model catalogs. Create only plugin-owned objects and reversible registrations through public APIs.
+- Do not patch deployed Core or dependency artifacts in `node_modules`, ship hidden Core patches, replace Core prototypes/private registries, or mutate shared upstream model catalogs. Create plugin-owned objects and reversible registrations through public APIs; the sole Core-owned credential exception is the user-confirmed native Copilot account switch described below.
 - Do not make a Core patch, a new Core export, or an upstream Core PR being merged/released a prerequisite for delivering a plugin fix.
 - Read-only Core/API inspection and isolated compatibility tests against unchanged pinned artifacts are allowed. Test-only fixtures must not alter tracked Core implementation or a live deployment and must clean up only their own temporary files. Historical controlled baselines are regression evidence, not permission for new Core changes.
-- If the existing API cannot support the desired behavior, report the limit and choose a tested plugin-local alternative or defer that capability. Do not expand into Core work to preserve an earlier design claim. Reusing a published adapter class for an account-scoped, metadata-driven Copilot route is allowed; a second wire implementation, independently maintained static model catalog, copied credentials, or a fabricated single-route claim is not.
+- If the existing API cannot support the desired behavior, report the limit and choose a tested plugin-local alternative or defer that capability. Do not expand into Core work to preserve an earlier design claim. Reusing a published adapter class for an account-scoped, metadata-driven Copilot route is allowed; a second wire implementation, independently maintained static model catalog, unapproved credential copies, or a fabricated single-route claim is not.
 - General model compatibility must be data-driven: new account models with supported endpoint/capability metadata must work without adding model IDs or name-prefix branches to code. Unknown or incomplete metadata must produce a diagnostic rather than guessed capabilities. Follow [the current acceptance checklist](./docs/model-compatibility-acceptance.md), including Thinking, pi version compatibility, PR/merge/release and the requested local upgrade.
 - Any future Core work requires a separate, explicit human request and separate task scope. Generic requests to fix compatibility, add models, optimize, or continue a goal do not grant that permission. Preserve abandoned Core work without resuming, publishing or deleting it automatically.
 
@@ -180,18 +180,43 @@ Safe background diagnostics use bounded Error cause chains and fixed allowlisted
 codes, never raw errors. Installation alone neither selects nor invokes recovery.
 See `src/compaction-replay.ts` and `docs/manual-compaction-recovery.md` (#349).
 
-## Approved multi-account ownership extension (#297)
+## Approved multi-account ownership extension (#297, #474)
 
-The explicit #470 enhancement permits managed-account switching alongside
-independently configured native Copilot. Keep native UI and label the managed
-route `GitHub Copilot (multi-account)`; do not mirror grants, intercept native
-credentials, redirect native requests or change native selections. Missing
-managed registration and incomplete evidence remain blockers. Reuse native
-canonical quota/search isolation; do not revive retired Auto or routing UI.
-Disposal removes only plugin registrations. Plugin-model selections and explicit
-`web.searchProvider=github-copilot-hosted` need user-selected replacements before
-uninstall; missing configured Web backends return `WEB_PROVIDER_CONFIGURED_MISSING`,
-not automatic fallback. No automatic Settings/history migration or sign-out.
+The user-approved #297 extension allows independently authorized
+`github-copilot/account-<opaque-id>` records in DSH's credentials service.
+The later explicit #474 direction supersedes the earlier prohibition on
+canonical writes only for a user-confirmed global account switch: copy the
+selected normalized OAuth grant into `llm-pi-ai/github-copilot` through the
+public serialized credential API so DSH's existing native provider uses it.
+Do not intercept native reads, patch Core, create a second provider as the
+switching solution, or change model/history/provider settings. The selected
+account applies profile-wide to future native requests; in-progress requests
+retain their admitted credentials.
+
+Before replacing a different configured canonical grant, preserve it in a new
+plugin-owned account record unless the previous selected account already owns
+that exact grant. Refuse when preservation would exceed the account bound. On
+later switches, synchronize the previous active account's saved grant from
+canonical before replacement. Use exact per-record serialization/readback and
+path-level Settings CAS. A failed Settings commit may roll back only while the
+canonical record still exactly matches the attempted write; otherwise retain
+data and report uncertainty. Fence native Agent turns, OAuth and account
+mutations. Direct provider calls outside observable Agent turn lifecycle remain
+outside the plugin's turn fence.
+Refresh remains owned by native pi-ai `Models.getAuth()` and DSH
+`modifyRecord()`; the pinned Copilot refresh keeps the refresh token stable.
+If selection and canonical credential diverge after an external native sign-in,
+show an actionable mismatch and require explicit recovery; never auto-migrate.
+
+Keep the native UI and its canonical quota/search attribution. Existing
+`github-copilot-preview` behavior and Session account overrides remain
+separately plugin-owned legacy behavior; they are not required for native
+switching. Disposal removes only plugin registrations. Native model selections
+and explicit `web.searchProvider=github-copilot-hosted` still need user-selected
+replacements before uninstall; missing configured Web backends return
+`WEB_PROVIDER_CONFIGURED_MISSING`, not automatic fallback. Uninstall leaves the
+last selected grant in the native canonical record. No automatic
+Settings/history migration or sign-out.
 
 Login environments (#424) use only pinned native pi-ai OAuth for GitHub.com and
 validated single-label `tenant.ghe.com` Enterprise Cloud hosts. Preserve host
@@ -209,9 +234,9 @@ metadata-only Retry; late results and disposal cannot publish stale state.
 Never apply this deadline to add/cancel/switch/reauthorize/remove mutations,
 release their fences, cancel Host work or introduce an automatic retry.
 
-Account display names survive freshness expiry in bounded Host memory, never credential invalidation or failed verification. Visible account lists may ensure missing configured names without activating accounts; no disk name cache, credential copying or identity-based authorization. Turn admission captures the first verified name for the frozen account. A missing name may be filled by one existing nonforcing account-bound lookup only during that exact active, uncancelled turn/signal; never after turn/end/disposal. Evidence still requires actual native delivery and never reconstructs completed history (#322).
+Account display names survive freshness expiry in bounded Host memory, never credential invalidation or failed verification. Visible account lists may ensure missing configured names without activating accounts; no disk name cache, incidental credential copying or identity-based authorization. Only the explicit confirmed native-switch preservation/projection above may copy a normalized grant. Turn admission captures the first verified name for the frozen account. A missing name may be filled by one existing nonforcing account-bound lookup only during that exact active, uncancelled turn/signal; never after turn/end/disposal. Evidence still requires actual native delivery and never reconstructs completed history (#322).
 
-The user approved independently authorized account records in the existing DSH credentials service. The canonical `llm-pi-ai/github-copilot` record remains unchanged as the compatibility account. Additional plugin-owned `github-copilot/account-<opaque-id>` records must be written directly by official pi-ai OAuth through public account-bound stores; never copy/move grants, refill the canonical record, introduce a separate credential storage service, patch Core, or implement another wire/catalog. Native `Models.getAuth()` and DSH `modifyRecord()` remain the refresh and serialization owners.
+Additional plugin-owned `github-copilot/account-<opaque-id>` records are written directly by official pi-ai OAuth through public account-bound stores. Only an explicit user-confirmed switch may project a selected normalized grant into the canonical record as specified above; preserve the former canonical grant before the first replacement. Never intercept Core credential reads, introduce a separate credential service, patch Core, or implement another wire/catalog. Native `Models.getAuth()` and DSH `modifyRecord()` remain the refresh and serialization owners.
 
 Settings store only the opaque global account selector and explicit `sessionAccounts` rows. Missing/invalid selectors or records fail explicitly, without another-account fallback. Models manages reauthorization/removal and the global default; Credits may select an already authorized account for this Session's subsequent turns, restore global inheritance or run add-only authorization without selecting it (#305/#318). An explicit choice equal to the default remains explicit. Freeze account ownership before Auto assessment and request admission, holding mutation fences until native `turn/end`/disposal; later Session/default changes never redirect running steps, retries or search. Account-local credentials, metadata, quota, proof cancellation and native adapter composition must remain isolated. Keep one public adapter/controller registration, with no second wire/catalog or Core changes. Reauthorization/removal of a pinned record stays blocked; global-default selection may continue independently.
 
@@ -308,7 +333,7 @@ evidence is content-free and ephemeral, never a new persistent population.
   See `docs/copilot-accounts.md` (#385).
 - Copilot OAuth grant writes must rebuild only pi-ai's documented provider fields as a fresh plain JSON object; unrelated extension values never reach DSH credential storage.
 - Settings changes are path-level. Never replace the whole `llm-pi-ai` section or unrelated provider profiles.
-- Sign-out deletes only the active Copilot credential record and keeps other records, the selector and route settings. A missing selected noncanonical slot fails explicitly; only an explicit eligible Add or Switch recovers it, never automatic canonical fallback.
+- Native sign-out deletes only `llm-pi-ai/github-copilot` and keeps plugin account records, the selector and route settings. A selected plugin account remains saved and must be explicitly applied again after sign-out; a missing selected slot fails explicitly, never automatic canonical fallback.
 - Hosted search serves either an eligible initiating `github-copilot` / managed `github-copilot-preview` route, or provider-owned independent search selected by the web-search router. Independent search preserves a nonempty explicit `searchModel` override; otherwise the Host considers at most three eligible Responses models from current account route facts, in deterministic ID order, without a static model list. Metadata alone is not search proof, and the final user query is sent once after candidate proof, never replayed across models. Both paths require an account-available model and supported search protocol; custom inline transport remains legacy-canonical only. Never substitute the global chat default or another Session's identity. The default `probe: true` path requires successful capability proof; `probe: false` is an explicit trust override, not an implicit fallback. Any request containing a file block, including one nested in tool-result content, must bypass the custom wire through `next()` so Core retains file projection ownership.
 - Misconfiguration and API drift fail loudly with a named missing seam. Do not fall back to process-local secrets or implicit machine state.
 - Host, Client, and Remote package entries must stay independently buildable and exported.
@@ -322,7 +347,7 @@ evidence is content-free and ephemeral, never a new persistent population.
 - Without `agents.currentInitiator`, traditional hosted search is unavailable with a named diagnostic; explicit marked `GenerateOptions` can still bind guarded inline requests, uncached if necessary. Credential notification during initial lazy discovery cannot distinguish own rotation from external account change via public status: fail closed with `WEB_PROVIDER_UNAVAILABLE` before probe/wire; a later user/driver request may retry, never automatically.
 - The new native Copilot draft warning says Save adds another real group, not a second account. Public additive APIs cannot veto Add or disable Save; this is warning-only, not enforced single-route registration. Core Edit/Delete remain.
 - Public `session.selectModel` also saves the future global default. Choose only approved Sessions/default; preserve other selected/history-backed Sessions, but do not promise unselected empty Sessions cannot inherit that default.
-- Code does not auto-migrate settings, credentials or history. After plugin release, approved Ops migration may compare-and-swap only the reviewed user-native `llm-pi-ai.providers.github-copilot` path after ruling out base/journal conflicts, then read back settings and registry. No hidden groups, bulk rewrites or credential copying. Search allowlist updates to the managed ID require a separate reviewed Ops edit; never silently broaden old lists.
+- Code does not automatically migrate settings, credentials or history; only a user-confirmed account switch updates the canonical credential as described above. After plugin release, approved Ops migration may compare-and-swap only the reviewed user-native `llm-pi-ai.providers.github-copilot` path after ruling out base/journal conflicts, then read back settings and registry. No hidden groups, bulk rewrites or credential copying outside the explicit switch. Search allowlist updates to the managed ID require a separate reviewed Ops edit; never silently broaden old lists.
 
 ## Live migration readiness (alpha.9, #101)
 
@@ -356,7 +381,7 @@ The release admission, development dependency and CI targets are exact official 
 
 These pins document compatibility evidence. They do not authorize creating another controlled Core patch or making one a prerequisite for new plugin fixes.
 
-- Models UI: `0.1.2-rc.1`, `0.1.3-alpha.1`, `0.1.5-alpha.1`, `0.1.5-alpha.2`, `0.1.5-rc.1`, `0.1.5-rc.2`, `0.1.6-alpha.1`, `0.1.6-alpha.2`, `0.2.0-rc.1` and `0.2.0-rc.2` expose `settings.models.provider-card`, keyed by settings namespace `llm-pi-ai`, to embed login/status/Refresh/Manage in a mounted configured canonical `github-copilot` row and suppress the separate footer controller. With no such row mounted, retain footer fallback; historical 0.1.1-rc.2 uses a dedicated `settings.section`. Preserve the shared account-state owner across transfer only while another eligible surface remains mounted. Unmounting the last surface or replacing declarations without overlapping mounts stops polling; a later controller reads status and separately non-forcing ensures missing/idle/stale/error/loading signed-in metadata, without replaying the old forced-login action. Manual Refresh models lives inside Manage; errors expose Retry. Opening Models is no longer guaranteed network-free, but status/details themselves remain pure. This additive slot cannot replace Core Edit/Delete: retain the native editor, while normal plugin discovery needs no manual model definitions. UI integration must not merge/remove actual canonical and `github-copilot-preview` routes or rewrite credentials, configuration, history or selection.
+- Models UI: `0.1.2-rc.1`, `0.1.3-alpha.1`, `0.1.5-alpha.1`, `0.1.5-alpha.2`, `0.1.5-rc.1`, `0.1.5-rc.2`, `0.1.6-alpha.1`, `0.1.6-alpha.2`, `0.2.0-rc.1` and `0.2.0-rc.2` expose `settings.models.provider-card`, keyed by settings namespace `llm-pi-ai`, to embed login/status/Refresh/Manage in a mounted configured canonical `github-copilot` row and suppress the separate footer controller. With no such row mounted, retain footer fallback; historical 0.1.1-rc.2 uses a dedicated `settings.section`. Preserve the shared account-state owner across transfer only while another eligible surface remains mounted. Unmounting the last surface or replacing declarations without overlapping mounts stops polling; a later controller reads status and separately non-forcing ensures missing/idle/stale/error/loading signed-in metadata, without replaying the old forced-login action. Manual Refresh models lives inside Manage; errors expose Retry. Opening Models is no longer guaranteed network-free, but status/details themselves remain pure. This additive slot cannot replace Core Edit/Delete: retain the native editor, while normal plugin discovery needs no manual model definitions. Native account switching is the explicit, confirmed canonical credential exception above; other route, model, history and Settings ownership remains unchanged.
 - Canonical authorization flow key: `llm-pi-ai/github-copilot`; additional account flows bind directly to their own plugin-owned record under the approved #297 contract.
 - Authorization verification links recognize the public `window.dshDesktop.protocolVersion === 1` marker and use `_self` so Desktop's existing `will-navigate` handler opens the system browser without popup creation. Other hosts retain `_blank`; display a selectable manual URL in both cases. This does not confirm browser launch or OAuth success. Manage omits the compatibility disclosure but retains actionable legacy diagnostics and explicit repair; migration documentation and backend ownership are unchanged.
 - Authorization service: rc.1 Core provides it; the rc.2 web/headless profiles rely on this package's runtime dependency and conditional bootstrap.

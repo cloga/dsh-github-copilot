@@ -121,7 +121,8 @@ function requestKey(request: DualModelCreateRequest): string { return JSON.strin
 function policyMatches(policy: Policy, request: DualModelCreateRequest): boolean { return policy.requestId === request.requestId && policy.workspaceId === request.workspaceId && policy.settingsRevision === request.expectedRevision }
 function dedicatedAddress(agent: Agent): boolean {
   const owned = /^copilot-dual-[0-9a-f]{64}$/
-  return owned.test(agent.id) || (agent.session.header.origin === 'subagent' && owned.test(agent.session.header.parentSession ?? ''))
+  const header = agent.session?.header
+  return owned.test(agent.id) || (header?.origin === 'subagent' && owned.test(header.parentSession ?? ''))
 }
 
 declare module '@deepseek-ai/cordis' { interface Context { githubCopilotDualModel: GitHubCopilotDualModel } }

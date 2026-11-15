@@ -13,18 +13,32 @@ const A = '11111111-1111-4111-8111-111111111111'
 const B = '22222222-2222-4222-8222-222222222222'
 const MODEL = 'synthetic-independent-model'
 const key = (id: string) => `github-copilot/account-${id}`
+const nativeKey = credentialKey('llm-pi-ai', 'github-copilot')
 afterEach(() => vi.unstubAllGlobals())
 
 it.each(['/responses', '/chat/completions', '/v1/messages'])(
-  'binds preparation and native %s dispatch to the active account without copying the canonical grant', async endpoint => {
+  'binds managed %s dispatch to the selected account and applies explicit switches to native credentials', async endpoint => {
   const ctx = new Context()
   let selected = A, revision = 1
   const continuationDefaultHistory = [{ enabled: true, changedAt: 1 }]
-  const records = new Map([A, B].map(id => [key(id), { kind: 'grant', payload: {
+  type StoredGrant = { kind: 'grant'; payload: {
+    type: 'oauth'; refresh: string; access: string; expires: number; availableModelIds: string[]
+  } }
+  const records = new Map<string, StoredGrant>()
+  for (const id of [A, B]) records.set(key(id), { kind: 'grant', payload: {
     type: 'oauth', refresh: `synthetic-github-${id}`, access: `synthetic-access-${id}`,
     expires: Date.now() + 7_200_000, availableModelIds: [MODEL],
-  } }]))
+  } })
+  records.set(nativeKey, structuredClone(records.get(key(A))!))
+  const canonicalBefore = structuredClone(records.get(nativeKey)!)
   const read = vi.fn(async (key: string) => records.get(key))
+  const modifyRecord = vi.fn(async (recordKey: string, mutate: (record: unknown) => Promise<unknown>) => {
+    const next = await mutate(records.get(recordKey))
+    if (next === undefined) records.delete(recordKey)
+    else records.set(recordKey, next as StoredGrant)
+    ctx.emit('credentials/record-updated', nativeKey as never)
+    return records.get(recordKey)
+  })
   const wireTokens: string[] = []
   vi.stubGlobal('fetch', vi.fn(async (input: unknown, init?: RequestInit) => {
     const url = String(input)
@@ -65,7 +79,7 @@ it.each(['/responses', '/chat/completions', '/v1/messages'])(
   }))
   try {
     ctx.provide('credentials', { readRecord: read, listRecords: async () => [...records.keys()].map(key => ({ key, kind: 'grant' })),
-      modifyRecord: async () => { throw new Error('Valid test tokens must not refresh') },
+      modifyRecord,
       deleteRecord: async () => { throw new Error('No fixture deletion') } })
     ctx.provide('settings', { describe: () => [{ ns: 'github-copilot', revision, value: { activeAccountId: selected, continuationDefaultHistory } }],
       mutate: async (_namespace: string, operations: readonly { value: string }[], expected: number) => {
@@ -119,7 +133,10 @@ it.each(['/responses', '/chat/completions', '/v1/messages'])(
       .toThrow('a prepared LLM call can only be dispatched once')
     expect(wireTokens).toHaveLength(2)
     expect(owner.turns.evidence(session, 2)).toMatchObject({ accountId: B, source: 'global' })
-    expect(read.mock.calls.every(([key]) => key.startsWith('github-copilot/account-'))).toBe(true)
+    expect(records.get(nativeKey)?.payload.refresh).toBe(`synthetic-github-${B}`)
+    expect(modifyRecord).toHaveBeenCalledOnce()
+    expect(await accounts.get()).toMatchObject({ state: 'ready', activeAccountId: B })
+    expect(canonicalBefore.payload.refresh).toBe(`synthetic-github-${A}`)
     owner.dispose(); accounts.dispose()
   } finally { await ctx.fiber.dispose() }
 })
