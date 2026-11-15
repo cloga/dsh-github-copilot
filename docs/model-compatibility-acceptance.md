@@ -12,13 +12,13 @@ Current source target: official DSH `0.2.2-rc.3` at
 `38a6a5c965aa99ab525161efb7cc5cf1fe62fced`, with exact dependency versions
 in `package.json`.
 
-Plugin `0.1.0-alpha.12.dsh.0.2.2.rc.3` at
-`b1763aa3d7f4040bcb50072b291514a7b1a4a779` passed the required Windows/Linux
+Plugin `0.1.0-alpha.13.dsh.0.2.2.rc.3` at
+`c7d3ab72cc043a32d24379738bf55189fbc0806a` passed the required Windows/Linux
 source and published-artifact matrix in
-[CI 43689149698](https://github.com/cloga/dsh-github-copilot/actions/runs/43689149698)
+[CI 43690419471](https://github.com/cloga/dsh-github-copilot/actions/runs/43690419471)
 and was published to GitHub Releases and npm. That evidence applies to that
-revision, not later changes. The alpha.13 source includes the #483
-qualification fix; check its exact CI and publication separately. Desktop
+revision, not later changes. The alpha.14 source adds separate native logical
+diagnostics and requires its own CI and publication evidence. Desktop
 artifact/signature evidence, installation, live OAuth, supplier model
 availability, and loaded-runtime behavior are separate and unverified.
 

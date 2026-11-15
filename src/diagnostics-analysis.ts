@@ -20,6 +20,7 @@ const gaps = [
   'no-unique-impact', 'hour-boundary-censoring', 'no-collection-coverage-clock',
   'no-calibrated-alert-thresholds', 'no-baseline-trend', 'no-root-cause-proof',
   'request-observations-not-analyzed',
+  'native-observations-not-analyzed',
 ] as const
 const intervals = [
   { lowerMs: 0, upperExclusiveMs: 100 }, { lowerMs: 100, upperExclusiveMs: 500 },
@@ -195,7 +196,7 @@ export function analyzeSnapshot(input: unknown, options: {
     || (options.source === 'reviewed-view') !== (options.view !== undefined))
     throw new Error('COPILOT_DIAGNOSTICS_ANALYSIS_INVALID_OPTIONS')
   const snapshot = parseSnapshot(input)
-  const rows = [...snapshot.rows].sort((a, b) =>
+  const rows = snapshot.rows.filter(row => !row.operation.startsWith('native-copilot-')).sort((a, b) =>
     order(a.version, b.version) || order(a.layer, b.layer) || order(a.operation, b.operation)
     || a.hour - b.hour || order(a.stage, b.stage) || order(a.metric, b.metric)
     || order(a.reason, b.reason) || a.bucket - b.bucket)
@@ -286,6 +287,9 @@ export function analyzeSnapshot(input: unknown, options: {
   }
   if (!populations.length) gapSet.add('no-retained-operation-observations')
   if (snapshot.requests !== undefined) gapSet.add('request-observations-not-analyzed')
+  if (snapshot.rows.some(row => row.operation.startsWith('native-copilot-'))
+    || snapshot.pending.some(row => row.operation.startsWith('native-copilot-')))
+    gapSet.add('native-observations-not-analyzed')
   if (!populations.some(row => ['account-global-switch', 'account-session-select', 'account-session-inherit'].includes(row.operation)))
     gapSet.add('account-switch-not-observed')
   if (!populations.some(row => row.operation === 'compaction' || row.operation === 'compaction-summary'))
@@ -332,7 +336,7 @@ export function analyzeSnapshot(input: unknown, options: {
       saturated: snapshot.saturated, interrupted: snapshot.interrupted,
     },
     populations,
-    pendingAtSnapshot: snapshot.pending,
+    pendingAtSnapshot: snapshot.pending.filter(row => !row.operation.startsWith('native-copilot-')),
     investigationCandidates: [...candidates.values()].map(candidate => ({
       fingerprint: candidate.fingerprint,
       category: candidate.category,

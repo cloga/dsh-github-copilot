@@ -42,9 +42,9 @@ These are synthetic acceptance requirements, not proof of live supplier access.
 [#483](https://github.com/cloga/dsh-github-copilot/issues/483) reports that
 plugin releases through alpha.12 could reject DSH's schema-default empty maps,
 leaving both reviewer temperature omission and canonical hosted search
-unavailable. The alpha.13 source includes the narrow qualification fix from
-[#485](https://github.com/cloga/dsh-github-copilot/pull/485); verify its
-publication, exact CI and live runtime independently. The report observed
+unavailable. The alpha.13 release includes the narrow qualification fix from
+[#485](https://github.com/cloga/dsh-github-copilot/pull/485); its source CI
+and publication do not prove live runtime behavior. The report observed
 unsupported-temperature errors on alpha.8, not on every configuration.
 
 ## Managed-route compatibility

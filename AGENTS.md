@@ -125,11 +125,11 @@ subagent invocation must be verified on `github-copilot`, not inferred from
 managed-route tests. Record enhancements that cannot safely attach to native
 APIs rather than patching Core or misrepresenting support.
 
-For official DSH `0.2.2-rc.3`, plugin `0.1.0-alpha.12.dsh.0.2.2.rc.3`
-at `b1763aa3d7f4040bcb50072b291514a7b1a4a779` passed the Windows/Linux
-source/artifact CI in [run 43689149698](https://github.com/cloga/dsh-github-copilot/actions/runs/43689149698)
+For official DSH `0.2.2-rc.3`, plugin `0.1.0-alpha.13.dsh.0.2.2.rc.3`
+at `c7d3ab72cc043a32d24379738bf55189fbc0806a` passed the Windows/Linux
+source/artifact CI in [run 43690419471](https://github.com/cloga/dsh-github-copilot/actions/runs/43690419471)
 and was published to GitHub Releases and npm. This evidence is limited to that
-revision; the alpha.13 source requires its own CI and publication evidence.
+revision; the alpha.14 source requires its own CI and publication evidence.
 Desktop signatures, installation, loaded state, OAuth and supplier calls are not
 established. The `desktopCandidateQualified: false` contract
 tracks the unverified Desktop artifact/live-acceptance layer, not a failed CI.
@@ -141,8 +141,8 @@ refresh, and normal model transport.
 Historical [#483](https://github.com/cloga/dsh-github-copilot/issues/483):
 releases through alpha.12 could reject native schema-default compatibility
 maps, blocking hosted-search proof and reviewer-only temperature omission.
-The alpha.13 source includes a narrow fix; confirm publication and live
-behavior independently. Do not suggest profile edits as a workaround.
+The alpha.13 release includes a narrow fix; confirm live behavior independently.
+Do not suggest profile edits as a workaround.
 
 The following is a historical architecture inventory, not a requirement to keep
 every surface as a product feature; apply the confirmed scope above when deciding
@@ -183,6 +183,18 @@ unique requests, retries or execution proof. Unknown source and missing legacy
 evidence stay unknown. Preserve #385 qualification/revocation; clear, pause,
 expiry and disposal fence later callbacks. Each diagnostic population, including
 Auto, is independently collapsed by default; opening it never enables collection.
+
+Native logical observations (#486) require a separate default-off
+`nativeDiagnosticsEnabled` CAS/readback consent. Observe only the public
+`llm/stream` waterfall and the plugin's native hosted-search operation, without
+changing chunks, transport, retries or Usage. Store fixed hourly counts, coarse
+duration buckets and terminal categories, never content, model/account/Session
+IDs or raw errors. Review purpose is not proof of reviewer identity; neither
+logical observation proves HTTP dispatch, supplier receipt, execution or
+billing. Clear/pause/disposal fence late and unconsumed streams. Native and
+account aggregates share the 14-day, 128-live and 2 MiB limits but remain
+separate in presentation and offline analysis. Older strict versions may reject
+new operation codes on rollback; never delete retained evidence to work around it.
 
 ## Session-policy compaction replay consent (#349, #352)
 
@@ -371,7 +383,7 @@ evidence is content-free and ephemeral, never a new persistent population.
 - Copilot OAuth grant writes must rebuild only pi-ai's documented provider fields as a fresh plain JSON object; unrelated extension values never reach DSH credential storage.
 - Settings changes are path-level. Never replace the whole `llm-pi-ai` section or unrelated provider profiles.
 - Native sign-out deletes only `llm-pi-ai/github-copilot` and keeps plugin account records, the selector and route settings. A selected plugin account remains saved and must be explicitly applied again after sign-out; a missing selected slot fails explicitly, never automatic canonical fallback.
-- Hosted search serves either an eligible initiating `github-copilot` / managed `github-copilot-preview` route, or provider-owned independent search selected by the web-search router. Independent search preserves a nonempty explicit `searchModel` override; otherwise the Host considers at most three eligible Responses models from current account route facts, in deterministic ID order, without a static model list. Metadata alone is not search proof, and the final user query is sent once after candidate proof, never replayed across models. Both paths require an account-available model and supported search protocol; custom inline transport remains legacy-canonical only. Never substitute the global chat default or another Session's identity. The default `probe: true` path requires successful capability proof; `probe: false` is an explicit trust override, not an implicit fallback. Any request containing a file block, including one nested in tool-result content, must bypass the custom wire through `next()` so Core retains file projection ownership.
+- The explicitly selected `github-copilot-hosted` backend uses the canonical native Copilot account and account-proven Responses models also present in the native catalog. Its configured model or deterministic first eligible model receives one fixed capability probe followed by one user query, without fallback or replay. Enforce the 25-second deadline, four-operation limit and account/configuration/disposal fences; metadata alone is not search proof. The old plugin router and custom inline transport are historical, not active alternatives. If that legacy wire is ever deliberately restored, file blocks, including nested tool-result files, must still delegate through `next()` so Core owns file projection.
 - Misconfiguration and API drift fail loudly with a named missing seam. Do not fall back to process-local secrets or implicit machine state.
 - Host, Client, and Remote package entries must stay independently buildable and exported.
 - The package must self-provide authorization when Core omits it, reuse an existing service without duplicate registration, and never activate the integration body before authorization is available.

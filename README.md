@@ -68,15 +68,15 @@ After the exact compatible release is available and verified, download its
 original asset and checksum in an empty directory:
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.13.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.13.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.13.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.14.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.14.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.14.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 For the `web` profile, install the same Release asset:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.13.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.13.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.14.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.14.dsh.0.2.2.rc.3.tgz
 ```
 
 Choose the intended profile explicitly. Then:
@@ -161,8 +161,9 @@ See [reviewer compatibility](./docs/auto-review-sampling.md).
 
 Plugin releases through alpha.12 can reject DSH's schema-default compatibility
 maps and disable both enhancements ([#483](https://github.com/cloga/dsh-github-copilot/issues/483)).
-The alpha.13 source fixes that qualification; check its publication and live
-runtime separately. Registration or model metadata alone proves neither works.
+The alpha.13 release fixes that qualification; live runtime behavior still
+requires separate verification. Registration or model metadata alone proves
+neither works.
 
 The native route's quota and optional identity display use only the canonical OAuth account. If the
 provider names a credential, endpoint or nonempty headers override, or its configuration
@@ -170,6 +171,10 @@ cannot be verified, quota is shown as unavailable rather than attributed to a
 different account. This is not proof of request-level billing attribution.
 Native context-incident diagnostics remain available without the optional
 managed continuation service; they do not replace DSH's context meter.
+Local diagnostics also offers separately opt-in, content-free logical
+observations for native Copilot streams and the optional Copilot search backend.
+They do not expose HTTP details or prove supplier receipt or execution.
+See [local diagnostics](./docs/plugin-diagnostics.md).
 
 ### Other optional capabilities
 
