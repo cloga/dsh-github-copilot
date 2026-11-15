@@ -26,7 +26,6 @@ import { createGitHubCopilotTokenResolver } from '../src/copilot-auth.ts'
 import { DiagnosticsController } from '../src/diagnostics-host.ts'
 import type { AccountModelSnapshot, AccountModelSource } from '../src/account-model-source.ts'
 import type { CopilotAccountBinding } from '../src/copilot-accounts-types.ts'
-import packageMetadata from '#package.json' with { type: 'json' }
 import {
   GITHUB_COPILOT_AUTO_MODEL_ID as AUTO, GITHUB_COPILOT_CREDENTIAL_KEY as KEY,
   GITHUB_COPILOT_AUTO_EFFICIENCY_MODEL_ID as EFFICIENCY,
@@ -2703,17 +2702,27 @@ describe('plugin-owned account Copilot route', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it.each([true, false])('admits projected MIME rather than durable MIME before wire: %s', async supported => {
+  it.each([
+    { supported: true, reject: false },
+    { supported: false, reject: false },
+    { supported: false, reject: true },
+  ])('dispatches projected images with MIME match $supported and supplier rejection $reject', async ({ supported, reject }) => {
     const item = catalogItem('fixture-image-model', '/responses', { capabilities: {
       supports: { streaming: true, tool_calls: true, vision: true },
       limits: { max_context_window_tokens: 128000, max_output_tokens: 8000,
         vision: { supported_media_types: [supported ? 'image/png' : 'image/jpeg'] } },
     } })
     let wires = 0
-    stubFetch(async input => {
+    stubFetch(async (input, init) => {
       if (String(input).endsWith('/models')) return catalogResponse([item])
       wires++
-      return response()
+      const body = JSON.parse(String(init?.body))
+      expect(body.input[0].content).toContainEqual(expect.objectContaining({
+        type: 'input_image', image_url: expect.stringMatching(/^data:image\/png;base64,/),
+      }))
+      return reject
+        ? new Response(JSON.stringify({ error: { message: 'synthetic image rejection' } }), { status: 400 })
+        : response()
     }, true)
     const harness = await runtime(grant({ availableModelIds: [] }))
     const data = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a/+8AAAAASUVORK5CYII=', 'base64')
@@ -2734,24 +2743,14 @@ describe('plugin-owned account Copilot route', () => {
     }), createUserMessage({ content: [{ type: 'text', text: 'continue' }], source: { kind: 'user' } })]
     const before = structuredClone(messages)
     const result = await call(harness.ctx, { model: item.id, messages })
-    if (supported) expect(result.assembler.finish).toEqual({ kind: 'stop' })
-    else {
-      expect(result.assembler.finish).toEqual({
-        kind: 'error',
-        failure: { message: expect.stringContaining('COPILOT_IMAGE_MEDIA_TYPE_UNSUPPORTED: Request blocked before selected-model dispatch'),
-          code: 'INVALID_REQUEST' },
-      })
-      if (result.assembler.finish.kind !== 'error') throw new Error('expected native admission error')
-      const message = result.assembler.finish.failure.message
-      expect(message).toContain('"model":"fixture-image-model"')
-      expect(message).toContain('"projectedMime":"image/png"')
-      expect(message).toContain('"allowedMimeTypes":["image/jpeg"]')
-      expect(message).toContain(`"pluginVersion":"${packageMetadata.version}"`)
-      expect(message).toContain('"role":"user"')
-      expect(message).not.toMatch(/synthetic-projected|image\/webp|iVBORw0KGgo/)
-      expect(harness.modify).not.toHaveBeenCalled()
+    if (reject) {
+      expect(result.assembler.finish).toMatchObject({ kind: 'error' })
+      expect(JSON.stringify(result.assembler.finish)).not.toContain('COPILOT_IMAGE_MEDIA_TYPE')
+    } else {
+      expect(result.assembler.finish).toEqual({ kind: 'stop' })
     }
-    expect(wires).toBe(supported ? 1 : 0)
+    expect(harness.modify).not.toHaveBeenCalled()
+    expect(wires).toBe(1)
     expect(messages).toEqual(before)
     expect(attachment.mediaType).toBe('image/webp')
   })

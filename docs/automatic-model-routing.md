@@ -74,9 +74,9 @@ the [latest review](./auto-iteration-review.json) before implementation.
 
 Image eligibility includes historical user/tool image blocks in all entered
 messages, not only current user text. Text-only candidates are removed; Auto
-advertises image input only with an eligible image model. Actual fixed/Auto
-dispatch independently checks explicit account MIME restrictions against
-Core's projected image. Missing MIME lists stay unverified.
+advertises image input only with an eligible image model. Fixed/Auto dispatch
+does not check the projected MIME against the account model's format list;
+supplier acceptance and errors remain native.
 [Image admission limits](./image-input-compatibility.md).
 
 Auto does not trim history or own compaction transactions. Estimated pressure

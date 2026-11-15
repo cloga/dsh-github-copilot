@@ -55,15 +55,15 @@ node scripts/select-core-release.mjs 0.2.2-rc.3
 精确兼容版本发布且通过验证后，在空目录下载原始制品并校验：
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.12.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.12.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.12.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.13.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.13.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.13.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 例如安装到 `web` profile：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.12.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.12.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.13.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.13.dsh.0.2.2.rc.3.tgz
 ```
 
 请明确选择目标 profile，然后：
@@ -83,7 +83,9 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 重新发现；如果快照不可用，请使用 **Refresh models**。此显式单次快照只通过
 Settings CAS 和回读替换 `llm-pi-ai.providers.github-copilot.models`。原生 profile
 中保存的非空列表会替代原生内置目录，卸载或停用插件后仍然保留。复制模型设置不会将
-托管路线的图像准入检查或工具 schema 过滤迁移到原生请求，也不能证明供应商调用成功。
+托管路线的权限参数过滤迁移到原生请求，也不能证明供应商调用成功。两条路线均不会在
+发送前将实际投影的图片 MIME 与账号模型的格式清单进行对照检查。
+托管路线也直接使用原生 Goal 更新 schema，不再改写。
 无法证明或与原生目录不兼容的协议、未知或更窄的服务端输入上限、未知上下文或图像支持，
 以及未知或不支持的推理控制会被跳过，不会猜测。缺少原生目录兼容性基线的新 Completions 和
 Anthropic 模型也会被跳过；已有目录模型保留原生兼容性。只有账号明确支持 PNG、JPEG、WebP、GIF 四种原生请求图像格式时，

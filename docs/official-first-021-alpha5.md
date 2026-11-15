@@ -6,6 +6,8 @@ The fixed official target is
 The plugin starts from alpha.16, main commit
 `bb25d425342ee660049a8320585f967671d49ec4`, not an earlier feature branch.
 Later upstream targets are outside this qualification.
+The historical Goal-filter retention decision below was superseded by the
+user-directed retirement in #481; permission-field filtering remains.
 
 The prepared version is `0.1.0-alpha.1.dsh.0.2.1.alpha.5`. User-directed
 independent numbering starts at `0.1.0-alpha.1` for each exact Core, continuing

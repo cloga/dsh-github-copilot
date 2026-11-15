@@ -1,12 +1,17 @@
 # Changelog
 
-## 0.1.0-alpha.12.dsh.0.2.2.rc.3 (prepared)
+## 0.1.0-alpha.13.dsh.0.2.2.rc.3 (prepared)
 
 - Add independently enabled, content-free native Copilot logical stream and hosted-search aggregates (#486).
 - Keep native observations separate from managed physical-request diagnostics; they do not prove HTTP dispatch, supplier receipt or execution.
 - Preserve request, retry, Usage and settings ownership; old strict versions may not read retained new operation codes on rollback.
 
-## 0.1.0-alpha.11.dsh.0.2.2.rc.3 (prepared)
+## 0.1.0-alpha.12.dsh.0.2.2.rc.3 (prepared)
+
+- Retire the managed route's projected-image MIME preflight and Goal schema rewriting (#481). Core owns image projection and Goal schemas; supplier errors are not preempted by a plugin MIME diagnostic.
+- Keep the managed route's permission-field filtering and the native model-sync format eligibility checks unchanged.
+
+## 0.1.0-alpha.11.dsh.0.2.2.rc.3 (published)
 
 - Show native model-list changes and output defaults automatically from current verified account metadata; one **Sync models** action explicitly confirms the write (#479).
 - Preserve an existing disabled native strict-mode override when the synced list contains a supporting Responses or Completions model; unproven overrides remain blocked.
