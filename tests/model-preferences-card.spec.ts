@@ -119,6 +119,8 @@ it('shows sync changes beside the model list and applies them with one explicit 
   expect(document.body.textContent).toContain(`${new Intl.NumberFormat().format(8192)} max output tokens`)
   expect(document.body.textContent).toContain(`${new Intl.NumberFormat().format(4096)} max output tokens`)
   expect(document.body.textContent).toContain('old')
+  const changes = document.querySelector('[aria-label="Model changes and output defaults"]')!.textContent!
+  expect(changes.indexOf('Native models that will be removed')).toBeLessThan(changes.indexOf('Per-request output defaults'))
 
   await click(sync)
   expect(face.applyNativeModelSync).toHaveBeenCalledExactlyOnceWith('12345678-1234-4234-8234-123456789012')
