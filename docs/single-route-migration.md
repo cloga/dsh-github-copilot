@@ -51,6 +51,11 @@ Synthetic tests verify that the plugin does not add a second provider alongside
 the native provider. They do not prove a specific Desktop version is installed,
 loaded or making successful supplier calls.
 
+The read-only `githubCopilot.migrationStatus()` reports
+`historyScope: live-agents-only`; it cannot rule out old selections in cold
+stored histories. The previously planned `tools/migrate-copilot-managed-route.ps1`
+is not required for this change; this guide does not attest its publication or execution.
+
 ## 中文操作说明
 
 生产插件保留账号界面和账号发现的元数据，但不再注册
@@ -80,3 +85,7 @@ DSH 操作；插件不拦截，也不声称能强制只保留一个组。
 
 合成测试验证插件不会在原生 provider 之外添加第二个 provider；不能证明特定 Desktop
 版本已安装、加载或成功调用供应商。
+
+只读的 `githubCopilot.migrationStatus()` 报告
+`historyScope: live-agents-only`，无法排除冷存储历史中的旧选择。此前规划的
+`tools/migrate-copilot-managed-route.ps1` 并非此变更的必要步骤；本文不证明其已发布或执行。
