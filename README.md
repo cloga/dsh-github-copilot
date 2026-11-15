@@ -67,15 +67,15 @@ After the exact compatible release is available and verified, download its
 original asset and checksum in an empty directory:
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.12.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.12.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.12.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.14.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.14.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.14.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 For the `web` profile, install the same Release asset:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.12.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.12.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.14.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.14.dsh.0.2.2.rc.3.tgz
 ```
 
 Choose the intended profile explicitly. Then:
@@ -151,6 +151,11 @@ The native Auto reviewer's qualified Copilot Responses requests omit
 `temperature`; ordinary Chat and native allow/deny/error/cancel behavior remain
 unchanged. Qualification uses the native adapter's pi-ai catalog even when
 the plugin resolves a separate copy; missing protocol facts remain unavailable.
+Native schema-default empty `chatTemplateKwargs`/`chatTemplateArgs` maps and a
+boolean `supportsStrictMode` do not disqualify this route, including per-model
+configuration. Other compatibility overrides remain unqualified. No settings
+rewrite is needed to remove schema defaults; do not disable review or search
+proof as a workaround. CI acceptance and live Desktop activation are separate.
 See [reviewer compatibility](./docs/auto-review-sampling.md).
 The native route's quota and optional identity display use only the canonical OAuth account. If the
 provider names a credential, endpoint or nonempty headers override, or its configuration
@@ -163,6 +168,10 @@ override, billing attribution or subagent rollup. Evidence is Host-memory-only;
 older turns and turns missing after a restart or eviction remain unknown.
 Native context-incident diagnostics remain available without the optional
 managed continuation service; they do not replace DSH's context meter.
+Local diagnostics also offers separately opt-in, content-free logical
+observations for native Copilot streams and the optional Copilot search backend.
+They do not expose HTTP details or prove supplier receipt or execution.
+See [local diagnostics](./docs/plugin-diagnostics.md).
 
 ### Removing the enhancement
 

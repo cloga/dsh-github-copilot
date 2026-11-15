@@ -54,7 +54,10 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
     || legacyAuto.rows.length > 0 || legacyAuto.noFitRows.length > 0 || legacyAuto.observationStart !== null
     || legacyAuto.rowsTruncated || legacyAuto.dropped > 0 || legacyAuto.expired > 0
     || legacyAuto.saturated > 0 || legacyAuto.restarts > 0)
-  const populations = [...new Set(rows.filter(row => row.operation !== 'collection').map(row => `${row.layer}/${row.operation}`))]
+  const nativePopulations = [...new Set(rows.filter(row => row.operation.startsWith('native-copilot-'))
+    .map(row => `${row.layer}/${row.operation}`))]
+  const populations = [...new Set(rows.filter(row => row.operation !== 'collection'
+    && !row.operation.startsWith('native-copilot-')).map(row => `${row.layer}/${row.operation}`))]
   const count = (metrics: readonly string[], population: string) => rows
     .filter(row => metrics.includes(row.metric) && `${row.layer}/${row.operation}` === population)
     .reduce((sum, row) => sum + row.count, 0)
@@ -67,6 +70,25 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
     h('p', { style: { ...nativeCaptionStyle, margin: 0 } }, 'Expand a diagnostic group to inspect its evidence. Collection controls are independent; opening a group does not enable collection.'),
     failed ? h('p', { role: 'alert', style: { margin: 0 } },
       'Could not confirm the operation. Read status before retrying; no write is automatically replayed.') : null,
+    view ? h('details', null,
+      h('summary', null, 'Native Copilot observations',
+        h('span', { style: { ...nativeCaptionStyle, marginInlineStart: 8 } },
+          view.nativeEnabled === undefined ? 'Status unknown' : view.nativeEnabled
+            ? view.state === 'ready' ? 'Enabled' : 'Configured on; storage not ready' : 'Paused')),
+      h('p', { style: { ...nativeCaptionStyle, margin: 0 } },
+        'Separately enabled, content-free logical stream and hosted-search aggregates. Review means the request declared the auto-review purpose, not verified reviewer identity. A successful stream means a stop or tool-calls terminal was observed; search success means the search returned. Neither proves tool execution, supplier receipt or billing. HTTP, bytes and native retry counts are unavailable.'),
+      nativePopulations.length ? h('div', { style: { overflowX: 'auto', minWidth: 0 } },
+        h('table', { style: { width: '100%', borderCollapse: 'collapse', textAlign: 'left', font: 'inherit' } },
+          h('thead', null, h('tr', null, ...['Population', 'Started', 'Observed success', 'Failed', 'Cancelled', 'Interrupted', 'Unknown / revoked', 'Failure codes'].map(label =>
+            h('th', { key: label, scope: 'col', style: { padding: 6, font: 'inherit', fontWeight: 500 } }, label)))),
+          h('tbody', null, ...nativePopulations.map(population => h('tr', { key: population },
+            h('th', { scope: 'row', style: { padding: 6, font: 'inherit', fontWeight: 500 } }, population),
+            ...['started', 'success', 'failed', 'cancelled', 'interrupted'].map(metric =>
+              h('td', { key: metric, style: { padding: 6 } }, count([metric], population))),
+            h('td', { style: { padding: 6 } }, count(['unknown', 'revoked'], population)),
+            h('td', { style: { padding: 6 } }, [...new Set(rows.filter(row => row.metric === 'failed'
+              && `${row.layer}/${row.operation}` === population).map(row => row.reason))].join(', ') || '—'))))))
+        : h('p', { style: { margin: 0 } }, 'No retained native observations. This does not establish zero failures.')) : null,
     view ? h('details', null,
       h('summary', null, 'Physical request observations',
         h('span', { style: { ...nativeCaptionStyle, marginInlineStart: 8 } },
@@ -135,6 +157,8 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
           : `Request observations ${view.requestEnabled ? 'enabled' : 'paused'}. ${requests?.rows.length ?? 0} retained physical requests; ${requests?.dropped ?? 0} dropped; ${requests?.evicted ?? 0} expired/evicted.`),
       h('p', { style: { ...nativeCaptionStyle, margin: 0 } },
         'Separate opt-in: retain at most 128 content-free physical requests and 128 credential-change observations for 24 hours within the shared storage cap. Includes model, payload byte counts, transport timing, HTTP status, terminal categories and fixed credential qualification reasons, not bodies, credentials, URLs, headers or Session/turn IDs. Random stream IDs correlate native SDK dispatches only; dispatch index is not a Core retry count.'),
+      h('p', { style: { ...nativeCaptionStyle, margin: 0 } },
+        'A separate native opt-in records only operation type, hourly counts, coarse duration, fixed outcomes and a few allowlisted error codes for native Copilot streams and the optional Copilot search backend. Aggregates are retained for 14 days; no model, prompt, query, account or Session identifiers are recorded.'),
       h('p', { role: 'status', style: { margin: 0 } },
         !remote ? 'Diagnostics controls are unavailable in this connection.'
           : !view ? busy ? 'Reading local collection status…' : 'Collection status is unknown.'
@@ -151,9 +175,12 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
         control(view?.requestEnabled ? 'Pause request observations' : 'Enable request observations',
           () => { void run(value => value.setRequestEnabled(!view?.requestEnabled)) },
           !remote || !view || view.requestEnabled === undefined || !view.requestEnabled && view.state !== 'ready'),
+        control(view?.nativeEnabled ? 'Pause native observations' : 'Enable native observations',
+          () => { void run(value => value.setNativeEnabled(!view?.nativeEnabled)) },
+          !remote || !view || view.nativeEnabled === undefined || !view.nativeEnabled && view.state !== 'ready'),
         control('Clear local diagnostics', () => setConfirmClear(true), !remote || !view || view.state !== 'ready')),
       confirmClear ? h('div', { role: 'group', 'aria-label': 'Confirm clearing local diagnostics' },
-        h('p', null, 'Delete collected aggregates and request observations? Collection controls keep their current enabled/paused settings. This does not clear account settings or conversation history.'),
+        h('p', null, 'Delete collected aggregates and request observations, including native observations? Collection controls keep their current enabled/paused settings. This does not clear account settings or conversation history.'),
         control('Confirm clear', () => { setConfirmClear(false); void run(value => value.clear()) }),
         control('Cancel', () => setConfirmClear(false))) : null),
     view ? h('details', null,

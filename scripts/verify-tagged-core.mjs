@@ -25,6 +25,7 @@ const tests = ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 't
 function runtimeTests(release) {
   if (release === '0.2.2-rc.3') return [...runtimeTests('0.2.1-rc.3'),
     'tests/native-web-composition.spec.ts', 'tests/dual-model-host.spec.ts',
+    'tests/fixtures/diagnostics-native-core.fixture.ts',
     'tests/fixtures/tool-schema-core.fixture.ts', 'tests/fixtures/subagent-copilot-core.fixture.ts',
     'tests/fixtures/native-subagent-copilot-core.fixture.ts', 'tests/fixtures/native-model-sync-core.fixture.ts']
   if (['0.2.1-alpha.5', '0.2.1-rc.3'].includes(release)) return [...runtimeTests('0.2.0-rc.2'),

@@ -23,7 +23,7 @@ collection **and bounded local aggregate persistence**, not exports or uploads.
 The normal installation does not change this default-off setting.
 
 The dedicated Local diagnostics region opens with independently collapsed
-**Physical request observations**, **Credential change observations**, and,
+**Native Copilot observations**, **Physical request observations**, **Credential change observations**, and,
 when present, **Account and compaction observations**. Summaries retain compact
 status/count information; expanding a group neither enables collection nor
 performs another status/request call. Account and compaction summaries,
@@ -45,8 +45,42 @@ snapshot fields on rollback; do not delete or silently rewrite retained evidence
 The separate **Enable request observations** control uses the hidden volatile
 `github-copilot.requestDiagnosticsEnabled` leaf with path-level CAS and exact
 readback. Existing aggregate consent never enables request observations.
+**Enable native observations** is a third, independent default-off consent,
+stored as `github-copilot.nativeDiagnosticsEnabled` with path-level CAS and
+exact readback. Existing request or aggregate settings never enable it.
 **Clear local diagnostics** also clears retained historical Auto aggregates and
-request observations, without changing saved collection settings.
+request and native observations, without changing saved collection settings.
+
+### Native Copilot logical observations (#486)
+
+The public `llm/stream` waterfall observes consumed streams for the exact native
+`github-copilot` route, including ordinary and prepared calls. Streams whose
+public purpose is `auto-review` form a separate population; that purpose is not
+proof of reviewer ownership. The optional `github-copilot-hosted` backend records
+one logical operation after input validation, covering its preparation, proof
+and final query together. Other Web backends, readiness, model listing,
+pre-validation search rejection and failures before stream iteration are not
+observed. These aggregates do not identify a Session, account, model or request.
+
+Only hourly counts, plugin version, fixed operation/outcome codes and coarse
+duration buckets are retained for 14 days. Stream success means an observed
+`stop` or `tool-calls` terminal, not tool execution. Search success means the
+backend returned a result. A reported abort without actual signal evidence,
+missing terminal or token limit stays unknown; early consumer closure is
+interrupted. Durations include consumer idle time or search preparation and
+are not supplier latency. Exact native error codes `AUTH`, `RATE_LIMIT`,
+`TIMEOUT` and `CONTEXT_WINDOW_EXCEEDED` map to fixed local categories; every
+other code stays unknown. No HTTP status, body/bytes, retry count, query,
+messages, credentials or raw errors are collected. None of these observations
+proves dispatch, supplier receipt, billing or end-to-end success.
+
+The native population shares the aggregate 4,096-row, 128-live-handle and 2 MiB
+limits but stays separate from account/compaction and managed physical-request
+presentations. Pause, clear and disposal fence pending and not-yet-consumed
+streams; old snapshots can contain interrupted work. The offline account
+analyzer excludes native rows with `native-observations-not-analyzed`.
+Older strict plugin versions may reject snapshots containing the new operation
+codes on rollback; preserve the data rather than deleting it.
 
 ### Credential-change decisions (#402)
 
@@ -159,8 +193,10 @@ signal evidence; arbitrary native error text cannot establish cancellation.
 
 Stock/custom-engine physical summaries, recovery opt-out/native-only summary
 branches, OAuth Add/reauthorization/removal, quota, ordinary model refresh,
-canonical/custom transport and unwrapped RPCs remain uncovered. Managed native
-adapter HTTP dispatches have only the separately enabled coverage below.
+canonical/custom HTTP transport and unwrapped RPCs remain uncovered at the
+physical layer. Native logical streams are observed only by the separately
+enabled scope above. Managed native adapter HTTP dispatches have only the
+separately enabled coverage below.
 Native checkpoint observation is not filesystem durability evidence. Reporting
 loss, crashes, disabled intervals and paging/coverage gaps must never be treated
 as zero failures. No automatic daily analysis, issue creation, account/model
