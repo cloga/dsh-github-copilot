@@ -199,6 +199,8 @@ jobs:
           node node_modules/vitest/vitest.mjs run --config vitest.candidate-published.config.ts
           node node_modules/vitest/vitest.mjs run --config vitest.auto-review-published.config.ts --reporter=default --reporter=json --outputFile reviewer-results.json
           node -e "const r=require('./reviewer-results.json'); const s=r.testResults.find(s=>s.name.endsWith('auto-review-copilot-core.fixture.ts')); if(!s||s.assertionResults.length!==34||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected all 34 native reviewer tests, none skipped'); console.log('Verified 34 executed published-artifact reviewer tests')"
+          node node_modules/vitest/vitest.mjs run tests/native-account-coexistence.spec.ts --reporter=default --reporter=json --outputFile account-marker-results.json
+          node -e "const r=require('./account-marker-results.json'); const s=r.testResults.find(s=>s.name.endsWith('native-account-coexistence.spec.ts')); if(!s||s.assertionResults.length!==1||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected the published native account marker test to execute without skips'); console.log('Verified native account evidence across published LLM marker instances')"
 
   release-ready:
     name: release-ready

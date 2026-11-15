@@ -1,9 +1,14 @@
+import { cpSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import '@earendil-works/pi-ai/api/openai-completions'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { Context } from '@deepseek-ai/cordis'
 import Authorization from '@deepseek-ai/dsh-authorization'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import LlmRuntime, { BlockAssembler, createUserMessage, markAgentLoopRequest } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { BlockAssembler, createUserMessage, isAgentLoopRequest, markAgentLoopRequest } from '@deepseek-ai/dsh-llm'
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import * as CorePiAi from '@deepseek-ai/dsh-llm-pi-ai'
@@ -28,8 +33,9 @@ const key = (account: string) => account === 'canonical' ? KEY : `github-copilot
 type SyntheticGrant = { kind: 'grant'; payload: { type: 'oauth'; refresh: string; access: string; expires: number; availableModelIds: string[] } }
 afterEach(() => vi.unstubAllGlobals())
 
-it('applies confirmed account switches to native credentials and retains the native route after disposal', async () => {
+it('preserves native account evidence and account switches across request marker instances', async () => {
   const ctx = new Context()
+  let markerFixture: string | undefined
   const model = getBuiltinModels('github-copilot').find(model => model.api === 'openai-completions')
   if (!model) throw new Error('Pinned native Copilot completions model unavailable')
   const expires = Date.now() + 7_200_000
@@ -154,6 +160,31 @@ it('applies confirmed account switches to native credentials and retains the nat
     for await (const _chunk of review.stream(markAgentLoopRequest({ ...review.config, signal: requestSignal.signal,
       sessionId: SessionId(nativeAgent.session.id), purpose: 'auto-review', messages: [] }))) {}
     expect(ctx.get('githubCopilotSessionAccounts')?.turns.evidence(nativeAgent.session, 1)).toBeUndefined()
+    if (process.env.DSH_CORE_EVIDENCE === 'published-artifact-runtime') {
+      expect(process.env.DSH_PUBLISHED_CORE_RELEASE).toBe('0.2.2-rc.3')
+      const require = createRequire(import.meta.url)
+      const manifest = realpathSync(require.resolve('@deepseek-ai/dsh-llm/package.json'))
+      expect(JSON.parse(readFileSync(manifest, 'utf8'))).toMatchObject({
+        name: '@deepseek-ai/dsh-llm', version: '0.2.2-rc.3',
+      })
+      const packageRoot = dirname(manifest)
+      markerFixture = mkdtempSync(join(tmpdir(), 'copilot-llm-marker-'))
+      symlinkSync(dirname(dirname(packageRoot)), join(markerFixture, 'node_modules'), 'junction')
+      const copy = join(markerFixture, 'llm')
+      cpSync(packageRoot, copy, { recursive: true, errorOnExist: true, force: false })
+      const other: typeof import('@deepseek-ai/dsh-llm') =
+        await import(/* @vite-ignore */ pathToFileURL(join(copy, 'lib', 'index.js')).href)
+      const ownMarker = markAgentLoopRequest({ provider: 'github-copilot', model: model.id, messages: [] })
+      expect(isAgentLoopRequest(ownMarker)).toBe(true)
+      expect(other.isAgentLoopRequest(ownMarker)).toBe(false)
+      const foreign = await ctx.llm.prepareCall({ provider: 'github-copilot', model: model.id })
+      const foreignRequest = other.markAgentLoopRequest({ ...foreign.config, signal: requestSignal.signal,
+        sessionId: SessionId(nativeAgent.session.id), messages: [] })
+      expect(other.isAgentLoopRequest(foreignRequest)).toBe(true)
+      expect(isAgentLoopRequest(foreignRequest)).toBe(false)
+      for await (const _chunk of foreign.stream(foreignRequest)) {}
+      expect(ctx.get('githubCopilotSessionAccounts')?.turns.evidence(nativeAgent.session, 1)).toBeUndefined()
+    }
     const ordinary = await ctx.llm.prepareCall({ provider: 'github-copilot', model: model.id })
     for await (const _chunk of ordinary.stream(markAgentLoopRequest({ ...ordinary.config, signal: requestSignal.signal,
       sessionId: SessionId(nativeAgent.session.id),
@@ -184,11 +215,15 @@ it('applies confirmed account switches to native credentials and retains the nat
     expect(wireAccounts).toEqual([
       `Bearer synthetic-access-${A}`, `Bearer synthetic-access-${A}`, `Bearer synthetic-access-${A}`,
       `Bearer synthetic-access-${A}`, `Bearer synthetic-access-${A}`,
+      ...(process.env.DSH_CORE_EVIDENCE === 'published-artifact-runtime' ? [`Bearer synthetic-access-${A}`] : []),
       `Bearer synthetic-access-${B}`, `Bearer synthetic-access-${B}`,
     ])
     expect(grants.get(KEY)?.payload.refresh).toBe(`synthetic-${B}`)
     expect(ctx.agentDefaultModel.currentSelection()).toEqual(nativeSelection)
     expect(modifyRecord).toHaveBeenCalledTimes(1)
     expect(deleteRecord).not.toHaveBeenCalled()
-  } finally { await ctx.fiber.dispose() }
+  } finally {
+    try { await ctx.fiber.dispose() }
+    finally { if (markerFixture !== undefined) rmSync(markerFixture, { recursive: true, force: true }) }
+  }
 })
