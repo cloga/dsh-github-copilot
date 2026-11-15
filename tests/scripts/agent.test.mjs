@@ -5,7 +5,150 @@ import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { spawnSync } from 'node:child_process'
 import { attribution, describeRepository, doctor, planTask, repositoryRoot } from '../../scripts/agent.mjs'
-import { verifyAgentContract } from '../../scripts/verify-agent-contract.mjs'
+import { verifyAgentContract, verifyCurrentCoreDocument, verifyDocumentationReview } from '../../scripts/verify-agent-contract.mjs'
+import { assessDocumentationImpact } from '../../scripts/verify-documentation-impact.mjs'
+
+const documentationImpactBody = `### Documentation impact
+- Behavior: user-facing
+- Docs: README.md, README.zh.md, docs/accounts.md
+- Details: Explain the account switch and its profile-wide behavior.`
+
+test('documentation impact requires reviewable evidence for code and tooling changes', () => {
+  const unchanged = {
+    changedFiles: ['src/example.ts'],
+    body: `### Documentation impact
+- Behavior: unchanged
+- Details: Refactors internal bookkeeping without changing public behavior.`,
+  }
+  assert.equal(assessDocumentationImpact(unchanged).required, true)
+  assert.equal(assessDocumentationImpact({ changedFiles: ['docs/accounts.md'], body: null }).required, false)
+  for (const body of [
+    null,
+    '<!-- ### Documentation impact\n- Behavior: unchanged\n- Details: Hidden text does not count as a review. -->',
+    '### Documentation impact\n- Behavior: unchanged\n- Details: TODO',
+    '### Documentation impact\n- Behavior: unchanged\n- Details: Reasonable explanation of the internal change.\n- Behavior: user-facing',
+    '### Documentation impact\n- Behavior: unchanged\n- Details: Reasonable explanation of the internal change.\n### Documentation impact',
+  ]) {
+    assert.throws(() => assessDocumentationImpact({ ...unchanged, body }), /DOCUMENTATION_IMPACT/)
+  }
+  for (const path of ['scripts/example.mjs', 'package.json']) {
+    assert.throws(() => assessDocumentationImpact({ changedFiles: [path], body: null }), /DOCUMENTATION_IMPACT/)
+  }
+})
+
+test('user-facing changes require substantive bilingual and named domain documentation', () => {
+  const input = {
+    changedFiles: ['src/example.ts', 'README.md', 'README.zh.md', 'docs/accounts.md'],
+    body: documentationImpactBody,
+    versions: ['1.0.0', '1.1.0'],
+    before: {
+      'README.md': 'Install 1.0.0.\nOld behavior.',
+      'README.zh.md': 'Install 1.0.0.\nOld behavior.',
+      'docs/accounts.md': 'Old account behavior.',
+    },
+    after: {
+      'README.md': 'Install 1.1.0.\nNew account behavior.',
+      'README.zh.md': 'Install 1.1.0.\nNew account behavior.',
+      'docs/accounts.md': 'New account behavior.',
+    },
+  }
+  assert.deepEqual(assessDocumentationImpact(input).docs, ['README.md', 'README.zh.md', 'docs/accounts.md'])
+  for (const invalid of [
+    { ...input, changedFiles: input.changedFiles.filter(path => path !== 'README.zh.md') },
+    { ...input, after: { ...input.after, 'README.md': 'Install 1.1.0.\nOld behavior.' } },
+    { ...input, body: documentationImpactBody.replace(', docs/accounts.md', '') },
+    { ...input, body: documentationImpactBody.replace('docs/accounts.md', 'docs/../accounts.md') },
+    { ...input, after: { ...input.after, 'docs/accounts.md': 'Old account behavior.' } },
+  ]) {
+    assert.throws(() => assessDocumentationImpact(invalid), /DOCUMENTATION_IMPACT/)
+  }
+})
+
+test('documentation impact CLI checks the actual PR base, head and event body', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'copilot-documentation-impact-'))
+  const git = (...args) => {
+    const result = spawnSync('git', ['-C', root, ...args], { encoding: 'utf8' })
+    assert.equal(result.status, 0, result.stderr)
+    return result.stdout.trim()
+  }
+  try {
+    await mkdir(join(root, 'src'))
+    await mkdir(join(root, 'docs'))
+    const write = (path, content) => writeFile(join(root, path), content)
+    await write('package.json', JSON.stringify({ version: '1.0.0' }))
+    await write('README.md', 'Version 1.0.0\nOld behavior.\n')
+    await write('README.zh.md', 'Version 1.0.0\nOld behavior.\n')
+    await write('docs/accounts.md', 'Old account behavior.\n')
+    await write('src/example.ts', 'export const value = 1\n')
+    git('init', '-q')
+    git('add', '.')
+    git('-c', 'user.name=Documentation test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'base')
+    git('update-ref', 'refs/remotes/origin/test-base', git('rev-parse', 'HEAD'))
+    await write('package.json', JSON.stringify({ version: '1.1.0' }))
+    await write('README.md', 'Version 1.1.0\nNew account behavior.\n')
+    await write('README.zh.md', 'Version 1.1.0\nNew account behavior.\n')
+    await write('docs/accounts.md', 'New account behavior.\n')
+    await write('src/example.ts', 'export const value = 2\n')
+    git('add', '.')
+    git('-c', 'user.name=Documentation test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'change')
+    const event = join(root, 'event.json')
+    const invoke = () => spawnSync(process.execPath, [join(repositoryRoot, 'scripts', 'verify-documentation-impact.mjs')], {
+      cwd: root, encoding: 'utf8',
+      env: { ...process.env, GITHUB_EVENT_NAME: 'pull_request', GITHUB_EVENT_PATH: event, GITHUB_BASE_REF: 'test-base' },
+    })
+
+    await writeFile(event, JSON.stringify({ pull_request: { body: documentationImpactBody } }))
+    assert.equal(invoke().status, 0)
+    await writeFile(event, JSON.stringify({ pull_request: { body: 'SECRET_SENTINEL' } }))
+    const rejected = invoke()
+    assert.notEqual(rejected.status, 0)
+    assert.match(rejected.stderr, /DOCUMENTATION_IMPACT/)
+    assert.ok(!`${rejected.stdout}${rejected.stderr}`.includes('SECRET_SENTINEL'))
+    git('update-ref', 'refs/remotes/origin/test-base', git('rev-parse', 'HEAD'))
+    git('rm', 'src/example.ts')
+    git('-c', 'user.name=Documentation test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'delete runtime')
+    assert.notEqual(invoke().status, 0, 'deleting a runtime file still requires a declaration')
+    await write('src/example.ts', 'export const value = 2\n')
+    git('add', 'src/example.ts')
+    git('-c', 'user.name=Documentation test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'restore runtime')
+    git('update-ref', 'refs/remotes/origin/test-base', git('rev-parse', 'HEAD'))
+    await mkdir(join(root, 'misc'))
+    git('mv', 'src/example.ts', 'misc/example.ts')
+    git('-c', 'user.name=Documentation test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'move runtime')
+    assert.notEqual(invoke().status, 0, 'moving a runtime file outside its directory still requires a declaration')
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test('current documentation targets track package metadata rather than historical pins', async () => {
+  const pkg = JSON.parse(await readFile(join(repositoryRoot, 'package.json'), 'utf8'))
+  for (const file of ['AGENTS.md', 'docs/model-compatibility-acceptance.md', 'docs/image-input-compatibility.md']) {
+    const text = await readFile(join(repositoryRoot, file), 'utf8')
+    verifyCurrentCoreDocument(text, pkg.engines.dsh)
+    assert.throws(() => verifyCurrentCoreDocument(text.replace(
+      `Current source target: official DSH \`${pkg.engines.dsh}\``,
+      'Current source target: official DSH `0.0.0-stale`',
+    ), pkg.engines.dsh), /current-Core document/)
+  }
+})
+
+test('agent contract keeps documentation review and PR-body edit checks wired into CI', async () => {
+  const contract = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
+  const policy = contract.tasks.tooling.documentationReview
+  const template = await readFile(join(repositoryRoot, '.github', 'PULL_REQUEST_TEMPLATE.md'), 'utf8')
+  const workflow = await readFile(join(repositoryRoot, '.github', 'workflows', 'ci.yml'), 'utf8')
+  verifyDocumentationReview(policy, template, workflow)
+  for (const invalid of [
+    { ...policy, detailsRequired: false },
+    { ...policy, versionOnlyInsufficient: false },
+    { ...policy, rerunOnBodyEdit: false },
+    { ...policy, semanticReview: 'automated' },
+  ]) {
+    assert.throws(() => verifyDocumentationReview(invalid, template, workflow), /documentation impact/)
+  }
+  assert.throws(() => verifyDocumentationReview(policy, template.replace('### Documentation impact', '### Removed'), workflow), /documentation impact/)
+  assert.throws(() => verifyDocumentationReview(policy, template, workflow.replace('opened, synchronize, reopened, edited', 'opened, synchronize, reopened')), /documentation impact/)
+  assert.throws(() => verifyDocumentationReview(policy, template, workflow.replace('test "$DOCUMENTATION_RESULT" = success', 'echo ignored')), /documentation impact/)
+})
 
 test('describes actual package metadata without claiming a release exists', async () => {
   const result = await describeRepository()

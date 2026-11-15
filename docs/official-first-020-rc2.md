@@ -1,5 +1,9 @@
 # Official-first review: DSH 0.2.0-rc.2
 
+> Historical review of this exact release, not the current support target or
+> migration guidance. See the [current README](../README.md) and
+> [model compatibility acceptance](./model-compatibility-acceptance.md).
+
 ## Target and evidence
 
 The sole admitted target is official [`dsh-v0.2.0-rc.2`](https://github.com/deepseek-ai/deepseek-harness/tree/639ed015397290b3745d163aafe02ffee4aa3f84), commit `639ed015397290b3745d163aafe02ffee4aa3f84`. Compare it with the retained [rc.1 baseline](./official-first-020-rc1.md) using the [official source comparison](https://github.com/deepseek-ai/deepseek-harness/compare/dsh-v0.2.0-rc.1...dsh-v0.2.0-rc.2). The signed installed Windows Desktop `dsh/desktop-runtime.json` is 2,817,387 bytes, SHA-256 `29561160fb7825c3968708f5700564f4381a976985fc270ee5dcc42e5a0a3a54`, and lists 287 shared packages. Desktop, Core and Desktop Host report rc.2; the 16 declared DSH peers resolve rc.2, Cordis 4.0.4 and schemastery 3.18.4. The descriptor establishes peer ownership, not plugin activation, Electron integration or live provider calls.

@@ -1,6 +1,6 @@
 # Oversized compaction recovery
 
-Tracking: [#228](https://github.com/cloga/dsh-github-copilot/issues/228), [#330](https://github.com/cloga/dsh-github-copilot/issues/330). Target: unchanged official DSH `0.2.0-rc.2` (`639ed015397290b3745d163aafe02ffee4aa3f84`). This document specifies a **separately selected** Host compaction engine; installing this plugin by itself does not replace a running Core engine. Once selected, automatic segmented recovery defaults on. The historical package export and class name remain compatible.
+Tracking: [#228](https://github.com/cloga/dsh-github-copilot/issues/228), [#330](https://github.com/cloga/dsh-github-copilot/issues/330). The initial design and measurements used unchanged official DSH `0.2.0-rc.2` (`639ed015397290b3745d163aafe02ffee4aa3f84`); the current exact target is in `package.json` and requires its own CI evidence. This document specifies a **separately selected** Host compaction engine; installing this plugin by itself does not replace a running Core engine. Once selected, automatic segmented recovery defaults on. The historical package export and class name remain compatible.
 
 ## Requirements and failure boundary
 

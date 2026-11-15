@@ -1,5 +1,10 @@
 # Changelog
 
+Status labels record what was known when each entry was written; immutable
+release tags do not update this file after publication. Check the exact
+[GitHub Release](https://github.com/cloga/dsh-github-copilot/releases) and npm
+version separately rather than treating an old `prepared` label as current status.
+
 ## 0.1.0-alpha.11.dsh.0.2.2.rc.3 (prepared)
 
 - Show native model-list changes and output defaults automatically from current verified account metadata; one **Sync models** action explicitly confirms the write (#479).

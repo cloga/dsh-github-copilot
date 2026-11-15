@@ -46,7 +46,8 @@ Release 与 npm 制品均已发布。已发布、已安装、已加载是不同�
 node scripts/select-core-release.mjs 0.2.2-rc.3
 ```
 
-只有工具确认存在完整且已发布的兼容版本后，才能给出安装建议。参见
+选择器只检查 Release／npm 元数据和指定资产；不会运行 CI、校验下载字节，
+也不会验证 Desktop 已加载。安装建议还需单独核实这些证据。参见
 [版本选择与分发](./docs/npm-distribution.md)和
 [模型兼容验收标准](./docs/model-compatibility-acceptance.md)。
 
@@ -110,14 +111,31 @@ Anthropic 模型也会被跳过；已有目录模型保留原生兼容性。只�
 每次先发送一个固定能力探测，证明可用后才发送一次用户查询；两者均可能产生费用。
 自定义端点、凭据或传输覆盖，以及无法确认的模型，保持不可用。没有自动换模型重试、
 Web 服务替换或旧插件路由 UI。
-原生 Auto reviewer 经确认的 Copilot Responses 审核请求会省略 `temperature`；
+原生 Auto reviewer 的 Copilot Responses 请求只有在资格验证通过时才会省略 `temperature`；
 普通聊天和原生 allow/deny/error/cancel 行为不变。即使插件解析到另一份 pi-ai，
 资格判断也使用原生适配器的目录；无法确认协议时仍不可用。参见
 [审核兼容说明](./docs/auto-review-sampling.md)。
+
+**已知限制（alpha.11）：**DSH schema 生成的默认兼容性映射可能使原生托管搜索
+及 reviewer 省略 temperature 的资格验证失败；见未关闭的
+[#483](https://github.com/cloga/dsh-github-copilot/issues/483)。
+注册成功或存在模型元数据不代表这两项能力实际可用。
+
 原生路线的额度和可选身份显示只使用 canonical OAuth 账号；如果 provider 指定了其他凭据、
 端点或非空请求头，或无法确认其配置，则显示额度不可用，不会将其他账号的额度归到原生路线。
 这不证明单次请求实际计费的账号。
 原生上下文异常诊断不依赖可选的托管续接服务，也不会替代 DSH 的上下文计量。
+
+### 其他可选能力
+
+- 托管路线的 Credits 可为当前 Session 的后续 turn 选择已保存账号。
+  [可见历史续接](./docs/session-continuation.md)是明确披露的有损 Responses 策略；
+  不会静默为已有 Session 开启，也不会自动发送或重试。
+- [分段压缩恢复](./docs/manual-compaction-recovery.md)需要明确选择对应引擎；
+  安装插件不会替换 Core 的引擎。
+- [本地诊断](./docs/plugin-diagnostics.md)和托管 Responses gzip 默认关闭；
+  开启诊断不会上传数据。支持 GitHub Enterprise Cloud 租户登录，
+  不支持 GHES 和 Enterprise 额度查询。
 
 ### 移除增强
 
@@ -144,6 +162,7 @@ rc.2 的证据不能证明 rc.3 的行为。安装不会自动运行预检：
 [AGENTS.md](./AGENTS.md)。完整验证及打包／发布门禁由 GitHub Actions 执行。
 本地源码检查、合成 fixture、发布、profile 安装和 Desktop 实际加载属于不同的证据层级，
 应分别如实报告。
+PR 需要说明文档影响，审阅者仍需核实语义准确性和覆盖范围；见[贡献指南](./CONTRIBUTING.md#change-workflow)。
 提交归因必须用 `Assisted-by` 标记实际使用的工具；不得虚构共同作者身份。
 
 更多行为和验收限制见[账号接入](./docs/copilot-accounts.md)、

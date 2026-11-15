@@ -21,6 +21,16 @@ responses for allow, deny, malformed verdict, HTTP error and cancellation.
 Disposing the enhancement reproduces the unsupported-temperature failure.
 These are synthetic acceptance requirements, not proof of live supplier access.
 
+### Known native configuration limitation
+
+Open [#483](https://github.com/cloga/dsh-github-copilot/issues/483) reports
+that DSH `0.2.2-rc.3` can populate empty compatibility maps even when no
+override was configured. The current qualification can reject these defaults,
+leaving both reviewer-only temperature omission and canonical hosted search
+unavailable. The report observed unsupported-temperature reviewer errors on
+alpha.8; it is not proof that every request or configuration fails. No profile
+rewrite, unsafe workaround, automatic retry or merged fix is implied.
+
 ## Managed-route compatibility
 
 The plugin automatically omits `temperature` only from a supported official DSH

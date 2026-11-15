@@ -8,11 +8,18 @@ catalog, selection strategy, or agent runtime. Follow the
 
 ## Exact target and evidence
 
-The current candidate targets official DSH `0.2.2-rc.3` at
-`38a6a5c965aa99ab525161efb7cc5cf1fe62fced`, with the exact dependency versions
-in `package.json`. It is pending required CI and is not a supported or
-installable release. Desktop artifact/signature evidence, live OAuth, supplier
-model availability, and loaded-runtime behavior are separate and unverified.
+Current source target: official DSH `0.2.2-rc.3` at
+`38a6a5c965aa99ab525161efb7cc5cf1fe62fced`, with exact dependency versions
+in `package.json`.
+
+Plugin `0.1.0-alpha.11.dsh.0.2.2.rc.3` at
+`cbaf3095298b75f48782e7962849e9ff7cfa1be0` passed the required Windows/Linux
+source and published-artifact matrix in
+[CI 43670239458](https://github.com/cloga/dsh-github-copilot/actions/runs/43670239458)
+and was published to GitHub Releases and npm. That evidence applies to that
+revision, not later changes. Desktop artifact/signature evidence, installation,
+live OAuth, supplier model availability, and loaded-runtime behavior are
+separate and unverified.
 
 Use the exact published source and package graphs in the Windows/Linux CI
 fixtures. Do not patch Core or dependencies. The fixtures use synthetic

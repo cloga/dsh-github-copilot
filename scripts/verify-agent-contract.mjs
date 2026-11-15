@@ -11,6 +11,29 @@ export function verifyCurrentCoreTemplate(template, release) {
   }
 }
 
+export function verifyCurrentCoreDocument(text, release) {
+  const targets = [...text.matchAll(/^Current source target: official DSH `([^`]+)`/gm)]
+  if (targets.length !== 1 || targets[0][1] !== release) {
+    throw new Error('Agent contract: current-Core document must match package engines.dsh exactly once')
+  }
+}
+
+export function verifyDocumentationReview(policy, template, workflow) {
+  if (policy?.implementation !== 'scripts/verify-documentation-impact.mjs'
+    || JSON.stringify(policy.impact) !== JSON.stringify(['user-facing', 'unchanged'])
+    || JSON.stringify(policy.requiredDocuments) !== JSON.stringify(['README.md', 'README.zh.md', 'docs/*.md'])
+    || policy.detailsRequired !== true || policy.versionOnlyInsufficient !== true
+    || policy.rerunOnBodyEdit !== true || policy.semanticReview !== 'human-required'
+    || !template.includes('### Documentation impact') || !template.includes('- Behavior:')
+    || !template.includes('- Docs:') || !template.includes('- Details:')
+    || !workflow.includes('types: [opened, synchronize, reopened, edited]')
+    || !workflow.includes('node scripts/verify-documentation-impact.mjs')
+    || !workflow.includes('needs: [verify, published-adapter, documentation-impact]')
+    || !workflow.includes('test "$DOCUMENTATION_RESULT" = success')) {
+    throw new Error('Agent contract: documentation impact review or CI gate is missing')
+  }
+}
+
 export async function verifyAgentContract(root = repositoryRoot) {
   const contract = JSON.parse(await readFile(resolve(root, 'agent-contract.json'), 'utf8'))
   const pkg = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
@@ -27,8 +50,9 @@ export async function verifyAgentContract(root = repositoryRoot) {
   const productScope = contract.boundaries?.confirmedProductScope
   require(productScope?.source === 'user-confirmed #455/#456 on 2026-11-14'
     && productScope.product === 'lightweight-native-github-copilot-model-integration'
-    && productScope.desktopCandidate === '0.2.2-rc.3'
+    && productScope.desktopCandidate === pkg.engines.dsh
     && productScope.desktopCandidateQualified === false
+    && productScope.desktopCandidateQualificationScope === 'desktop-artifact-and-live-acceptance'
     && JSON.stringify(productScope.retirePluginOwned) === JSON.stringify([
       'auto', 'parent-model-follow', 'hosted-search-routing',
     ])
@@ -122,6 +146,7 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && contract.tasks.accounts?.tests?.includes('tests/scripts/copilot-login-environment.test.mjs')
     && contract.tasks.accounts?.loginEnvironmentBoundary?.includes('tenant.ghe.com')
     && contract.tasks.accounts?.loginEnvironmentBoundary?.includes('Native OAuth redirect control is unavailable')
+    && contract.tasks.accounts?.loginEnvironmentBoundary?.includes(`pi-ai ${pkg.dependencies['@earendil-works/pi-ai']}`)
     && contract.tasks.accounts?.loginEnvironmentBoundary?.includes('GHES and Enterprise quota remain unsupported')
     && agentGuide.includes('Login environments (#424)'),
   'login environments must preserve native OAuth, strict tenant hosts and explicit unsupported boundaries')
@@ -154,6 +179,9 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && contract.tasks.compatibility?.read?.includes('src/responses-request-compression.ts')
     && contract.tasks.compatibility?.tests?.includes('tests/responses-request-compression.spec.ts'),
   'managed Responses gzip must remain default-off, bounded and lossless through its public Fetch seam')
+  require(contract.tasks.compatibility?.risk?.includes(`official dsh-v${pkg.engines.dsh}`)
+    && contract.tasks.compatibility?.risk?.includes(`pi-ai ${pkg.dependencies['@earendil-works/pi-ai']}`),
+  'compatibility guidance must match the exact current Core and pi-ai versions')
   require(contract.tasks.continuation?.processingBoundary?.includes('never recursively traverse')
     && contract.tasks.continuation?.processingBoundary?.includes('atomic baseline commit')
     && contract.tasks.continuation?.tests?.includes('tests/fixtures/compaction-pressure-core.fixture.ts')
@@ -190,6 +218,10 @@ export async function verifyAgentContract(root = repositoryRoot) {
   await file(review.policy)
   const template = await readFile(resolve(root, '.github/PULL_REQUEST_TEMPLATE.md'), 'utf8')
   verifyCurrentCoreTemplate(template, pkg.engines.dsh)
+  verifyCurrentCoreDocument(agentGuide, pkg.engines.dsh)
+  for (const path of ['docs/model-compatibility-acceptance.md', 'docs/image-input-compatibility.md']) {
+    verifyCurrentCoreDocument(await readFile(resolve(root, path), 'utf8'), pkg.engines.dsh)
+  }
   const acceptance = contract.acceptance
   require(acceptance?.mode === 'evidence-consistency-only'
     && acceptance.policy === 'docs/agent-acceptance.md'
@@ -261,6 +293,11 @@ export async function verifyAgentContract(root = repositoryRoot) {
   }
   const ciWorkflow = await readFile(resolve(root, '.github/workflows/ci.yml'), 'utf8')
   const releaseWorkflow = await readFile(resolve(root, '.github/workflows/release.yml'), 'utf8')
+  verifyDocumentationReview(contract.tasks.tooling.documentationReview, template, ciWorkflow)
+  require(contract.tasks.tooling.read.includes('scripts/verify-documentation-impact.mjs')
+    && contract.tasks.tooling.tests.includes('tests/scripts/agent.test.mjs')
+    && contract.tasks.tooling.risk.includes('human review remains required'),
+  'documentation impact must retain its implementation, regression and semantic-review boundary')
   require(ciWorkflow.includes('verify:') && ciWorkflow.includes('runs-on: ${{ matrix.os }}')
     && ciWorkflow.includes('os: [ubuntu-latest, windows-latest]')
     && ciWorkflow.includes('name: Published adapter (${{ matrix.os }})')

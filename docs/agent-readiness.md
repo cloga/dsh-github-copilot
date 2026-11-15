@@ -2,8 +2,24 @@
 
 > **Historical audit:** dated follow-ups preserve plans and validation blockers
 > at the time, not current setup requirements or release status. Start with
-> [AGENTS.md](../AGENTS.md), current README and the
-> [rc.2 review](./official-first-020-rc2.md).
+> [AGENTS.md](../AGENTS.md), the [current README](../README.md) and
+> [model compatibility acceptance](./model-compatibility-acceptance.md).
+
+## Current documentation-impact follow-up
+
+For PRs changing runtime, tooling, release-significant metadata, workflows or
+the agent contract, `documentation-impact` requires a reviewable PR declaration.
+Choose `Behavior: user-facing` or `Behavior: unchanged` and explain the impact.
+For user-facing changes, list both changed READMEs and at least one changed
+`docs/*.md` file; version-only edits do not satisfy the check. It re-runs on PR
+body edits and `release-ready` requires it for PRs. Documentation-only changes
+without those paths do not require a declaration, and push/release workflows do
+not consume a PR body.
+
+The check verifies the declaration's structure and committed file changes, not
+whether the chosen documents are relevant, correct or complete. Reviewers must
+compare source behavior, limitations and evidence with every affected document.
+Retain explicitly labeled historical records rather than rewriting old results.
 
 Tracking: [#73](https://github.com/cloga/dsh-github-copilot/issues/73). Audited baseline: `d9d0954` (2026-09-05). This is an evidence inventory, not a blanket certification of live Copilot behavior.
 

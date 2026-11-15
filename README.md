@@ -57,8 +57,9 @@ the release mapping:
 node scripts/select-core-release.mjs 0.2.2-rc.3
 ```
 
-It must report a fully verified published release before an install is
-recommended. See [release selection and distribution](./docs/npm-distribution.md)
+The selector checks Release/npm metadata and named assets; it does not run CI,
+hash downloaded bytes, or verify a loaded Desktop. Check those separately before
+recommending installation. See [release selection and distribution](./docs/npm-distribution.md)
 and the [model compatibility acceptance criteria](./docs/model-compatibility-acceptance.md).
 
 ## Use
@@ -145,17 +146,35 @@ another model. Each search makes one fixed capability probe and, only after
 proof, one user query; both may incur charges.
 Custom endpoint, credential or transport overrides and unproven models remain
 unavailable. There is no model retry, backend replacement or plugin routing UI.
-The native Auto reviewer's qualified Copilot Responses requests omit
-`temperature`; ordinary Chat and native allow/deny/error/cancel behavior remain
+When qualification succeeds, the native Auto reviewer's Copilot Responses requests
+omit `temperature`; ordinary Chat and native allow/deny/error/cancel behavior remain
 unchanged. Qualification uses the native adapter's pi-ai catalog even when
 the plugin resolves a separate copy; missing protocol facts remain unavailable.
 See [reviewer compatibility](./docs/auto-review-sampling.md).
+
+**Known limitation (alpha.11):** DSH schema-default compatibility maps can
+prevent native hosted-search qualification and reviewer temperature omission;
+see open [#483](https://github.com/cloga/dsh-github-copilot/issues/483).
+Do not treat registration or model metadata as proof that either works.
+
 The native route's quota and optional identity display use only the canonical OAuth account. If the
 provider names a credential, endpoint or nonempty headers override, or its configuration
 cannot be verified, quota is shown as unavailable rather than attributed to a
 different account. This is not proof of request-level billing attribution.
 Native context-incident diagnostics remain available without the optional
 managed continuation service; they do not replace DSH's context meter.
+
+### Other optional capabilities
+
+- On the managed route, Credits can select an already saved account for a
+  Session's subsequent turns. [Visible-history continuation](./docs/session-continuation.md)
+  is a disclosed, lossy Responses policy; existing Sessions are not silently
+  enrolled, and enabling it never sends or retries a message.
+- [Segmented compaction recovery](./docs/manual-compaction-recovery.md) requires
+  explicit engine selection; installing the plugin does not replace Core's engine.
+- [Local diagnostics](./docs/plugin-diagnostics.md) and managed Responses gzip
+  are default-off; enabling diagnostics does not upload data. GitHub Enterprise
+  Cloud tenant login is supported, while GHES and Enterprise quota are not.
 
 ### Removing the enhancement
 
@@ -191,6 +210,8 @@ The exact development target is in `deployment-baseline.json`; follow
 and package/release gates run in GitHub Actions. A successful local source
 check, synthetic fixture, release publication, profile installation, and loaded
 Desktop runtime are different evidence layers; report each accurately.
+PRs declare documentation impact; reviewers still verify semantic accuracy and
+coverage. See [contributing](./CONTRIBUTING.md#change-workflow).
 Commit attribution must use an `Assisted-by` trailer for the actual assisting
 tool; do not invent a co-author identity.
 

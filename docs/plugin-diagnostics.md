@@ -3,8 +3,9 @@
 Roadmap: [#347](https://github.com/cloga/dsh-github-copilot/issues/347).
 Phase 0: [#354](https://github.com/cloga/dsh-github-copilot/issues/354).
 Phases 1–2: [#356](https://github.com/cloga/dsh-github-copilot/issues/356).
-Reviewed source baseline: plugin alpha.123 and official DSH
+Historical reviewed source baseline: plugin alpha.123 and official DSH
 `0.2.0-rc.2`, commit `639ed015397290b3745d163aafe02ffee4aa3f84`.
+It does not establish current release or loaded-runtime status.
 
 **Runtime pilot, default off. Publication, installation, loaded Host and enabled
 collection are separate states.** This feature does not install itself, restart

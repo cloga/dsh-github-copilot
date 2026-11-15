@@ -1,22 +1,19 @@
 # Image input compatibility
 
-Current source target: official DSH `0.2.1-rc.3`. Plugin-only. Historical
+Current source target: official DSH `0.2.2-rc.3`. Plugin-only. Historical
 rc.2 delivery evidence below does not qualify the current source or a loaded
 Desktop.
 
 ## Current behavior
 
-Auto checks actual typed image blocks in **all entered messages**, including
-historical user/tool content after a text-only continuation. It does not inspect
-tool arguments or infer images from filenames/textual offload placeholders.
+DSH owns current model selection and Auto; the old plugin Auto picker and its
+candidate filtering are retired. For selected managed-route calls, the
+account-bound public `inspectRequest` hook checks actual typed image blocks in
+the native transcript, including projected historical user/tool messages, before
+wire dispatch. It does not infer images from filenames or text placeholders.
 Core's `offloaded: true` marker means projected text, not image bytes.
 
-The picker advertises aggregate image input only with an eligible account image
-model. Auto filters text-only candidates before task preferences; no eligible
-image model fails explicitly rather than sending content to an unverified route.
-
-For fixed and Auto managed calls, the account-bound public `inspectRequest`
-hook checks the native transcript's **projected MIME** before wire dispatch:
+The managed route checks the **projected MIME**:
 
 | Diagnostic | Meaning |
 |---|---|
@@ -28,6 +25,8 @@ Omitted account MIME lists preserve existing verified vision behavior but do
 not prove universal format acceptance. The plugin neither invents a list nor
 converts images itself. Native error/finish behavior, historical attachments,
 turn freezing and existing cancellation/retry policy stay unchanged.
+Native `github-copilot` requests do not gain this managed admission check from
+model sync; their image handling remains native-owned.
 
 ### Admission error details
 
@@ -47,7 +46,8 @@ diagnostic store, or history event. Image bytes, URLs, paths, prompt text and
 credentials are never included. Native handling of failure messages is unchanged;
 this is not a claim that native failures are never retained. The version describes
 the build producing this error, not the plugin loaded during an earlier incident.
-Earlier Auto assessment traffic, if any, is not a selected-model dispatch.
+The current diagnostic retains legacy wording about plugin Auto filtering;
+that wording is not evidence that the retired filter runs.
 
 History images can cause this failure on a text-only continuation. The error
 offers explicit next-turn choices: select a model whose current advertised formats
@@ -69,12 +69,10 @@ Auto filtering from durable MIME can reject a model whose native projection
 would be accepted; candidate-specific projection would require another public
 contract and reviewed tests.
 
-Auto currently filters general image capability, not the final candidate-specific
-projected MIME. A vision-eligible selection may therefore still fail the final
-format gate. This diagnostic improvement does not close that capability gap.
 The current public seam used here receives projection only in `inspectRequest`,
-after model selection. Do not pre-project candidates through private APIs or
-replace this fail-closed gate with inferred durable-format filtering.
+after model selection. A selection may therefore still fail the final format
+gate. Do not pre-project candidates through private APIs or replace this
+fail-closed gate with inferred durable-format filtering.
 
 The current fix diagnoses explicit incompatibility, not every provider 400.
 When advertised restrictions and outgoing projection agree but the endpoint
@@ -91,13 +89,13 @@ projections, missing/invalid/unsupported formats, absent versus empty restrictio
 bounded redacted diagnostics, no private-content reads and no input mutation.
 It does not exercise the native adapter or Client.
 `tests/preview-route.spec.ts` covers the native failure/finish surface and no
-selected-model wire on rejection; `tests/auto-model-routing.spec.ts` preserves the
-explicit separation between Auto vision eligibility and final projected-format
-admission. These require the unchanged pinned dependencies. Passing the
+selected-model wire on rejection; `tests/auto-model-routing.spec.ts` preserves
+historical retired Auto behavior, not a current routing claim. These require the
+unchanged pinned dependencies. Passing the
 dependency-free helper tests is not a substitute for those integration gates.
 
 Historical tool-image continuation first reproduced the old missed-image
-requirement. Regressions now cover all Auto preferences, historical user/tool
+requirement. Historical regressions covered Auto preferences, historical user/tool
 images, no vision candidate and native WebP-to-PNG projection against explicit
 PNG/JPEG restrictions. A mismatch emits native `finish(error)` with zero model
 requests.

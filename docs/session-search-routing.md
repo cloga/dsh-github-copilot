@@ -1,8 +1,11 @@
 # Provider-aware Web search
 
-> Historical documentation for earlier releases. The `0.2.2-rc.3` candidate
-> does not register Copilot-hosted search or the plugin routing page described
-> below. DSH's separately configured Web search remains native-owned.
+> **Historical routing design:** the plugin routing page and facade described
+> below are retired. Current builds register an optional `github-copilot-hosted`
+> backend for DSH's native Web service; select it explicitly in native Web
+> settings. It uses the canonical account and a separate native search-model
+> setting, not the old routing controls. See the [current README](../README.md#use)
+> and known limitation [#483](https://github.com/cloga/dsh-github-copilot/issues/483).
 
 Target: official DSH / Windows Desktop `0.2.0-rc.2`. The routed facade and
 configuration page are shipped plugin functionality, not a pending proposal.
@@ -25,7 +28,7 @@ Reload sees newly registered IDs.
 
 ![Actual parent-following and search controls with synthetic settings](images/copilot-search-routing.png)
 
-The picture uses current built Client components in an isolated synthetic browser fixture.
+The historical picture uses built Client components in an isolated synthetic browser fixture.
 It does not demonstrate a live search or loaded Desktop runtime.
 
 ## Routing and fallback

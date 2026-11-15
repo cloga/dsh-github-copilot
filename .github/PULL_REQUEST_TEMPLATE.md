@@ -29,6 +29,20 @@ Other changes: N/A with the actual Expected vs Actual results above. See docs/ag
 
 <!-- Auto routing/assessment/cost/continuity/assistance changes: reference the prior review; evidence status, policy version, window, sample/opportunity denominator and limitations; retain/change/defer decision; actual validation; follow-up owner, trigger, metric and action. Unrelated changes: N/A. Never attach raw live exports or imply CI proves the conclusions. See docs/evidence-driven-iteration.md. -->
 
+### Documentation impact
+
+<!-- For runtime, tooling, release-metadata, workflow or agent-contract changes:
+Choose Behavior: user-facing or unchanged. Explain the behavior or why it is unchanged.
+For user-facing changes, list both READMEs and at least one relevant changed docs/*.md
+file in Docs, separated by commas; version-only edits do not count.
+The check verifies structure and changed files, not relevance or correctness: reviewers
+must compare every affected feature, setting, limitation and evidence claim with source.
+Documentation-only PRs may explain their impact without filling these fields. -->
+
+- Behavior:
+- Docs:
+- Details:
+
 ## Contract checklist
 
 - [ ] **plugin-only**: no Core source/artifact changes, `node_modules` patches, private-registry/prototype/shared-catalog mutation, or Core commit/PR/release work.

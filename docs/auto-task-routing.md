@@ -7,7 +7,7 @@
 Tracking: [#258](https://github.com/cloga/dsh-github-copilot/issues/258) and
 [evidence refinement #262](https://github.com/cloga/dsh-github-copilot/issues/262).
 
-**Current contract:** source candidate `0.4.2-alpha.10`, targeting official DSH/Windows
+**Historical contract at that revision:** source candidate `0.4.2-alpha.10`, targeting official DSH/Windows
 Desktop `0.2.0-rc.2`. Semantic assessment is enabled by default with bounded
 auxiliary timing/output evidence. Neither publication nor
 these explanations prove the version loaded in a particular Host.

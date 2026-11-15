@@ -16,9 +16,9 @@ Core inspection is read-only. Isolated tests may use unchanged pinned Core artif
 
 1. Determine `pwd`, Git status, remote and actual default branch. Preserve other people's changes. Start a feature branch such as `feature/issue-73-agent-readiness`; branch names need not contain an owner name.
 2. Read `node scripts/agent.mjs describe --json` and run `node scripts/agent.mjs doctor --json`. These are read-only repository diagnostics, not live health checks. Plans from `node scripts/agent.mjs plan <task> --json` contain unexecuted argv lists.
-3. Use Node 24 LTS for development (runtime floor: 22.19.0), the pinned pnpm version, and frozen install inside the checkout/worktree.
-4. Add focused regression tests before changing capability claims. Keep READMEs, deployment evidence and the Agent task map aligned.
-5. State expected outcomes and scope; run:
+3. Use Node 24 LTS for development (runtime floor: 22.19.0) and the pinned pnpm version. Agents must follow the [environment guardrails](./docs/environment-evidence-guardrails.md): local work is limited to the guarded dependency-free scripts tests; do not install or restore dependencies locally.
+4. Add focused regression tests before changing capability claims. Review and update both READMEs and relevant domain docs with user-facing behavior; keep deployment evidence and the Agent task map aligned.
+5. State expected outcomes and scope. The existing GitHub Actions workflow runs:
 
    ```sh
    pnpm install --frozen-lockfile
@@ -26,10 +26,10 @@ Core inspection is read-only. Isolated tests may use unchanged pinned Core artif
    pnpm pack --pack-destination artifacts
    ```
 
-   Validate the resulting exact path with `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz`. The release task plan supplies that path automatically. Never run broad cleanup on an existing artifacts directory just to package again.
+   CI validates the resulting exact path with `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz`. The release task plan supplies that path automatically. Never run broad cleanup on an existing artifacts directory just to package again. Local agent validation uses `node scripts/agent.mjs guard --task tooling --environment local-auxiliary --operation scripts-test`; it is not the complete gate.
 6. Inspect the complete diff, compare expected versus actual results, and report what was NOT checked. Source markers, stubbed unit tests, built module imports, upstream config fixtures, authenticated API calls, installation, and loaded UI are different evidence layers.
 7. Commit with the issue reference and accurate attribution. For work assisted by DSH use `Assisted-by: DeepSeek Harness (DSH)`. Other agents must name the actual tool; do not infer authorship from the model vendor or copy a bot identity. Add `Co-authored-by` only for real verified collaborators. No fabricated email, author replacement or published-history rewrite.
-8. Push the feature branch and open a PR containing `Fixes #<issue>`, verification, risks and rollback. For user-requested delivery, merge without an additional approval prompt after required review/CI and branch protection; respect explicit code-only, review-only or do-not-merge restrictions.
+8. Push the feature branch and open a PR containing `Fixes #<issue>`, verification, risks and rollback. For runtime, tooling, release-metadata, workflow or agent-contract changes, fill the PR's **Documentation impact** section with `Behavior: user-facing` or `Behavior: unchanged` and an explanation. User-facing changes must list substantively changed `README.md`, `README.zh.md` and a relevant `docs/*.md`; version-only updates are insufficient. The CI gate rechecks body edits and only checks structure/file differences, not whether the assessment is true or complete. Reviewers must check affected behavior and evidence against all relevant docs. For user-requested delivery, merge without an additional approval prompt after required review/CI and branch protection; respect explicit code-only, review-only or do-not-merge restrictions.
 
 Generated `lib/` output, archives, `.env`, tokens, local credentials, machine state and production screenshots with real authorization codes must not be committed. Use synthetic fixtures for screenshots and report staged UI honestly.
 
