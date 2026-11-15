@@ -516,12 +516,44 @@ For historical alpha.25, source markers, local rc.1-backed focused tests and fif
 
 ## Important-update release delivery
 
-- User-requested important updates include user-visible features, behavior fixes, compatibility fixes, and security or stability fixes. Their default delivery includes publication after a reviewed merge and green required CI; do not stop at a merged PR or ask a second time whether to release.
-- Explicit user restrictions such as code-only, review-only or do-not-release take precedence. Pure documentation and internal-only changes are not automatically release-bearing; they need an explicit release request if publication is desired. A task plan is not permission for an unrelated release.
+- User-requested important plugin updates include user-visible features, behavior fixes, compatibility fixes, and security or stability fixes for plugin consumers. Their default delivery includes publication after a reviewed merge and green required CI; do not stop at a merged PR or ask a second time whether to release. Repository engineering features are not plugin features merely because they improve the project.
+- Explicit user restrictions such as code-only, review-only or do-not-release take precedence. Pure documentation and internal-only changes are not automatically release-bearing; distributing them as plugin artifacts requires an explicit request for that artifact, not a generic delivery instruction. A task plan is not permission for an unrelated release.
 - Plan version alignment with the implementation PR whenever possible. If the prepared version/tag is unused and aligned, release it; otherwise prepare the next appropriate SemVer version through the normal PR path. Preserve the prerelease channel unless promotion is explicitly requested. Any additional version PR follows the same required review/CI and branch protection, without a separate merge-approval prompt.
 - Check all required CI, tag rules and package/archive checks. Create a fresh annotated tag only on the verified merged revision, let the protected Release workflow publish, and verify the non-draft Release, intended prerelease flag, tag/commit, assets and SHA-256. Never bypass failing CI, move a tag or substitute an unverified local archive.
 - A release-bearing update is not fully delivered until the published Release URL, verified version/commit/assets/checksum and npm version/SRI are reported. If CI, permissions or network prevents either channel, report partial delivery and the exact pending step; never describe merged-only or GitHub-only work as fully delivered.
 - This standing release authorization does not authorize profile installation, sign-out, worktree checkout or interruption of running Sessions. Keep published, installed-on-disk and loaded-runtime status separate; a session-interrupting restart still requires explicit acknowledgement.
+
+### Classify delivery before packaging (#502)
+
+Choose the task's consumer impact before editing versions, installation URLs or
+package contents. Record the classification and concrete rationale in the PR's
+`Release delivery` section:
+
+| Classification | Completion and artifact boundary |
+| --- | --- |
+| `repository-only` | Agent guidance, CI, tests, documentation governance and unshipped development tools complete at reviewed merge and green required CI. Keep the plugin version and package whitelist unchanged; no plugin release or local upgrade is needed. |
+| `plugin-update` | An actual plugin runtime, compatibility or release-significant consumer-package change follows the important-update release gates above. A version/baseline/whitelist edit alone is not evidence of such a change. |
+| `explicit-plugin-artifact` | An explicit request to distribute an engineering artifact as a plugin package may authorize that separate delivery. Record the actual artifact-specific request under `Authorization`; generic "deliver/publish" instructions or release-status questions are not that authorization. A version-only follow-through PR may instead cite the already reviewed and authorized plugin update; it needs no second approval. |
+| `release-recovery` | Repair publication infrastructure or reconcile an already authorized version without a new version or changed consumer payload. Verify that existing release's outcome; do not describe reconciliation as a new plugin upgrade. |
+
+Never add repository tools, fixtures or guides to `package.json.files`, or bump a
+version, merely to make an engineering task releasable. If an intended change
+touches an already shipped executable or other release-significant file, preserve the existing release-policy gate:
+separate/defer that artifact change or establish its real consumer release scope,
+never relabel it repository-only to bypass the gate. Preserve historical releases,
+tags and package contents; this rule does not authorize unpublishing or repacking.
+Documentation-only source edits, including packaged guides, may wait for the next
+independently justified version without changing any already published bytes.
+
+The existing PR `documentation-impact` check also checks this declaration against
+the actual base/head manifests and important-file diff. It rejects repository-only
+package changes and metadata-only manufactured plugin updates, and requires a
+reviewable artifact-specific authorization statement for the explicit exception.
+These are consistency checks, not proof of semantic impact or user consent; an
+agent or human must review the rationale and actual request without adding a new
+human-only approval gate. Report repository delivery, plugin publication,
+installed-on-disk and loaded-runtime status separately. No runtime benefit means
+no recommendation to install or restart merely because a new package exists.
 
 ## Installation-agent PowerShell practice
 

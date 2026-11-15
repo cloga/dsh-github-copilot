@@ -85,6 +85,15 @@
       "repeatApprovalRequired": false,
       "userRestrictionsTakePrecedence": true,
       "otherChangesRequireExplicitReleaseRequest": true,
+      "deliveryClassification": {
+        "basis": "consumer-impact-before-package-or-version-changes",
+        "repositoryOnlyCompletion": "reviewed-merge-and-green-required-ci",
+        "repositoryOnlyArtifacts": "no-new-version-no-whitelist-expansion",
+        "explicitArtifactRequest": "plugin-artifact-specific-not-generic-publish",
+        "shippedArtifacts": "preserve-existing-release-policy-and-immutable-bytes",
+        "installation": "no-runtime-benefit-no-local-upgrade",
+        "reporting": "separate-repository-release-installation-runtime"
+      },
       "requiredConditions": ["reviewed-merge", "green-required-ci", "fresh-annotated-tag", "verified-release-assets"],
       "localGateWhenRegistryBlocked": "record-environment-blocker-and-require-complete-github-ci",
       "completionEvidence": ["published-release-url", "tag-and-commit", "asset-and-sha256", "npm-version-and-integrity"]
@@ -239,6 +248,7 @@
         "requiredDocuments": ["README.md", "README.zh.md", "docs/*.md"],
         "detailsRequired": true,
         "versionOnlyInsufficient": true,
+        "deliveryClasses": ["repository-only", "plugin-update", "explicit-plugin-artifact", "release-recovery"],
         "rerunOnBodyEdit": true,
         "semanticReview": "agent-or-human-required"
       },

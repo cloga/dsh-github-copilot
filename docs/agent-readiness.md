@@ -21,6 +21,27 @@ whether the chosen documents are relevant, correct or complete. Reviewers must
 compare source behavior, limitations and evidence with every affected document.
 Retain explicitly labeled historical records rather than rewriting old results.
 
+## Current delivery-classification follow-up
+
+Repository engineering delivery is distinct from plugin publication and local
+installation. For the same assessed PR paths, `documentation-impact` also reads
+`## Release delivery`: choose `repository-only`, `plugin-update`,
+`explicit-plugin-artifact` or `release-recovery`, with `Details` of at least 20
+characters. Repository-only and recovery declarations reject important-file or
+manifest changes. Plugin-update declarations require more than version, baseline
+and package-whitelist edits. An explicit artifact declaration additionally needs
+an `Authorization` statement identifying the artifact-specific request, or the
+already reviewed/authorized plugin update for version-only follow-through.
+The latter preserves standing release permission without a new approval prompt.
+
+The gate reads actual base/head manifests even when documentation behavior is
+declared unchanged. It preserves the existing shipped-file/version policy and
+does not infer runtime benefit, authenticate consent or prove the justification.
+Review those semantics against the user's request. Repository-only work ends at
+reviewed merge and required CI: no new plugin version, installation or restart.
+Existing released artifacts remain immutable; do not remove old packaged tools
+as an incidental cleanup. See [the delivery rules](../AGENTS.md#classify-delivery-before-packaging-502).
+
 Tracking: [#73](https://github.com/cloga/dsh-github-copilot/issues/73). Audited baseline: `d9d0954` (2026-09-05). This is an evidence inventory, not a blanket certification of live Copilot behavior.
 
 ## Scope and method
