@@ -668,18 +668,19 @@
     {
       "id": "native-subagent-copilot-invocation",
       "required": true,
-      "evidenceScope": "synthetic-two-account-tagged-source-production-host-child-invocation-with-default-switch-not-live-or-explicit-child-account-policy",
+      "evidenceScope": "synthetic-two-account-tagged-source-native-provider-child-invocation-with-default-switch-and-explicit-model-configuration-not-live-or-session-account-policy",
       "sourceMarkers": [
         {"file": "scripts/verify-tagged-core.mjs", "marker": "tests/fixtures/subagent-copilot-core.fixture.ts"},
         {"file": ".github/workflows/ci.yml", "marker": "['subagent-copilot-core.fixture.ts',1],['native-subagent-copilot-core.fixture.ts',3]"},
         {"file": ".github/workflows/ci.yml", "marker": "s.assertionResults.some(t=>t.status!=='passed')"},
         {"file": "tests/fixtures/native-subagent-copilot-core.fixture.ts", "marker": "it.each(['absent', 'enabled', 'disposed'] as const)"},
         {"file": "tests/fixtures/subagent-copilot-core.fixture.ts", "marker": "await ctx.plugin(GitHubCopilotPlugin,"},
-        {"file": "tests/fixtures/subagent-copilot-core.fixture.ts", "marker": "accounts.turns.current(child.session)"},
+        {"file": "tests/fixtures/subagent-copilot-core.fixture.ts", "marker": "COPILOT_ACCOUNTS_BUSY"},
         {"file": "src/session-accounts-host.ts", "marker": "class SessionAccountsHost"}
       ],
       "tests": [
-        {"file": "tests/fixtures/subagent-copilot-core.fixture.ts", "name": "routes concurrently authorized native children to their selected Copilot models and efforts"},
+        {"file": "tests/fixtures/subagent-copilot-core.fixture.ts", "name": "routes native Copilot children across a confirmed account switch"},
+        {"file": "tests/fixtures/native-subagent-copilot-core.fixture.ts", "name": "selects and concurrently dispatches native Copilot subagents with the plugin %s"},
         {"file": "tests/session-accounts-host.spec.ts", "name": "freezes a running turn while allowing later Session/default choices independently"},
         {"file": "tests/session-accounts-host.spec.ts", "name": "rejects stale CAS and missing accounts instead of persisting a fallback"}
       ]
