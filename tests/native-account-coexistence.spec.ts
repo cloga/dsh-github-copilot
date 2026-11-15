@@ -128,12 +128,13 @@ it('applies confirmed account switches to native credentials and retains the nat
     const requestSignal = new AbortController()
     await ctx.waterfall(scopeTarget(requestAgent, requestAgent), 'agent/request',
       { agent: requestAgent, turn: 1, step: 1, signal: requestSignal.signal }, async () => {
-        const call = await ctx.llm.prepareCall({ provider: 'github-copilot', model: model.id })
-        for await (const _chunk of call.stream({ ...call.config, signal: requestSignal.signal, purpose: 'auto-review', messages: [] })) {
+        const auxiliary = await ctx.llm.prepareCall({ provider: 'github-copilot', model: model.id })
+        for await (const _chunk of auxiliary.stream({ ...auxiliary.config, signal: requestSignal.signal, purpose: 'auto-review', messages: [] })) {
           // Auxiliary native-provider calls are not ordinary turn delivery.
         }
         expect(ctx.get('githubCopilotSessionAccounts')?.turns.evidence(nativeAgent.session, 1)).toBeUndefined()
-        for await (const _chunk of call.stream({ ...call.config, signal: requestSignal.signal,
+        const ordinary = await ctx.llm.prepareCall({ provider: 'github-copilot', model: model.id })
+        for await (const _chunk of ordinary.stream({ ...ordinary.config, signal: requestSignal.signal,
           messages: [createUserMessage({ content: [{ type: 'text', text: 'hello' }], source: { kind: 'user' } })] })) {
           // Consume the native stream to exercise delivery-scoped account evidence.
         }
