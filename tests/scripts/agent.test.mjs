@@ -114,6 +114,7 @@ test('documentation impact CLI checks the actual PR base, head and event body', 
     git('rm', 'src/example.ts')
     git('-c', 'user.name=Documentation test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'delete runtime')
     assert.notEqual(invoke().status, 0, 'deleting a runtime file still requires a declaration')
+    await mkdir(join(root, 'src'), { recursive: true })
     await write('src/example.ts', 'export const value = 2\n')
     git('add', 'src/example.ts')
     git('-c', 'user.name=Documentation test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'restore runtime')
