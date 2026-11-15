@@ -73,15 +73,15 @@ After the exact compatible release is available and verified, download its
 original asset and checksum in an empty directory:
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.15.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.15.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.15.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.16.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.16.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.16.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 For the `web` profile, install the same Release asset:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.15.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.15.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.16.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.16.dsh.0.2.2.rc.3.tgz
 ```
 
 Choose the intended profile explicitly. Then:
@@ -174,6 +174,13 @@ The native route's quota and optional identity display use only the canonical OA
 provider names a credential, endpoint or nonempty headers override, or its configuration
 cannot be verified, quota is shown as unavailable rather than attributed to a
 different account. This is not proof of request-level billing attribution.
+Completed-turn Account evidence is also captured for the native provider, but
+only after an actual native stream chunk for that admitted request. It reflects
+the profile-wide account bound to the canonical credential, not a Session
+override, billing attribution or subagent rollup. A mismatched account,
+unproven native route or credential change before delivery leaves it unknown.
+Evidence is Host-memory-only;
+older turns and turns missing after a restart or eviction remain unknown.
 Native context-incident diagnostics remain available without the optional
 managed continuation service; they do not replace DSH's context meter.
 Local diagnostics also offers separately opt-in, content-free logical
