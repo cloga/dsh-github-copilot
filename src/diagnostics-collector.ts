@@ -108,38 +108,6 @@ export class DiagnosticsCollector {
       this.changed()
       return noop
     }
-    isNativeEnabled(): boolean { return this.nativeEnabled && this.layer === 'host' }
-    nativeToken(): object | undefined { return this.isNativeEnabled() ? this.nativeGeneration : undefined }
-    setNativeEnabled(enabled: boolean): void {
-      if (this.nativeEnabled !== enabled) this.nativeGeneration = {}
-      if (this.nativeEnabled && !enabled) {
-        for (const live of this.nativeLive) this.settleNative(live, 'interrupted', 'unknown')
-      }
-      this.nativeEnabled = enabled
-    }
-    beginNative(operation: 'native-copilot-llm' | 'native-copilot-review' | 'native-copilot-search',
-      token = this.nativeGeneration): DiagnosticsHandle {
-      if (!this.isNativeEnabled() || token !== this.nativeGeneration) return noop
-      if (this.live.size + this.nativeLive.size >= DIAGNOSTICS_MAX_LIVE) {
-        this.increment('dropped')
-        this.changed()
-        return noop
-      }
-      const live: Live = { operation, stage: 'admitted', start: this.mono(), epoch: this.data.epoch }
-      this.nativeLive.add(live)
-      this.add(operation, live.stage, 'started', 'none', 0)
-      return {
-        stage: () => {},
-        finish: (outcome, reason = 'unknown') => this.settleNative(live, outcome, reason),
-      }
-    }
-    private settleNative(live: Live, outcome: DiagnosticsOutcome, reason: DiagnosticsReason): void {
-      if (!this.nativeLive.delete(live)) return
-      const safeReason = ['NATIVE_LLM_AUTH', 'NATIVE_LLM_RATE_LIMIT', 'NATIVE_LLM_TIMEOUT', 'NATIVE_LLM_CONTEXT_LIMIT']
-        .includes(reason) ? reason : 'unknown'
-      this.add(live.operation, live.stage, outcome, outcome === 'success' ? 'none' : safeReason, this.age(live))
-      if (outcome === 'interrupted') this.increment('interrupted')
-    }
     const live: Live = { operation, stage: 'admitted', start: this.mono(), epoch: this.data.epoch }
     this.live.add(live)
     this.add(operation, live.stage, 'started', 'none', 0)
@@ -151,6 +119,38 @@ export class DiagnosticsCollector {
       },
       finish: (outcome, reason = 'none') => this.settle(live, outcome, reason),
     }
+  }
+  isNativeEnabled(): boolean { return this.nativeEnabled && this.layer === 'host' }
+  nativeToken(): object | undefined { return this.isNativeEnabled() ? this.nativeGeneration : undefined }
+  setNativeEnabled(enabled: boolean): void {
+    if (this.nativeEnabled !== enabled) this.nativeGeneration = {}
+    if (this.nativeEnabled && !enabled) {
+      for (const live of this.nativeLive) this.settleNative(live, 'interrupted', 'unknown')
+    }
+    this.nativeEnabled = enabled
+  }
+  beginNative(operation: 'native-copilot-llm' | 'native-copilot-review' | 'native-copilot-search',
+    token = this.nativeGeneration): DiagnosticsHandle {
+    if (!this.isNativeEnabled() || token !== this.nativeGeneration) return noop
+    if (this.live.size + this.nativeLive.size >= DIAGNOSTICS_MAX_LIVE) {
+      this.increment('dropped')
+      this.changed()
+      return noop
+    }
+    const live: Live = { operation, stage: 'admitted', start: this.mono(), epoch: this.data.epoch }
+    this.nativeLive.add(live)
+    this.add(operation, live.stage, 'started', 'none', 0)
+    return {
+      stage: () => {},
+      finish: (outcome, reason = 'unknown') => this.settleNative(live, outcome, reason),
+    }
+  }
+  private settleNative(live: Live, outcome: DiagnosticsOutcome, reason: DiagnosticsReason): void {
+    if (!this.nativeLive.delete(live)) return
+    const safeReason = ['NATIVE_LLM_AUTH', 'NATIVE_LLM_RATE_LIMIT', 'NATIVE_LLM_TIMEOUT', 'NATIVE_LLM_CONTEXT_LIMIT']
+      .includes(reason) ? reason : 'unknown'
+    this.add(live.operation, live.stage, outcome, outcome === 'success' ? 'none' : safeReason, this.age(live))
+    if (outcome === 'interrupted') this.increment('interrupted')
   }
   private settle(live: Live, outcome: DiagnosticsOutcome, reason: DiagnosticsReason): void {
     if (!this.live.delete(live) || live.epoch !== this.data.epoch) return
