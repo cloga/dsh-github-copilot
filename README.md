@@ -67,15 +67,15 @@ After the exact compatible release is available and verified, download its
 original asset and checksum in an empty directory:
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.9.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.9.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.9.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.12.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.12.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.12.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 For the `web` profile, install the same Release asset:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.9.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.9.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.12.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.12.dsh.0.2.2.rc.3.tgz
 ```
 
 Choose the intended profile explicitly. Then:
@@ -93,10 +93,12 @@ The plugin's account-discovered models and capabilities apply to the
 own bundled or configured catalog; the two routes do not automatically share
 model discovery.
 
-To copy enabled models from the current canonical account into an existing
-native provider, use **Manage → Model preferences → Preview enabled models**,
-review the additions, updates, removals, skipped models and per-request output
-defaults, then choose **Apply sync**. This one-time snapshot replaces only
+To copy enabled models from the verified account used by the native provider into an existing
+native provider, open **Manage → Model preferences**, review the displayed
+additions, updates, removals, skipped models and per-request output defaults,
+then choose **Sync models**. Preparing the display uses the current verified
+account snapshot without forcing discovery; if it is unavailable, use
+**Refresh models**. This one-time snapshot replaces only
 `llm-pi-ai.providers.github-copilot.models` with Settings CAS and readback.
 The nonempty saved list replaces the native built-in catalog and remains after
 the plugin is unloaded or uninstalled. Copying model settings does not transfer
@@ -111,30 +113,38 @@ New Completions and Anthropic models without a native catalog compatibility
 baseline are also skipped; catalog-backed models retain native compatibility.
 Image models are included only when the account explicitly supports all four
 native request formats: PNG, JPEG, WebP, and GIF. Custom native authentication,
-endpoints, headers, nonempty model overrides, or route compatibility overrides
-block sync rather than changing those settings. An existing native default
+endpoints, headers, nonempty model overrides, or unproven route compatibility
+overrides block sync rather than changing those settings. An existing
+`compat.supportsStrictMode: false` is preserved when at least one synced
+Responses or Completions model supports that native override. An existing native default
 reasoning effort must also be supported by each synced model. Core uses each
 configured `maxTokens` as that model's per-request output default. The sync does
 not change credentials, select a model, alter history, or automatically follow
 later account changes.
 
-When adding DSH's native GitHub Copilot provider, use the separate plugin account
-panel to sign in. With no named key, the native route uses a stored canonical
-OAuth grant, not an independently selected additional account. Native and
-managed routes can coexist: use **Manage → Account management → Switch**, then
-choose a model under **GitHub Copilot (multi-account)** in the native picker.
-Switching changes only the managed default; managed **Credits** can select an
-account for that Session's subsequent turns. Native login, selected models and
-running turns are not redirected. The native picker is not guaranteed
-to filter its bundled catalog by account entitlement.
+Use **Manage → Account management → Switch** in the native GitHub Copilot
+account panel to apply a saved account to DSH's canonical
+`llm-pi-ai/github-copilot` credential slot. This is profile-wide: subsequent
+native requests use that account. The first switch preserves the prior native
+OAuth grant as a saved account. In-progress requests are not redirected, and
+the operation does not change model selections, provider settings or history.
+Account switching does not change the native provider's bundled/configured
+model catalog, which is not guaranteed to filter models by account entitlement.
+The existing `github-copilot-preview` route remains a separate plugin-owned
+model route; it is not required for native account switching.
 Starting the plugin or completing sign-in does not automatically repair the
 native provider's settings.
 The plugin registers optional `github-copilot-hosted` search in DSH's existing
 Web service. Select it explicitly in native Web settings and enable the native
 search tool as needed; installation does not change the selected backend.
 Search uses only the canonical OAuth account and models shared by the native
-configured catalog and current account metadata. Each search makes one fixed
-capability probe and, only after proof, one user query; both may incur charges.
+configured catalog and current account metadata. In **Plugins → dsh-github-copilot
+→ details → Copilot search model**, choose **Automatic** (the default) or one
+eligible model. Opening or reloading this control fetches account metadata and
+may refresh native OAuth; metadata alone does not prove search support. If an
+explicitly selected model is no longer eligible, search fails without choosing
+another model. Each search makes one fixed capability probe and, only after
+proof, one user query; both may incur charges.
 Custom endpoint, credential or transport overrides and unproven models remain
 unavailable. There is no model retry, backend replacement or plugin routing UI.
 The native Auto reviewer's qualified Copilot Responses requests omit
@@ -152,18 +162,20 @@ managed continuation service; they do not replace DSH's context meter.
 ### Removing the enhancement
 
 Unloading the plugin removes its own routes, UI and listeners, not native
-Copilot credentials, configuration, model selections or history. Independently
-configured native **GitHub Copilot** remains usable with its original account.
-Removing the plugin is not signing out; explicit sign-out or removal of the
-original authorization is a different action and can affect native login.
+Copilot credentials, configuration, model selections or history. Native
+**GitHub Copilot** remains usable with whichever account was last explicitly
+applied to the canonical credential slot. Removing the plugin is not signing
+out; explicit sign-out or removal of that authorization is a different action
+and can affect native login.
 
-Plugin-dependent selections do not become native automatically. Before removal,
+Plugin-only model selections do not become native automatically. Before removal,
 explicitly select native models for Sessions/defaults using
 `github-copilot-preview`. If Web is set to `github-copilot-hosted`, select another
 available backend in native Web settings first. Removing the plugin does not
 rewrite Web settings: a retained missing backend produces
 `WEB_PROVIDER_CONFIGURED_MISSING`, not an automatic fallback. Additional-account
-switching and plugin-specific search require the plugin.
+management and plugin-specific search require the plugin; the last selected
+native OAuth grant remains in DSH's canonical credential record.
 
 Desktop's native package manager and its bundled CLI have different contracts
 from a standalone profile. Review the [Desktop CLI evidence](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)

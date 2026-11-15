@@ -16,6 +16,7 @@ import type {
 import type { GitHubCopilotMigrationStatus } from './migration-status.ts'
 import dualModelRemote from './dual-model-remote.ts'
 import searchRoutingRemote from './search-routing-remote.ts'
+import nativeCopilotSearchRemote from './native-copilot-search-remote.ts'
 import copilotUsageRemote from './copilot-usage-remote.ts'
 import turnSelectionRemote from './turn-selection-remote.ts'
 import replayRecoveryRemote from './replay-recovery-remote.ts'
@@ -36,6 +37,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
       restoreModel(modelId: string): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       setModelExcluded(modelId: string, excluded: boolean): Promise<RemoteResult<GitHubCopilotModelPreferencesView>>
       setModelHighCost(modelId: string, highCost: boolean): Promise<RemoteResult<GitHubCopilotModelPreferencesView>>
+      prepareNativeModelSync(): Promise<RemoteResult<GitHubCopilotNativeModelSyncPreview>>
       previewNativeModelSync(): Promise<RemoteResult<GitHubCopilotNativeModelSyncPreview>>
       applyNativeModelSync(planId: string): Promise<RemoteResult<GitHubCopilotNativeModelSyncResult>>
       start(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
@@ -241,6 +243,12 @@ const contribution: TypertRemoteContribution = {
       result: strictRemoteCodec('dsh-github-copilot#GitHubCopilotModelPreferencesView', GitHubCopilotModelPreferencesViewSchema),
     },
     {
+      id: 'dsh-github-copilot:githubCopilot.prepareNativeModelSync',
+      service: 'githubCopilotAuthorization', namespace: 'githubCopilot', method: 'prepareNativeModelSync',
+      invocation: direct, parameters: [],
+      result: strictRemoteCodec('dsh-github-copilot#GitHubCopilotNativeModelSyncPreview', GitHubCopilotNativeModelSyncPreviewSchema),
+    },
+    {
       id: 'dsh-github-copilot:githubCopilot.previewNativeModelSync',
       service: 'githubCopilotAuthorization', namespace: 'githubCopilot', method: 'previewNativeModelSync',
       invocation: direct, parameters: [],
@@ -264,6 +272,7 @@ const contribution: TypertRemoteContribution = {
     },
     ...dualModelRemote.descriptors,
     ...searchRoutingRemote.descriptors,
+    ...nativeCopilotSearchRemote.descriptors,
     ...copilotUsageRemote.descriptors,
     ...turnSelectionRemote.descriptors,
     ...replayRecoveryRemote.descriptors,

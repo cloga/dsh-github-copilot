@@ -275,7 +275,9 @@ describe('tsdown client artifact', () => {
       const element = fixture.registrations.get('plugins.bundle.config')!({ view: 'page' })
       expect(element.type).toBe(fixture.client.exports.CopilotPluginSettingsPage)
       const page = fixture.instance().render(element)
-      expect(page?.props.children.props.ctx).toBe(fixture.ctx)
+      expect(page?.props.children).toHaveLength(2)
+      expect(page?.props.children[0].props.ctx).toBe(fixture.ctx)
+      expect(page?.props.children[1].props.ctx).toBe(fixture.ctx)
       expect(fixture.client.exports.ParentModelFollowCard).toBeUndefined()
       expect(element.props).not.toHaveProperty('routing')
       expect(fixture.registrations.get('plugins.bundle.config')!({ view: 'summary' })).toBeNull()
@@ -415,8 +417,8 @@ describe('tsdown client artifact', () => {
       && descriptor.namespace !== 'githubCopilotDiagnostics').map(descriptor => descriptor.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
       'excludeModel', 'restoreModel', 'setModelExcluded', 'setModelHighCost',
-      'previewNativeModelSync', 'applyNativeModelSync', 'migrationStatus',
-      'view', 'save', 'create', 'providers', 'get', 'refresh', 'getNative', 'refreshNative',
+      'prepareNativeModelSync', 'previewNativeModelSync', 'applyNativeModelSync', 'migrationStatus',
+      'view', 'save', 'create', 'providers', 'models', 'get', 'refresh', 'getNative', 'refreshNative',
       'ensureNativeIdentity', 'refreshNativeIdentity', 'get', 'requestedModels', 'allocationSummary', 'get', 'authorize', 'setEnabled',
     ])
     expect(contributions[0]?.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotAccounts').map(descriptor => descriptor.method).sort())
@@ -469,7 +471,8 @@ describe('tsdown client artifact', () => {
         typeSymbol: descriptor.method === 'migrationStatus'
           ? 'dsh-github-copilot#GitHubCopilotMigrationStatus'
           : descriptor.method === 'setModelExcluded' || descriptor.method === 'setModelHighCost' ? 'dsh-github-copilot#GitHubCopilotModelPreferencesView'
-          : descriptor.method === 'previewNativeModelSync' ? 'dsh-github-copilot#GitHubCopilotNativeModelSyncPreview'
+          : descriptor.method === 'previewNativeModelSync' || descriptor.method === 'prepareNativeModelSync'
+            ? 'dsh-github-copilot#GitHubCopilotNativeModelSyncPreview'
             : descriptor.method === 'applyNativeModelSync' ? 'dsh-github-copilot#GitHubCopilotNativeModelSyncResult'
           : 'dsh-github-copilot#GitHubCopilotAuthorizationView',
       })

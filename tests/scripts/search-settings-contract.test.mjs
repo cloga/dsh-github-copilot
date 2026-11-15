@@ -192,6 +192,28 @@ test('hidden legacy searchModel and searchRouting share namespace revision and c
   assert.equal(view(COPILOT).revision, 3)
 })
 
+test('native search model is a separate volatile CAS leaf and survives restart', async t => {
+  const { ctx, settings, view, fiber, start, getConfig } = await fixture(t)
+  const initial = view(COPILOT)
+  const serialized = initial.schema
+  assert.equal(serialized.refs[serialized.refs[serialized.uid].dict.nativeSearchModel].meta.hidden, true)
+  assert.equal(initial.value.nativeSearchModel, '')
+  await settings.mutate(COPILOT, [{ op: 'set', path: ['searchModel'], value: 'legacy-model' }], initial.revision)
+  const legacy = view(COPILOT)
+  await settings.mutate(COPILOT, [{ op: 'set', path: ['nativeSearchModel'], value: 'native-model' }], legacy.revision)
+  assert.equal(view(COPILOT).value.searchModel, 'legacy-model')
+  assert.equal(view(COPILOT).value.nativeSearchModel, 'native-model')
+  assert.equal(readInlineConfig(getConfig()).nativeSearchModel, 'native-model')
+  assert.equal([...ctx.loader.entries()].find(entry => entry.options.id === COPILOT).fiber, fiber)
+  await assert.rejects(settings.mutate(COPILOT,
+    [{ op: 'set', path: ['nativeSearchModel'], value: '' }], legacy.revision), { code: 'SETTINGS_CONFLICT' })
+  await ctx.fiber.dispose()
+  const restarted = await start()
+  const restored = restarted.settings.describe().find(entry => entry.ns === COPILOT)
+  assert.equal(restored.value.nativeSearchModel, 'native-model')
+  assert.equal(restored.value.searchModel, 'legacy-model')
+})
+
 test('pinned generated Client mutate codecs accept routing ops and a flat namespace revision', async t => {
   const { settings, view } = await fixture(t)
   const descriptor = await settingsMutateDescriptor()

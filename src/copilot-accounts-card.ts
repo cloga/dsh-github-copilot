@@ -93,24 +93,27 @@ const accountCopy = {
     identityChecking: 'Checking GitHub identity…', identityUnavailable: 'GitHub account identity unavailable',
     accounts: 'Account management',
     savedAccounts: 'Manage saved authorizations',
-    scope: 'Default for GitHub Copilot (multi-account), not the native GitHub Copilot account. Credits can override managed Session turns. Running turns, explicit Session accounts, models and history stay unchanged.',
+    scope: 'Switching changes the account in DSH’s native GitHub Copilot credential slot for future requests across this profile. Requests already in progress are not redirected; model selections, provider settings and history are unchanged.',
     remoteUnavailable: 'Account management is unavailable in this deployment.',
     readFailed: 'Could not read account information. Retry before changing accounts.',
     switchUnavailable: 'Account switching is temporarily unavailable. Refresh account information and try again. No running work will be cancelled.',
-    routeBlocked: 'Account switching requires the plugin-managed Copilot route to be available.',
+    routeBlocked: 'Account switching requires the native GitHub Copilot provider to be configured and available.',
     evidenceIncomplete: 'Account switching is unavailable because route or activity evidence is incomplete.',
     authorizationBusy: 'Account switching is paused while GitHub authorization is in progress.',
     verifyingBusy: 'Account switching is paused while the authorized account is being verified.',
     switchingBusy: 'An account change is already in progress.',
     technicalDetails: 'Technical details',
-    currentDefault: 'Current default',
+    currentDefault: 'Selected for native requests',
+    nativeCredentialMismatch: 'The native credential does not match the selected account. Apply the selected account or choose the account currently in the native credential slot.',
+    nativeCredentialUnsupported: 'The native credential is not a supported Copilot OAuth grant, so account switching is unavailable.',
+    applySelectedNative: 'Apply selected account to native',
     savedAuthorization: 'Saved authorization',
     authorizationUnavailable: 'Authorization unavailable',
     identityUnavailableLabel: 'Identity unavailable',
     switch: 'Switch', reauthorize: 'Reauthorize', remove: 'Remove',
     confirmRemoveTitle: 'Confirm account removal', confirmSwitchTitle: 'Confirm account switch',
     removePrompt: (account: string) => `Remove the saved authorization for ${account}? This does not revoke access at GitHub or delete conversations.`,
-    switchPrompt: (account: string) => `Use ${account} for subsequent GitHub Copilot (multi-account) work? The native account stays unchanged. Existing selected models may be unavailable, and encrypted reasoning from another account may not replay. History will not be modified.`,
+    switchPrompt: (account: string) => `Use ${account} for subsequent native GitHub Copilot requests across this DSH profile? Requests already in progress are not redirected. Model selections, provider settings and history will not be changed.`,
     confirmRemove: 'Confirm removal', confirmSwitch: 'Confirm switch', cancel: 'Cancel',
     switchFailed: 'Could not confirm the account change. Refresh account information before retrying.',
     authorizationFailed: 'GitHub authorization did not complete. Try adding the account again.',
@@ -149,24 +152,27 @@ const accountCopy = {
     identityChecking: '正在检查 GitHub 身份…', identityUnavailable: 'GitHub 账号身份暂不可用',
     accounts: '账号管理',
     savedAccounts: '管理已保存授权',
-    scope: '此默认账号仅用于 GitHub Copilot (multi-account)，不改变原生 GitHub Copilot 账号。Credits 可覆盖托管 Session 后续 turn 的账号。正在运行的 turn、Session 已指定账号、模型和历史保持不变。',
+    scope: '切换会将账号写入 DSH 原生 GitHub Copilot 凭据槽，供此 profile 后续请求使用。不会重定向正在进行的请求，也不会更改模型选择、provider 设置或历史。',
     remoteUnavailable: '当前部署无法管理账号。',
     readFailed: '无法读取账号信息。更改账号前请重试。',
     switchUnavailable: '暂时无法切换账号。请刷新账号信息后重试；不会取消正在运行的工作。',
-    routeBlocked: '插件管理的 Copilot 路由不可用，因此无法切换账号。',
+    routeBlocked: '原生 GitHub Copilot provider 未配置或不可用，无法切换账号。',
     evidenceIncomplete: '路由或活动证据不完整，因此无法切换账号。',
     authorizationBusy: 'GitHub 授权进行期间无法切换账号。',
     verifyingBusy: '正在验证已授权账号，暂时无法切换。',
     switchingBusy: '账号更改正在进行中。',
     technicalDetails: '诊断详情',
-    currentDefault: '当前默认账号',
+    currentDefault: '原生请求使用的账号',
+    nativeCredentialMismatch: '原生凭据与所选账号不匹配。请应用所选账号，或选择原生凭据槽中的账号。',
+    nativeCredentialUnsupported: '原生凭据不是受支持的 Copilot OAuth 授权，无法切换账号。',
+    applySelectedNative: '将所选账号应用到原生 provider',
     savedAuthorization: '已保存授权',
     authorizationUnavailable: '授权暂不可用',
     identityUnavailableLabel: '身份暂不可用',
     switch: '切换', reauthorize: '重新授权', remove: '移除',
     confirmRemoveTitle: '确认移除账号', confirmSwitchTitle: '确认切换账号',
     removePrompt: (account: string) => `移除 ${account} 的已保存授权？这不会撤销 GitHub 端的访问权限，也不会删除对话。`,
-    switchPrompt: (account: string) => `后续 GitHub Copilot (multi-account) 工作使用 ${account}？原生账号保持不变。该账号可能没有当前已选模型，加密推理内容也可能绑定其他账号。不会修改历史记录。`,
+    switchPrompt: (account: string) => `此 DSH profile 后续的原生 GitHub Copilot 请求使用 ${account}？不会重定向正在进行的请求，也不会更改模型选择、provider 设置或历史记录。`,
     confirmRemove: '确认移除', confirmSwitch: '确认切换', cancel: '取消',
     switchFailed: '无法确认账号更改结果。请刷新账号信息后再试。',
     authorizationFailed: 'GitHub 授权未完成。请重新添加账号。',
@@ -207,6 +213,8 @@ function accountProblemMessage(code: CopilotAccountsView['diagnostic'],
   text: typeof accountCopy.en | typeof accountCopy.zh): string {
   switch (code) {
     case 'COPILOT_ACCOUNTS_ROUTE_BLOCKED': return text.routeBlocked
+    case 'COPILOT_ACCOUNTS_NATIVE_CREDENTIAL_MISMATCH': return text.nativeCredentialMismatch
+    case 'COPILOT_ACCOUNTS_NATIVE_CREDENTIAL_UNSUPPORTED': return text.nativeCredentialUnsupported
     case 'COPILOT_ACCOUNTS_EVIDENCE_INCOMPLETE': return text.evidenceIncomplete
     case 'COPILOT_ACCOUNTS_BUSY': return text.switchUnavailable
     case 'COPILOT_ACCOUNTS_AUTH_FAILED': return text.authorizationFailed
@@ -562,7 +570,8 @@ function CopilotAccountControls(props: AccountControlsProps & (
         })),
         onSelect: (id: string) => {
           setAccountsOpen(false)
-          if (id !== view?.activeAccountId && view?.revision !== undefined) setConfirmation({ id, revision: view.revision, remove: false })
+          if ((id !== view?.activeAccountId || view?.diagnostic === 'COPILOT_ACCOUNTS_NATIVE_CREDENTIAL_MISMATCH')
+            && view?.revision !== undefined) setConfirmation({ id, revision: view.revision, remove: false })
         },
         listAttribute: 'data-copilot-saved-accounts',
         footer: authorizationOperation ? null : control(text.add, () => {
@@ -570,6 +579,10 @@ function CopilotAccountControls(props: AccountControlsProps & (
           if (props.remote !== undefined) startAdd()
         }, pending || addBlocked || view?.writable !== true || view?.switchable !== true),
       })),
+      props.addOnly || view?.diagnostic !== 'COPILOT_ACCOUNTS_NATIVE_CREDENTIAL_MISMATCH'
+        || view.revision === undefined ? null : control(text.applySelectedNative, () => {
+          setConfirmation({ id: view.activeAccountId, revision: view.revision!, remove: false })
+        }, pending || view.switchable !== true),
       props.addOnly || confirmation === undefined ? null : h('div', { role: 'group',
         'aria-label': confirmation.remove ? text.confirmRemoveTitle : text.confirmSwitchTitle,
         style: { border, borderRadius: 8, padding: 12 } },
