@@ -13,8 +13,31 @@ function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
+function plainRecord(value: unknown): value is Record<string, unknown> {
+  if (!record(value)) return false
+  const prototype: unknown = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
+}
+
+/**
+ * Native Config materializes empty template maps at provider, model and override
+ * scope. They do not add template values; supportsStrictMode only controls native
+ * JSON-schema tool conversion, not the credential, endpoint or model protocol.
+ * Qualify these exact shapes without deleting or overriding any native setting.
+ */
+function nativeCompat(value: unknown): boolean {
+  if (value === undefined) return true
+  if (!plainRecord(value)) return false
+  return Reflect.ownKeys(value).every(key => {
+    if (key === 'supportsStrictMode') return typeof value[key] === 'boolean'
+    if (key !== 'chatTemplateKwargs' && key !== 'chatTemplateArgs') return false
+    const template = value[key]
+    return plainRecord(template) && Reflect.ownKeys(template).length === 0
+  })
+}
+
 function customTransport(value: Record<string, unknown>): boolean {
-  return ['apiKeyEnv', 'baseURL', 'headers', 'compat'].some(key => {
+  return !nativeCompat(value.compat) || ['apiKeyEnv', 'baseURL', 'headers'].some(key => {
     const field = value[key]
     return field !== undefined && field !== '' && (!record(field) || Object.keys(field).length > 0)
   })

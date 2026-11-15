@@ -164,6 +164,18 @@ evidence stay unknown. Preserve #385 qualification/revocation; clear, pause,
 expiry and disposal fence later callbacks. Each diagnostic population, including
 Auto, is independently collapsed by default; opening it never enables collection.
 
+Native logical observations (#486) require a separate default-off
+`nativeDiagnosticsEnabled` CAS/readback consent. Observe only the public
+`llm/stream` waterfall and the plugin's native hosted-search operation, without
+changing chunks, transport, retries or Usage. Store fixed hourly counts, coarse
+duration buckets and terminal categories, never content, model/account/Session
+IDs or raw errors. Review purpose is not proof of reviewer identity; neither
+logical observation proves HTTP dispatch, supplier receipt, execution or
+billing. Clear/pause/disposal fence late and unconsumed streams. Native and
+account aggregates share the 14-day, 128-live and 2 MiB limits but remain
+separate in presentation and offline analysis. Older strict versions may reject
+new operation codes on rollback; never delete retained evidence to work around it.
+
 ## Session-policy compaction replay consent (#349, #352)
 
 `/copilot-compact visible-history` explicitly authorizes one lossy managed Responses

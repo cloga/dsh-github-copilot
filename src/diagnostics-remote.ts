@@ -5,7 +5,8 @@ import { DiagnosticsRowSchema, DiagnosticsViewSchema } from './diagnostics-types
 import type { DiagnosticsView } from './diagnostics-types.ts'
 export const ClientDiagnosticsBatchSchema = z.object({
   epoch: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-  rows: z.array(DiagnosticsRowSchema.refine(row => row.layer === 'client')).max(128),
+  rows: z.array(DiagnosticsRowSchema.refine(row => row.layer === 'client'
+    && !row.operation.startsWith('native-copilot-') && !row.reason.startsWith('NATIVE_LLM_'))).max(128),
   dropped: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
   unconfirmed: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
 }).strict()
@@ -17,6 +18,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
       setEnabled(enabled: boolean): Promise<RemoteResult<DiagnosticsView>>
       setAutoAllocationEnabled(enabled: boolean): Promise<RemoteResult<DiagnosticsView>>
       setRequestEnabled(enabled: boolean): Promise<RemoteResult<DiagnosticsView>>
+      setNativeEnabled(enabled: boolean): Promise<RemoteResult<DiagnosticsView>>
       clear(): Promise<RemoteResult<DiagnosticsView>>
       recordClient(batch: ClientDiagnosticsBatch): Promise<RemoteResult<DiagnosticsView>>
     }
@@ -34,6 +36,8 @@ const contribution: TypertRemoteContribution = {
       codec: strictRemoteCodec('dsh-github-copilot#AutoAllocationDiagnosticsEnabled', z.boolean()) }] },
     { method: 'setRequestEnabled', parameters: [{ name: 'enabled', wire: 'enabled', source: 'json' as const,
       codec: strictRemoteCodec('dsh-github-copilot#RequestDiagnosticsEnabled', z.boolean()) }] },
+    { method: 'setNativeEnabled', parameters: [{ name: 'enabled', wire: 'enabled', source: 'json' as const,
+      codec: strictRemoteCodec('dsh-github-copilot#NativeDiagnosticsEnabled', z.boolean()) }] },
     { method: 'recordClient', parameters: [{ name: 'batch', wire: 'batch', source: 'json' as const,
       codec: strictRemoteCodec('dsh-github-copilot#ClientDiagnosticsBatch', ClientDiagnosticsBatchSchema) }] },
   ].map(descriptor => ({ ...descriptor, id: `dsh-github-copilot:githubCopilotDiagnostics.${descriptor.method}`,
