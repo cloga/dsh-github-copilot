@@ -229,8 +229,7 @@ export class CopilotAccountsHost {
     const evidence = migrationStatus(this.ctx)
     if (!evidence.complete.routes || includeActivity && (!evidence.complete.sessions || !evidence.complete.defaultSelection)
       || !evidence.capabilities.settingsCas) return 'COPILOT_ACCOUNTS_EVIDENCE_INCOMPLETE'
-    // The managed selector never changes the canonical record or native selection.
-    if (!evidence.routes.managedRegistered) return 'COPILOT_ACCOUNTS_ROUTE_BLOCKED'
+    if (!evidence.routes.nativeRegistered || !evidence.routes.nativeConfigured) return 'COPILOT_ACCOUNTS_ROUTE_BLOCKED'
     if (!this.ctx.get('githubCopilotSessionAccounts') && includeActivity && evidence.sessions.some(row => row.status === 'running'
       && row.effectiveSelection?.provider === 'github-copilot-preview')) return 'COPILOT_ACCOUNTS_BUSY'
     return undefined
@@ -265,6 +264,64 @@ export class CopilotAccountsHost {
     }
     return rows
   }
+  private async readGrant(accountId: string): Promise<GitHubCopilotOAuthCredential | undefined> {
+    const binding = this.captureAccount(accountId)
+    const value = await createGitHubCopilotCredentialStore(this.ctx, GITHUB_COPILOT_PROVIDER_ID, binding)
+      .read(GITHUB_COPILOT_PROVIDER_ID)
+    if (value === undefined) return undefined
+    if (value.type !== 'oauth') fail('COPILOT_ACCOUNTS_NATIVE_CREDENTIAL_UNSUPPORTED')
+    return normalizeGitHubCopilotOAuthCredential(value)
+  }
+  private async writeGrant(
+    accountId: string,
+    expected: GitHubCopilotOAuthCredential | undefined,
+    next: GitHubCopilotOAuthCredential | undefined,
+  ): Promise<void> {
+    const binding = this.captureAccount(accountId)
+    const store = createGitHubCopilotCredentialStore(this.ctx, GITHUB_COPILOT_PROVIDER_ID, binding)
+    const normalize = (credential: Awaited<ReturnType<typeof store.read>>) => {
+      if (credential === undefined) return undefined
+      if (credential.type !== 'oauth') fail('COPILOT_ACCOUNTS_NATIVE_CREDENTIAL_UNSUPPORTED')
+      return normalizeGitHubCopilotOAuthCredential(credential)
+    }
+    const same = (left: GitHubCopilotOAuthCredential | undefined, right: GitHubCopilotOAuthCredential | undefined) =>
+      left === undefined ? right === undefined : right !== undefined && JSON.stringify(left) === JSON.stringify(right)
+    let actual: Awaited<ReturnType<typeof store.read>>
+    try {
+      actual = await store.modify(GITHUB_COPILOT_PROVIDER_ID, async current => {
+        binding.assertCurrent()
+        if (!same(normalize(current), expected)) fail('COPILOT_ACCOUNTS_CHANGED')
+        return next
+      })
+    } catch (error) {
+      let observed: Awaited<ReturnType<typeof store.read>>
+      try { observed = await store.read(GITHUB_COPILOT_PROVIDER_ID) }
+      catch { fail('COPILOT_ACCOUNTS_COMMIT_UNCERTAIN') }
+      if (same(normalize(observed), next)) {
+        actual = observed
+      } else if (same(normalize(observed), expected)) {
+        throw error
+      } else fail('COPILOT_ACCOUNTS_COMMIT_UNCERTAIN')
+    }
+    binding.assertCurrent()
+    if (!same(normalize(actual), next)) {
+      fail('COPILOT_ACCOUNTS_COMMIT_UNCERTAIN')
+    }
+  }
+  private async nativeCredentialMismatch(accountId: string): Promise<boolean> {
+    if (accountId === 'canonical') return false
+    const [selected, native] = await Promise.all([this.readGrant(accountId), this.readGrant('canonical')])
+    if (selected === undefined) fail('COPILOT_ACCOUNTS_SELECTED_MISSING')
+    return native === undefined || copilotAccountKey(selected) !== copilotAccountKey(native)
+  }
+  async nativeCredentialMatches(accountId: string): Promise<boolean> {
+    const binding = this.capture()
+    if (binding.accountId !== id(accountId)) fail('COPILOT_ACCOUNTS_CHANGED')
+    if (binding.accountId === 'canonical') return true
+    const mismatch = await this.nativeCredentialMismatch(binding.accountId)
+    binding.assertCurrent()
+    return !mismatch
+  }
   async get(): Promise<CopilotAccountsView> {
     return this.accountView()
   }
@@ -282,11 +339,17 @@ export class CopilotAccountsHost {
       if ((accountId !== undefined || activeAccountId !== 'canonical') && !accounts.some(row => row.id === activeAccountId && row.configured)) {
         fail('COPILOT_ACCOUNTS_SELECTED_MISSING')
       }
+      const routeProblem = this.routeDiagnostic()
+      if (accountId === undefined && activeAccountId !== 'canonical' && routeProblem === undefined) {
+        if (await this.nativeCredentialMismatch(activeAccountId)) problem = 'COPILOT_ACCOUNTS_NATIVE_CREDENTIAL_MISMATCH'
+        else accounts = accounts.filter(row => row.id !== 'canonical')
+      }
       const retainedFailure = accountId !== undefined || this.lastFailure === 'COPILOT_ACCOUNTS_BUSY' ? undefined : this.lastFailure
-      problem = retainedFailure ?? this.routeDiagnostic() ?? (this.busy() ? 'COPILOT_ACCOUNTS_BUSY' : undefined)
+      problem ??= retainedFailure ?? routeProblem ?? (this.busy() ? 'COPILOT_ACCOUNTS_BUSY' : undefined)
     } catch (error) { problem = diagnostic(error, 'COPILOT_ACCOUNTS_CREDENTIALS_UNAVAILABLE') }
     if (accountId === undefined && this.lastFailure === 'COPILOT_ACCOUNTS_COMMIT_UNCERTAIN') problem = this.lastFailure
-    const recovery = problem === 'COPILOT_ACCOUNTS_SELECTED_MISSING' && writable && this.routeDiagnostic() === undefined
+    const recovery = (problem === 'COPILOT_ACCOUNTS_SELECTED_MISSING'
+      || problem === 'COPILOT_ACCOUNTS_NATIVE_CREDENTIAL_MISMATCH') && writable && this.routeDiagnostic() === undefined
     return { state: problem ? 'error' : 'ready', activeAccountId, ...revision === undefined ? {} : { revision },
       writable, switchable: (!problem || recovery) && writable && !this.busy(), accounts,
       ...this.operation === undefined ? {} : { operation: this.operation },
@@ -418,14 +481,20 @@ export class CopilotAccountsHost {
   async ensureAccountNamesFor(accountId: string): Promise<CopilotAccountsView> {
     const view = await this.ensureIdentityFor(accountId)
     if (view.state === 'error') return view
+    const duplicateCanonical = accountId !== 'canonical' && this.selection().accountId === accountId
+      && !(await this.nativeCredentialMismatch(accountId))
+    const accounts = duplicateCanonical ? view.accounts.filter(row => row.id !== 'canonical') : view.accounts
     // Membership is bounded; each lookup retains its own timeout, cooldown and flight.
-    const missing = view.accounts.filter(row => row.configured && row.id !== accountId && !this.cachedIdentity(row.id))
+    const missing = accounts.filter(row => row.configured && row.id !== accountId && !this.cachedIdentity(row.id))
     await Promise.all(missing.map(async row => {
       const result = await this.ensureIdentityFor(row.id)
       if (result.state === 'error') this.ctx.logger.warn('[github-copilot] %s',
         result.diagnostic ?? 'COPILOT_ACCOUNTS_IDENTITY_UNAVAILABLE')
     }))
-    return this.viewForAccount(accountId)
+    const result = await this.viewForAccount(accountId)
+    return duplicateCanonical && this.selection().accountId === accountId
+      ? { ...result, accounts: result.accounts.filter(row => row.id !== 'canonical') }
+      : result
   }
   private async readIdentity(accountId: string, force: boolean): Promise<CopilotAccountsView> {
     const operation = beginDiagnostics(this.ctx, 'identity-read')
@@ -522,7 +591,11 @@ export class CopilotAccountsHost {
   async switchAccount(accountId: string, expectedRevision: number): Promise<CopilotAccountsView> {
     const observed = beginDiagnostics(this.ctx, 'account-global-switch')
     observed?.stage('host-received')
-    let committed = false, fenced = false
+    let committed = false, fenced = false, canonicalWritten = false, rollbackAllowed = true
+    let backupId: string | undefined, backupWritten = false
+    let previousCanonical: GitHubCopilotOAuthCredential | undefined
+    let selectedGrant: GitHubCopilotOAuthCredential | undefined
+    let previousCanonicalIdentity: CopilotAccountIdentity | undefined
     try {
       id(accountId)
       const before = this.selection()
@@ -533,7 +606,10 @@ export class CopilotAccountsHost {
       this.operation = 'switching'; fenced = true
       const rows = await this.membership()
       if (!rows.some(row => row.id === accountId && row.configured)) fail('COPILOT_ACCOUNTS_SELECTED_MISSING')
-      const binding = this.capture(accountId)
+      previousCanonical = await this.readGrant('canonical')
+      const previousSelectionMismatch = accountId !== 'canonical' && before.accountId !== 'canonical'
+        && previousCanonical !== undefined && await this.nativeCredentialMismatch(before.accountId)
+      const binding = this.captureAccount(accountId)
       const preflightAbort = new AbortController()
       const signal = AbortSignal.any([this.abort.signal, preflightAbort.signal, AbortSignal.timeout(60_000)])
       const identity = (async () => {
@@ -552,6 +628,48 @@ export class CopilotAccountsHost {
       }
       await this.assertIdentityCurrent(binding, identityKey)
       binding.assertCurrent()
+      selectedGrant = await this.readGrant(accountId)
+      if (selectedGrant === undefined || copilotAccountKey(selectedGrant) !== identityKey) fail('COPILOT_ACCOUNTS_CHANGED')
+      if (accountId !== 'canonical') {
+        const latestCanonical = await this.readGrant('canonical')
+        if (previousCanonical === undefined ? latestCanonical !== undefined
+          : latestCanonical === undefined || JSON.stringify(latestCanonical) !== JSON.stringify(previousCanonical)) {
+          fail('COPILOT_ACCOUNTS_CHANGED')
+        }
+        if (before.accountId !== 'canonical' && previousCanonical !== undefined && !previousSelectionMismatch) {
+          const previousSelected = await this.readGrant(before.accountId)
+          if (previousSelected === undefined || copilotAccountKey(previousSelected) !== copilotAccountKey(previousCanonical)) {
+            fail('COPILOT_ACCOUNTS_NATIVE_CREDENTIAL_MISMATCH')
+          }
+          if (JSON.stringify(previousSelected) !== JSON.stringify(previousCanonical)) {
+            await this.writeGrant(before.accountId, previousSelected, previousCanonical)
+          }
+        } else if (previousCanonical !== undefined) {
+          previousCanonicalIdentity = await this.identity(this.captureAccount('canonical'), signal)
+          if (JSON.stringify(previousCanonical) !== JSON.stringify(selectedGrant)) {
+            const currentSlots = rows.filter(row => row.id !== 'canonical' && row.configured)
+            if (currentSlots.length >= COPILOT_ACCOUNTS_MAX) fail('COPILOT_ACCOUNTS_LIMIT')
+            backupId = randomUUID()
+            await this.writeGrant(backupId, undefined, previousCanonical)
+            backupWritten = true
+            const cached = this.identities.get('canonical')
+            if (cached) this.identities.set(backupId, { ...cached, identity: previousCanonicalIdentity })
+          }
+        }
+        try {
+          await this.writeGrant('canonical', previousCanonical, selectedGrant)
+          canonicalWritten = true
+        } catch (error) {
+          try {
+            const actual = await this.readGrant('canonical')
+            const same = (left: GitHubCopilotOAuthCredential | undefined, right: GitHubCopilotOAuthCredential | undefined) =>
+              left === undefined ? right === undefined : right !== undefined && JSON.stringify(left) === JSON.stringify(right)
+            if (same(actual, selectedGrant)) canonicalWritten = true
+            else if (!same(actual, previousCanonical)) rollbackAllowed = false
+          } catch { rollbackAllowed = false }
+          throw error
+        }
+      }
       const finalRoute = this.routeDiagnostic()
       if (finalRoute) fail(finalRoute)
       if (this.leases.size > 0 || this.ctx.get('authorization')?.describe(recordKey('canonical'))?.inFlight === true) {
@@ -564,7 +682,10 @@ export class CopilotAccountsHost {
       catch {
         try {
           const after = this.selection()
-          if (after.accountId !== before.accountId || after.revision !== before.revision) fail('COPILOT_ACCOUNTS_COMMIT_UNCERTAIN')
+          if (after.accountId !== before.accountId || after.revision !== before.revision) {
+            rollbackAllowed = false
+            fail('COPILOT_ACCOUNTS_COMMIT_UNCERTAIN')
+          }
         } catch { fail('COPILOT_ACCOUNTS_COMMIT_UNCERTAIN') }
         fail('COPILOT_ACCOUNTS_CONFLICT')
       }
@@ -574,8 +695,26 @@ export class CopilotAccountsHost {
       if (after.accountId !== accountId || after.revision === expectedRevision) fail('COPILOT_ACCOUNTS_COMMIT_UNCERTAIN')
       await this.assertIdentityCurrent(this.capture(accountId), identityKey)
       if (!(await this.membership()).some(row => row.id === accountId && row.configured)) fail('COPILOT_ACCOUNTS_COMMIT_UNCERTAIN')
+      if (accountId !== 'canonical') {
+        const currentCanonical = await this.readGrant('canonical')
+        if (currentCanonical === undefined || copilotAccountKey(currentCanonical) !== identityKey) {
+          fail('COPILOT_ACCOUNTS_COMMIT_UNCERTAIN')
+        }
+      }
       this.lastFailure = undefined
     } catch (error) {
+      if (!committed && canonicalWritten && rollbackAllowed && selectedGrant !== undefined) {
+        try {
+          await this.writeGrant('canonical', selectedGrant, previousCanonical)
+          canonicalWritten = false
+        } catch { rollbackAllowed = false }
+      }
+      if (!committed && backupWritten && !canonicalWritten && rollbackAllowed && backupId !== undefined
+        && previousCanonical !== undefined) {
+        try { await this.writeGrant(backupId, previousCanonical, undefined) }
+        catch { rollbackAllowed = false }
+      }
+      if (!rollbackAllowed) error = new AccountsFailure('COPILOT_ACCOUNTS_COMMIT_UNCERTAIN')
       this.lastFailure = committed ? 'COPILOT_ACCOUNTS_COMMIT_UNCERTAIN' : diagnostic(error, 'COPILOT_ACCOUNTS_CHANGED')
       const reason = diagnosticsReason(new Error(this.lastFailure))
       observed?.finish(diagnosticsOutcome(reason), reason)
@@ -773,9 +912,9 @@ export class CopilotAccountsHost {
     if (binding.accountId === 'canonical') fail('COPILOT_ACCOUNTS_ACTIVE_REMOVE_BLOCKED')
     this.operation = 'switching'
     try {
-      await createGitHubCopilotCredentialStore(this.ctx, GITHUB_COPILOT_PROVIDER_ID, binding).delete(GITHUB_COPILOT_PROVIDER_ID)
-      this.identities.delete(binding.accountId)
-      this.unavailableIdentities.delete(binding.accountId)
+      const credentials = this.ctx.get('credentials')
+      if (!object(credentials) || typeof credentials.deleteRecord !== 'function') fail('COPILOT_ACCOUNTS_CREDENTIALS_UNAVAILABLE')
+      await credentials.deleteRecord(recordKey('canonical'))
     } finally { this.operation = undefined }
   }
   dispose(): void {

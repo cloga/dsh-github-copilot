@@ -19,7 +19,7 @@ import GitHubCopilotAuthorizationController from './authorization-controller.ts'
 import previewPlugin from './preview-route.ts'
 import { installAutoReviewSampling } from './auto-review-sampling.ts'
 import { createNativeCopilotSearch } from './native-copilot-search.ts'
-import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
+import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID, GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
 export {
   COPILOT_HOSTED_SEARCH_PROVIDER_ID,
   GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID,
@@ -141,6 +141,9 @@ function activate(ctx: Context, config: LiveInlineConfig): void {
       }
       if (provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID) {
         sessionAccounts.admit(payload.agent, payload.turn, payload.signal)
+      } else if (provider === GITHUB_COPILOT_PROVIDER_ID && !accountTurns.has(payload.agent.session.id)) {
+        const lease = ctx.get('githubCopilotAccounts')?.host.acquire(payload.signal, false)
+        if (lease) accountTurns.set(payload.agent.session.id, lease)
       }
     }
     return next()
@@ -153,14 +156,23 @@ function activate(ctx: Context, config: LiveInlineConfig): void {
     const pending: unknown = typeof state === 'object' && state !== null && 'pending' in state ? state.pending : undefined
     const pendingProvider = typeof pending === 'object' && pending !== null && 'provider' in pending ? pending.provider : undefined
     const selectedProvider = pendingProvider ?? agent.session.requestHeader()?.config.provider
-    if (selectedProvider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID && !sessionAccounts.turns.current(agent.session)) return next()
-    sessionAccounts.admit(agent, turn, signal)
-    const lease = acquireAccount(signal)
+    const managedRequest = selectedProvider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
+      || sessionAccounts.turns.current(agent.session) !== undefined
+    const nativeRequest = selectedProvider === GITHUB_COPILOT_PROVIDER_ID
+    if (!managedRequest && !nativeRequest) return next()
+    if (nativeRequest && accountTurns.has(agent.session.id)) {
+      accountTurns.get(agent.session.id)?.binding.assertCurrent()
+      return next()
+    }
+    if (managedRequest) sessionAccounts.admit(agent, turn, signal)
+    const lease = managedRequest ? acquireAccount(signal)
+      : ctx.get('githubCopilotAccounts')?.host.acquire(signal, false)
     let retained = false
     try {
       const result = await next()
       lease?.binding.assertCurrent()
-      if (lease && result.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID && !signal.aborted) {
+      if (lease && (result.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
+        || result.provider === GITHUB_COPILOT_PROVIDER_ID) && !signal.aborted) {
         accountTurns.get(agent.session.id)?.release()
         accountTurns.set(agent.session.id, lease)
         retained = true
