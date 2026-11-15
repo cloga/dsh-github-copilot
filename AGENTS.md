@@ -162,15 +162,15 @@ add model-ID routing rules, patch Core, or claim untested parity.
 When any later legacy detail in this guide conflicts with this confirmed scope,
 follow this section and the current acceptance criteria in #455/#456.
 
-The user clarified that the ordinary route should be DSH's native
-`github-copilot` provider, with only useful plugin enhancements through public
-APIs. Retire the separate managed route when native-route acceptance is met;
-do not preserve it solely to continue old conversations or create a history
+The user clarified that the ordinary route is DSH's native
+`github-copilot` provider, with useful plugin enhancements attached only through
+public APIs. The production package registers no `github-copilot-preview`
+provider; do not restore it to preserve old selections or create a history
 migration. Existing stored conversations, credentials and settings are not
-authorized for deletion or rewriting. Explicitly document that old managed
+authorized for deletion or rewriting. Explicitly document that old preview
 route selections may become unavailable. Native model selection and actual
 subagent invocation must be verified on `github-copilot`, not inferred from
-managed-route tests. Record enhancements that cannot safely attach to native
+legacy-route tests. Record enhancements that cannot safely attach to native
 APIs rather than patching Core or misrepresenting support.
 
 For official DSH `0.2.2-rc.3`, plugin `0.1.0-alpha.14.dsh.0.2.2.rc.3`
@@ -215,34 +215,12 @@ projection may diagnose concrete failed-zero or invalid-sample incidents; ordina
 request progress and absent fresh sampling stay quiet. Never filter shared native
 usage, replace Core's meter, infer current occupancy/percentages or rewrite history.
 See [quota boundaries](./docs/copilot-usage.md).
-12. Default-off local account/Checking/compaction diagnostics through public storage-domain and strict additive Remotes. Keep fixed-dimension Client/Host and logical/physical populations separate, with bounded handles/rows, 14-day retention, explicit loss/uncertainty and native commit evidence. Isolate the home-wide backend by public profile context, never account/Session identity; one writer per profile is required. No content, raw errors, identities/hashes, credential/history reads, ad-hoc files, Settings logs, upload, daily task or automatic repair. Aggregate and Auto controls remain independent. Separately consented `requestDiagnosticsEnabled` collects at most 128 content-free managed-adapter physical requests for 24 hours within the shared 2 MiB cap. Random stream groups/dispatch indices are not Session/turn identity or Core retry counts. Local body-write completion does not prove supplier receipt; abort attribution needs actual signal evidence, not EOF text. Never change transport/retries/Usage to obtain diagnostics. All controls use hidden volatile CAS leaves with exact readback; clear is a separately confirmed epoch fence. Missing/corrupt storage remains unavailable, never healthy empty data. Publication does not enable collection. See [local diagnostics](./docs/plugin-diagnostics.md).
-
-Auto aggregate assessment outcomes are fixed codes only; keep legacy missing reasons
-unrecorded and separate from new cohorts. Count decisions by selected/no-fit counts,
-not repeated candidate opportunities. Never change assessment policy, deadline or
-context safety merely to populate diagnostics; retain the shared storage/row bounds.
-
-Credential-change observations (#402) use the existing independent request
-consent: at most 128 fixed notification/commit rows and pending handles for 24
-hours within the shared 2 MiB cap. Derive reasons only from existing refresh
-checks, never new credential reads. No grant/record/identity/endpoint values or
-hashes; random change IDs join verdict phases only. Live-wire counts are not
-unique requests, retries or execution proof. Unknown source and missing legacy
-evidence stay unknown. Preserve #385 qualification/revocation; clear, pause,
-expiry and disposal fence later callbacks. Each diagnostic population, including
-Auto, is independently collapsed by default; opening it never enables collection.
-
-Native logical observations (#486) require a separate default-off
-`nativeDiagnosticsEnabled` CAS/readback consent. Observe only the public
-`llm/stream` waterfall and the plugin's native hosted-search operation, without
-changing chunks, transport, retries or Usage. Store fixed hourly counts, coarse
-duration buckets and terminal categories, never content, model/account/Session
-IDs or raw errors. Review purpose is not proof of reviewer identity; neither
-logical observation proves HTTP dispatch, supplier receipt, execution or
-billing. Clear/pause/disposal fence late and unconsumed streams. Native and
-account aggregates share the 14-day, 128-live and 2 MiB limits but remain
-separate in presentation and offline analysis. Older strict versions may reject
-new operation codes on rollback; never delete retained evidence to work around it.
+12. Local diagnostics is retired (#499): do not register its service, UI,
+Remotes, storage or collectors. Preserve existing data and the four hidden
+legacy settings without rewriting them; even true values do not enable
+collection. Older releases may collect again if loaded with those settings.
+Native Usage, context incident notices, immediate request errors and native
+refresh qualification remain independent. See [retirement details](./docs/plugin-diagnostics.md).
 
 ## Session-policy compaction replay consent (#349, #352)
 
@@ -293,13 +271,13 @@ Refresh remains owned by native pi-ai `Models.getAuth()` and DSH
 If selection and canonical credential diverge after an external native sign-in,
 show an actionable mismatch and require explicit recovery; never auto-migrate.
 
-Keep the native UI and its canonical quota/search attribution. Existing
-`github-copilot-preview` behavior and Session account overrides remain
-separately plugin-owned legacy behavior; they are not required for native
-switching. Disposal removes only plugin registrations. Native model selections
-remain native; plugin-only model selections and explicit
-`web.searchProvider=github-copilot-hosted` need user-selected
-replacements before uninstall; missing configured Web backends return
+Keep the native UI and its canonical quota/search attribution. The
+`github-copilot-preview` adapter remains compatibility code but is not
+registered by the production package entry. Session account overrides are not
+evidence of native-provider behavior or a reason to register a second model
+provider. Disposal removes only plugin registrations. Native model selections
+remain native; explicit `web.searchProvider=github-copilot-hosted` needs a
+user-selected replacement before uninstall. Missing configured Web backends return
 `WEB_PROVIDER_CONFIGURED_MISSING`, not automatic fallback. Uninstall leaves the
 last selected grant in the native canonical record. No automatic
 Settings/history migration or sign-out.
@@ -326,7 +304,7 @@ Additional plugin-owned `github-copilot/account-<opaque-id>` records are written
 
 Settings store only the opaque global account selector and explicit `sessionAccounts` rows. Missing/invalid selectors or records fail explicitly, without another-account fallback. Models manages account authorization and the global default; Credits may select an already authorized managed-route account for this Session's subsequent turns or restore global inheritance (#305/#318). An explicit choice equal to the default remains explicit. Freeze account ownership before request admission, holding mutation fences until native `turn/end`/disposal; later Session/default changes never redirect running steps, retries or search. Account-local credentials, metadata, quota, proof cancellation and native adapter composition must remain isolated. Keep one public adapter/controller registration, with no second wire/catalog or Core changes. Reauthorization/removal of a pinned record stays blocked; global-default selection may continue independently.
 
-Account selection shows the current account and a compact Switch dropdown with no account search, never a flat unbounded account list. Mark the current choice and scroll long lists internally; Add and saved-account reauthorization/removal remain in Models, not Credits. One Models Manage disclosure contains account management and cross-account exact-ID model preferences. Continuation settings belong beside account controls. Persist the initial default-on epoch and later global changes with path-level CAS; only unseeded Sessions born after a known epoch inherit it, never retroactively enroll existing/unknown/forked histories. Normal Client continuation uses only the persistent Session policy; no next-turn-only or temporary-recovery duration choices. Explicit-off account changes require persistent-enable/keep-off/cancel choices, then fresh account revision readback before CAS. Exact replay failures offer loss-disclosed persistent Enable/Cancel when off, diagnostics without repeated authorization when on. Missing policy evidence fails explicitly, never a temporary authorization fallback. Retain old next-turn/recovery strict Remote contracts and Host admission for compatibility; failure-evidence expiry does not disable the persistent policy. No automatic send/retry, history writes, private Settings navigation or inferred encrypted account origin. The approved synthetic mock and current navigation limit are documented in [account management](./docs/account-management-experience.md).
+Account selection shows the current account and a compact Switch dropdown with no account search, never a flat unbounded account list. Mark the current choice and scroll long lists internally; Add and saved-account reauthorization/removal remain in Models, not Credits. One Models Manage disclosure contains account management and cross-account exact-ID model preferences. The former new-Session continuation default is not shown now that the managed route is retired; preserve existing settings and compatibility contracts. The historical default-on epoch and later changes use path-level CAS; only unseeded Sessions born after a known epoch inherit it, never retroactively enroll existing/unknown/forked histories. Normal Client continuation uses only the persistent Session policy; no next-turn-only or temporary-recovery duration choices. Explicit-off account changes require persistent-enable/keep-off/cancel choices, then fresh account revision readback before CAS. Exact replay failures offer loss-disclosed persistent Enable/Cancel when off, diagnostics without repeated authorization when on. Missing policy evidence fails explicitly, never a temporary authorization fallback. Retain old next-turn/recovery strict Remote contracts and Host admission for compatibility; failure-evidence expiry does not disable the persistent policy. No automatic send/retry, history writes, private Settings navigation or inferred encrypted account origin. The approved synthetic mock and current navigation limit are documented in [account management](./docs/account-management-experience.md).
 
 Use hidden volatile `sessionAccounts` with path-level SettingsForms CAS, readback and restart evidence. Session account Remotes use explicit viewed IDs, native Agent lookup and strict codecs, never automatic Client scope. Credits uses that Session's account for identity/quota, rejecting mismatched or late results. Historical Account is an additive assistant-actions disclosure beside native Usage, captured only after a real ordinary native chunk; bounded Host-lifetime evidence becomes unknown after restart/eviction and is never reconstructed from today's settings. No new durable events, history/default/model/Usage writes, automatic account fallback, replay deletion or message retry. See [the requirements and acceptance gates](./docs/copilot-accounts.md).
 
@@ -377,7 +355,7 @@ Alpha.25 admits native `subagent/descriptor` v3, already v3 in the retained rc.1
 - `src/response-error-body.ts`, `src/request-body-timeout.ts`, `src/request-upload-evidence.ts`: bounded clone-only HTTP error evidence and safe managed upload-timeout guidance. Request-scoped public Node diagnostic events supply numeric local body-write/header/ALPN evidence only after an exact verified `408/user_request_timeout`; absent events, multiple native requests and work limits stay explicit. Always dispose subscriptions when Fetch settles, without changing its arguments, Response/errors, dispatcher, proxy or retry owner. Local body-write completion is not upload duration, kernel ACK, supplier receipt or execution; its absence does not prove incomplete upload. Native failure classification/retry metadata stay unchanged; final JSON bytes are not tokens or a payload limit. A separate explicit opt-in compression setting is default-off and never activated by a 408; never infer overflow, auto-compact, trim history, switch models or add retries from a 408.
 - `src/responses-request-compression.ts`: asynchronous `node:zlib` gzip at `Z_BEST_SPEED` only for exact account-proven official Copilot HTTPS `/responses` JSON POSTs through the existing public Fetch seam. `github-copilot.responsesRequestCompression` defaults false; enforce the 256 KiB minimum, 32 MiB compression-work bound and both 5%/4 KiB savings thresholds. Skips retain the original request with a fixed reason, and cancellation/account/deadline fences run before dispatch. No custom Fetch, other protocol, explicit `auto`/WebSocket, DNS/proxy/dispatcher changes, context-admission or replay changes, resend after an encoding rejection, or new retry. Gzip is wire encoding, not compaction or proof of supplier receipt.
 - Verified 408 error correlation (#276) adds only validated model/protocol, UTC header-observation time and strictly formatted `x-github-request-id` / `x-request-id` response IDs. Missing/malformed IDs stay unavailable; no other header values or new persisted population. IDs do not prove receipt/execution, and zero/unknown image composition cannot justify image-budget guidance.
-- `src/request-body-evidence.ts`, `src/request-body-composition.ts`: bounded numeric original-JSON spans for verified 408s and separately consented request observations. Keep replay validation/recovery at 16 MiB; only diagnostic composition may use the 32 MiB cooperative scanner with 64 Ki-character yields, a two-second monotonic deadline and four scan slots. Do not build a full payload object graph or decode image/replay values. Conversation/tool definitions/top-level system/residual partition total bytes; structural image and opaque replay spans are disjoint conversation subsets. Unknown/limited/cancelled evidence stays explicit. Opted-in large scans start after Fetch invocation without delaying ordinary native delivery; retained numeric rows may update after settlement only behind consent/clear/retention/eviction fences. Retain source strings only for bounded in-flight counting, never in storage/logs. Fetch-to-header time excludes analysis and is not upload duration. With gzip, report original JSON and prepared HTTP-body bytes separately; neither establishes delivered bytes. No automatic mitigation, timeout/retry changes or supplier-limit claim.
+- `src/request-body-evidence.ts`, `src/request-body-composition.ts`: bounded numeric original-JSON spans for verified 408 guidance only. Keep replay validation/recovery at 16 MiB; error composition may use the 32 MiB cooperative scanner with 64 Ki-character yields, a two-second monotonic deadline and four scan slots. Do not build a full payload object graph or decode image/replay values. Conversation/tool definitions/top-level system/residual partition total bytes; structural image and opaque replay spans are disjoint conversation subsets. Unknown/limited/cancelled evidence stays explicit. Retain source strings only for bounded in-flight counting, never in storage/logs. With gzip, report original JSON and prepared HTTP-body bytes separately; neither establishes delivered bytes. No automatic mitigation, timeout/retry changes or supplier-limit claim.
 - `src/copilot-stream-liveness.ts`: request-local HTTP/SSE byte-idle observation, paired with the public native adapter's bounded assistant-chunk deadline. Default five-minute byte idle and ten-minute semantic silence; no fake assistant output, private watchdog access, new retry or Core patch. Consumer think time is excluded; explicit WebSocket/auto stays native-only. `chatStreamLiveness: false` restores native-only timing. `chatMaxRequestImageBytes` retains Core's 20 MiB default; smaller explicit settings authorize only native image offload, not hidden history trimming or a guessed supplier limit. Synthetic heartbeat evidence is not production heartbeat proof.
 - `tests/`: unit and integration evidence; mirror the source area being changed.
 - `deployment-baseline.json`: declared machine-readable compatibility and capability evidence inventory.
@@ -460,7 +438,7 @@ to remove the native provider or migrate settings.
 - Capabilities are `agentsList`, `sessionProjections`, `settingsCas`, `providerRegistry`, `defaultSelection`; `complete.sessions/defaultSelection/routes` describes evidence completeness, not migration approval. Effective selection uses pending projection, request-header config, then default only for genuinely empty Sessions with known projection state. Running `activeRequestSelection` is the latest recorded header, not proven in-flight LLM work. Native effective configuration and native/managed registration are separate flags.
 - This read invokes no auth status/model discovery, credentials or network and mutates no settings/Sessions. No normal UI/global current-model/search card is added. Nine ordinary authorization/model-preference Remotes retain their codec; the tenth migration Remote uses a separate strict `GitHubCopilotMigrationStatus` codec.
 - `historyScope: live-agents-only` excludes cold stored histories. Require operator acknowledgement that older conversations may need a new explicit selection later. Loaded version/structural capability self-reports are not full Desktop/Core byte attestation or an atomic cross-namespace guarantee; recheck immediately before CAS.
-- The planned `cloga/dsh-windows-ops` command `tools/migrate-copilot-managed-route.ps1` is separate config-only maintenance after release. V1 performs no automated Session/default writes, cold-history scan, plugin install, restart or full Desktop-baseline acceptance. Resolve selection blockers separately with explicit approval; never report this planned command or live migration as published/installed/completed without evidence.
+- The earlier planned `cloga/dsh-windows-ops` command `tools/migrate-copilot-managed-route.ps1` is superseded: production no longer registers the managed model route, so provider-profile removal is not required. Never claim that this historical command or a live migration was published/installed/completed without evidence.
 
 ## Supported DSH seams
 
@@ -505,7 +483,7 @@ These pins document compatibility evidence. They do not authorize creating anoth
 - Authorization service: rc.1 Core provides it; the rc.2 web/headless profiles rely on this package's runtime dependency and conditional bootstrap.
 - Credentials: use record description/read/modify/delete APIs on the Host. Never read records in the browser.
 - Copilot grant schema: `type: oauth`, non-empty `refresh`/`access`, finite `expires`, optional non-empty `enterpriseUrl`, and optional deduplicated non-empty-string `availableModelIds`.
-- Settings: never recreate a missing `providers.github-copilot` profile. Existing native profiles remain user/Core-owned and require explicit migration before only the account-discovered route is listed.
+- Settings: never recreate a missing `providers.github-copilot` profile. Existing native profiles remain user/Core-owned; production does not register a second account-discovered model route. Native model sync is an explicit, reviewed operation on an existing canonical profile.
 - Per-model API: do not assume stock Core honors a configured model.api. Verify the existing published behavior; where it cannot serve a model, use a plugin-local, exact-model alternative or report the limitation rather than patching Core.
 - Route activation: the dormant `llm-pi-ai` mount observes the profile and registers the route.
 - Client activation: package metadata injects DSH remotes and Models UI; `./client` mounts `./remote`.
@@ -538,12 +516,44 @@ For historical alpha.25, source markers, local rc.1-backed focused tests and fif
 
 ## Important-update release delivery
 
-- User-requested important updates include user-visible features, behavior fixes, compatibility fixes, and security or stability fixes. Their default delivery includes publication after a reviewed merge and green required CI; do not stop at a merged PR or ask a second time whether to release.
-- Explicit user restrictions such as code-only, review-only or do-not-release take precedence. Pure documentation and internal-only changes are not automatically release-bearing; they need an explicit release request if publication is desired. A task plan is not permission for an unrelated release.
+- User-requested important plugin updates include user-visible features, behavior fixes, compatibility fixes, and security or stability fixes for plugin consumers. Their default delivery includes publication after a reviewed merge and green required CI; do not stop at a merged PR or ask a second time whether to release. Repository engineering features are not plugin features merely because they improve the project.
+- Explicit user restrictions such as code-only, review-only or do-not-release take precedence. Pure documentation and internal-only changes are not automatically release-bearing; distributing them as plugin artifacts requires an explicit request for that artifact, not a generic delivery instruction. A task plan is not permission for an unrelated release.
 - Plan version alignment with the implementation PR whenever possible. If the prepared version/tag is unused and aligned, release it; otherwise prepare the next appropriate SemVer version through the normal PR path. Preserve the prerelease channel unless promotion is explicitly requested. Any additional version PR follows the same required review/CI and branch protection, without a separate merge-approval prompt.
 - Check all required CI, tag rules and package/archive checks. Create a fresh annotated tag only on the verified merged revision, let the protected Release workflow publish, and verify the non-draft Release, intended prerelease flag, tag/commit, assets and SHA-256. Never bypass failing CI, move a tag or substitute an unverified local archive.
 - A release-bearing update is not fully delivered until the published Release URL, verified version/commit/assets/checksum and npm version/SRI are reported. If CI, permissions or network prevents either channel, report partial delivery and the exact pending step; never describe merged-only or GitHub-only work as fully delivered.
 - This standing release authorization does not authorize profile installation, sign-out, worktree checkout or interruption of running Sessions. Keep published, installed-on-disk and loaded-runtime status separate; a session-interrupting restart still requires explicit acknowledgement.
+
+### Classify delivery before packaging (#502)
+
+Choose the task's consumer impact before editing versions, installation URLs or
+package contents. Record the classification and concrete rationale in the PR's
+`Release delivery` section:
+
+| Classification | Completion and artifact boundary |
+| --- | --- |
+| `repository-only` | Agent guidance, CI, tests, documentation governance and unshipped development tools complete at reviewed merge and green required CI. Keep the plugin version and package whitelist unchanged; no plugin release or local upgrade is needed. |
+| `plugin-update` | An actual plugin runtime, compatibility or release-significant consumer-package change follows the important-update release gates above. A version/baseline/whitelist edit alone is not evidence of such a change. |
+| `explicit-plugin-artifact` | An explicit request to distribute an engineering artifact as a plugin package may authorize that separate delivery. Record the actual artifact-specific request under `Authorization`; generic "deliver/publish" instructions or release-status questions are not that authorization. A version-only follow-through PR may instead cite the already reviewed and authorized plugin update; it needs no second approval. |
+| `release-recovery` | Repair publication infrastructure or reconcile an already authorized version without a new version or changed consumer payload. Verify that existing release's outcome; do not describe reconciliation as a new plugin upgrade. |
+
+Never add repository tools, fixtures or guides to `package.json.files`, or bump a
+version, merely to make an engineering task releasable. If an intended change
+touches an already shipped executable or other release-significant file, preserve the existing release-policy gate:
+separate/defer that artifact change or establish its real consumer release scope,
+never relabel it repository-only to bypass the gate. Preserve historical releases,
+tags and package contents; this rule does not authorize unpublishing or repacking.
+Documentation-only source edits, including packaged guides, may wait for the next
+independently justified version without changing any already published bytes.
+
+The existing PR `documentation-impact` check also checks this declaration against
+the actual base/head manifests and important-file diff. It rejects repository-only
+package changes and metadata-only manufactured plugin updates, and requires a
+reviewable artifact-specific authorization statement for the explicit exception.
+These are consistency checks, not proof of semantic impact or user consent; an
+agent or human must review the rationale and actual request without adding a new
+human-only approval gate. Report repository delivery, plugin publication,
+installed-on-disk and loaded-runtime status separately. No runtime benefit means
+no recommendation to install or restart merely because a new package exists.
 
 ## Installation-agent PowerShell practice
 

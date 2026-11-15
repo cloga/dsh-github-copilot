@@ -13,7 +13,6 @@ import type { CredentialStore } from '@earendil-works/pi-ai'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { estimateContextTokens, estimateMessageTokens } from '@earendil-works/pi-ai/utils/estimate'
 import { createGitHubCopilotCredentialStore, observeCopilotNativeRefresh, trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
-import type { CredentialChangeReason, CredentialChangeHandle } from './request-diagnostics.ts'
 import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import type { GitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import {
@@ -50,6 +49,7 @@ export type PreviewRouteConfig = Pick<PiAiProviderProfile,
   & Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs'>
   & {
     readonly streamLiveness?: boolean
+    readonly registerLegacyProvider?: boolean
     readonly chatRequestSettings?: () => Pick<InlineConfig,
       'chatStreamIdleTimeoutMs' | 'chatStreamLiveness' | 'chatMaxRequestImageBytes'
       | 'responsesRequestCompression' | 'responsesOmitTemperature'>
@@ -240,17 +240,6 @@ class PreviewLifetime {
     for (const [wire, state] of this.wires) {
       if (!preserveDispatched || !state.dispatched) wire.abort(new ManagedWireAbortError('COPILOT_PREVIEW_CREDENTIAL_CHANGED'))
     }
-  }
-  credentialChangeCounts(preserveDispatched: boolean) {
-    let preparing = 0, dispatched = 0, alreadyAborted = 0, preserved = 0, revoked = 0
-    for (const [wire, state] of this.wires) {
-      if (wire.signal.aborted) { alreadyAborted++; continue }
-      if (state.dispatched) dispatched++
-      else preparing++
-      if (preserveDispatched && state.dispatched) preserved++
-      else revoked++
-    }
-    return { preparing, dispatched, alreadyAborted, preserved, revoked }
   }
   dispose(): void {
     if (!this.active) return
@@ -809,11 +798,6 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
     const enabled = (settings?.chatStreamLiveness ?? streamLiveness ?? true)
       && (template.transport === undefined || template.transport === 'sse')
     const guard: AccountProviderGuard = { ...lifetime.guard(lease), ...hooks,
-      requestDiagnostics: {
-        enabled: () => ctx.get('githubCopilotDiagnostics')?.collector.isRequestEnabled() === true,
-        begin: start => ctx.get('githubCopilotDiagnostics')?.collector.beginRequest(start),
-        failed: () => ctx.logger.warn('[github-copilot] COPILOT_REQUEST_DIAGNOSTICS_FAILED'),
-      },
       responsesRequestCompression: settings?.responsesRequestCompression === true
         && (template.transport === undefined || template.transport === 'sse'),
       responsesOmitTemperature: settings?.responsesOmitTemperature === true,
@@ -993,6 +977,7 @@ class AccountRoutingAdapter extends PiAiAdapter {
 
 /** Register services once; account switches affect the directory, not admitted turns. */
 export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
+  const { registerLegacyProvider = false, ...routeConfig } = config
   const runtimes = new Map<string, AccountRuntime>()
   const exclusionTurns = new ModelExclusionTurns()
   const freezeBinding = (binding: CopilotAccountBinding | undefined) => binding === undefined ? undefined
@@ -1011,7 +996,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     if (current !== undefined) return current
     // Do not evict prepared calls, discovery, or live Session proof owners.
     if (runtimes.size >= COPILOT_ACCOUNTS_MAX) throw failure('COPILOT_ACCOUNTS_RUNTIME_LIMIT', 'INVALID_REQUEST')
-    const runtime = createAccountRuntime(ctx, config, binding, exclusionTurns, replayRecovery, () => {
+    const runtime = createAccountRuntime(ctx, routeConfig, binding, exclusionTurns, replayRecovery, () => {
       if (disposed) return
       // A broken default directory cannot invalidate a different admitted account.
       try { if ((globalBinding()?.accountId ?? 'canonical') === accountId) publish() }
@@ -1050,9 +1035,12 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     dispose() { temporaryRecovery.dispose(); continuation.dispose(); compactionReplay.dispose() },
   }
   const initial = directoryRuntime()
-  const registration = ctx.llm.registerAdapter([GITHUB_COPILOT_PREVIEW_PROVIDER_ID],
-    new AccountRoutingAdapter(initial.optionsFor(), currentRuntime, imageRuntime))
+  const registration = registerLegacyProvider
+    ? ctx.llm.registerAdapter([GITHUB_COPILOT_PREVIEW_PROVIDER_ID],
+      new AccountRoutingAdapter(initial.optionsFor(), currentRuntime, imageRuntime))
+    : undefined
   publish = () => {
+    if (registration === undefined) return
     const runtime = directoryRuntime()
     const view = runtime.preview.getView()
     const snapshot = runtime.lifetime.source.readSnapshot()
@@ -1125,37 +1113,13 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     if (event.type === 'turn/end') exclusionTurns.end(session)
   })
   const removeListener = ctx.on('credentials/record-updated', key => {
-    let notificationReason: CredentialChangeReason = 'unknown-source'
-    let commitReason: CredentialChangeReason = 'write-failed'
-    const refresh = observeCopilotNativeRefresh(ctx, key, (phase, reason) => {
-      if (phase === 'notification') notificationReason = reason
-      else commitReason = reason
-    })
+    const refresh = observeCopilotNativeRefresh(ctx, key)
     for (const [accountId, runtime] of runtimes) {
       const record = accountId === 'canonical' ? GITHUB_COPILOT_CREDENTIAL_KEY : `github-copilot/account-${accountId}`
       if (record === key) {
-        let evidence: CredentialChangeHandle | undefined
-        try { evidence = ctx.get('githubCopilotDiagnostics')?.collector.beginCredentialChange() }
-        catch { ctx.logger.warn('COPILOT_CREDENTIAL_DIAGNOSTICS_CAPTURE_FAILED') }
-        const recordEvidence = (phase: 'notification' | 'commit', reason: CredentialChangeReason, preserve: boolean) => {
-          if (!evidence) return
-          try {
-            const counts = runtime.lifetime.credentialChangeCounts(preserve)
-            evidence.record({ phase, reason, ...counts,
-              ...(phase === 'commit' && preserve ? { preserved: counts.preparing + counts.dispatched, revoked: 0 } : {}) })
-          }
-          catch { ctx.logger.warn('COPILOT_CREDENTIAL_DIAGNOSTICS_CAPTURE_FAILED') }
-        }
-        recordEvidence('notification', notificationReason, refresh !== undefined)
         runtime.invalidate(refresh !== undefined)
         if (refresh !== undefined) void refresh.then(committed => {
-          if (!disposed) {
-            recordEvidence('commit', commitReason, committed)
-            if (!committed) runtime.invalidate()
-          } else {
-            try { evidence?.cancel() }
-            catch { ctx.logger.warn('COPILOT_CREDENTIAL_DIAGNOSTICS_CAPTURE_FAILED') }
-          }
+          if (!disposed && !committed) runtime.invalidate()
         })
       }
     }
@@ -1166,7 +1130,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
       publish()
       void directoryRuntime().preview.refresh().catch(() => undefined)
     } catch {
-      registration.replace([GITHUB_COPILOT_PREVIEW_PROVIDER_ID])
+      registration?.replace([GITHUB_COPILOT_PREVIEW_PROVIDER_ID])
       ctx.logger.warn('COPILOT_PREVIEW_DIRECTORY_ACCOUNT_UNAVAILABLE')
     }
   })
@@ -1177,7 +1141,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     if (next === exclusionSignature) return
     exclusionSignature = next
     publishedDirectory = ''
-    registration.replace([GITHUB_COPILOT_PREVIEW_PROVIDER_ID])
+    registration?.replace([GITHUB_COPILOT_PREVIEW_PROVIDER_ID])
   })
   ctx.effect(() => () => {
     disposed = true
@@ -1191,7 +1155,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     removeSelectionRequest()
     removeSelectionAgent()
     selections.clear()
-    registration()
+    registration?.()
   })
   void initial.preview.refresh().catch(() => undefined)
 }

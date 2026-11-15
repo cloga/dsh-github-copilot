@@ -9,6 +9,11 @@ selection remains separate. This is not a release receipt or a claim of current
 installation/runtime state; publication, installation and loaded state require
 separate evidence.
 
+> Current production does not register the `github-copilot-preview` model
+> provider. Session-specific account and continuation controls described below
+> applied to that retired route, not native requests. Native account switching
+> is profile-wide; stored settings and histories are not migrated.
+
 ## Requirements
 
 ### GitHub login environments (#424)
@@ -72,11 +77,8 @@ regressions exercise distinct contexts, isolated services, duplicate/missing/
 delayed notifications and failed/mismatched commits. This repairs qualification,
 not proof that a particular historical notification was a token refresh.
 
-Separately enabled request diagnostics may now record fixed qualification,
-notification and commit reasons plus bounded live-wire populations; see
-[credential-change decisions](./plugin-diagnostics.md#credential-change-decisions-402).
-Unknown notification source stays unknown. This observes the existing exception,
-not a broader permission to preserve requests or a reconstruction of past failures.
+Local diagnostics no longer records credential-change observations. Unknown
+notification source still fails the existing qualification and revokes work.
 
 Only a genuine native refresh through the plugin's public credential-store bridge
 may qualify: normalized account grant, model entitlements and official
@@ -337,8 +339,10 @@ uncertain commit. A selector/canonical mismatch after upgrade or an external
 native sign-in is shown explicitly and requires a user-selected recovery; no
 automatic credential or Settings migration occurs.
 
-The existing `github-copilot-preview` route and Session account overrides are
-separate plugin-owned behavior; they are not the mechanism for native account
+The production package no longer registers the `github-copilot-preview` model
+route; references to that route elsewhere in this document describe historical
+behavior and do not authorize a second provider. Session account overrides are
+separate plugin-owned behavior and are not the mechanism for native account
 switching. Native quota and optional native hosted search continue to use only
 the canonical credential, which after a confirmed switch contains the selected
 account's grant. No account identity is inferred for a native
@@ -402,25 +406,14 @@ The separate `githubCopilotAccounts` namespace exposes `get`, `ensureIdentity`,
 cannot be named `remove`: official rc.2 reserves that inherited service name
 and rejects the entire Client contribution.
 
-Credits shows the Session's next-turn account and quota under the existing title.
-Its **Switch** dropdown marks the current choice, scrolls long lists internally
-and offers **Follow global default**. Adding accounts, reauthorization, removal and global
-selection remain in Models. Changing
-the preference while a turn runs leaves that turn's old account pinned; the
-popover identifies it separately. Other Sessions are unchanged. Unknown identity
-is unavailable, not a stale username presented as current.
-
-One Models **Manage** groups account management, the new-Session continuation
-default and shared exact-ID model preferences. The existing Session policy is
-under the composer Credits/usage popover → **Visible-history continuation** →
-**Session policy**; it appears only for an open Session whose effective model
-is the managed account-discovered Copilot route. Choose **On** after reviewing
-the loss disclosure. This is distinct from the Models new-Session default and
-applies to subsequent turns and managed native compaction summaries, including
-on the same account. Active turns keep their captured policy; enabling does not
-send or retry a message. See the [synthetic composer capture](./images/copilot-session-continuation.png)
-and [continuation contract](./session-continuation.md). When off, an account change pauses for explicit
-persistent-enable/keep-off/cancel consent. See the [approved experience and mock](./account-management-experience.md).
+The historical Credits Session-account switch and **Visible-history
+continuation** controls applied only to the managed route. They are not
+available for native model calls. Use Models account management for explicit
+profile-wide native switches. The old new-Session continuation default is no
+longer shown in Models; existing Session and default settings are not rewritten.
+The [composer capture](./images/copilot-session-continuation.png) and
+[continuation contract](./session-continuation.md) document the retired route's
+behavior, not native-route parity.
 
 Completed native and managed turns have a compact **Account** disclosure
 alongside native Usage actions through the public assistant-actions slot. This

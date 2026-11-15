@@ -5,7 +5,6 @@ import type { ReactElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { describe, expect, it, vi } from 'vitest'
 import { apply, CopilotPluginSettingsPage, HostedSearchSettingsCard, inject } from '../src/client.ts'
-import { emptyDiagnostics } from '../src/diagnostics-collector.ts'
 
 // Actual Cordis dependency tracing and the actual Client apply/render callback.
 // The mounted test uses real React DOM and Cordis tracing; Remote transport and
@@ -29,6 +28,8 @@ async function fixture(footer: boolean, routingAvailable = false, bundle = true,
   const status = vi.fn(async () => ({ ok: true as const, value: {
     phase: 'signed-out' as const, configured: false, writable: true, inFlight: false, notices: [],
   } }))
+  const continuationDefaults = vi.fn(async () => ({ ok: true, value: { enabled: false, revision: 0 } }))
+  const setContinuationDefault = vi.fn(async () => ({ ok: true, value: { enabled: false, revision: 0 } }))
   let settingsRemote!: SettingsRemote
   class CopilotRemote extends NamedService {
     constructor(ctx: Context) { super(ctx, 'remote.githubCopilot') }
@@ -36,8 +37,8 @@ async function fixture(footer: boolean, routingAvailable = false, bundle = true,
   }
   class ContinuationRemote extends NamedService {
     constructor(ctx: Context) { super(ctx, 'remote.githubCopilotSessionContinuation') }
-    async defaults() { return { ok: true, value: { enabled: false, revision: 0 } } }
-    async setDefault() { return { ok: true, value: { enabled: false, revision: 0 } } }
+    defaults = continuationDefaults
+    setDefault = setContinuationDefault
   }
   class SettingsRemote extends NamedService {
     constructor(ctx: Context) { super(ctx, 'remote.settings'); settingsRemote = this }
@@ -81,9 +82,7 @@ async function fixture(footer: boolean, routingAvailable = false, bundle = true,
   const addDiagnostics = () => root.plugin({ apply(ctx) {
     class DiagnosticsRemote extends NamedService {
       constructor() { super(ctx, 'remote.githubCopilotDiagnostics') }
-      async get() { return { ok: true, value: { enabled: false, autoAllocationEnabled: false,
-        state: 'ready', diagnostic: 'none',
-        dirty: false, snapshot: emptyDiagnostics() } } }
+      async get() { throw new Error('retired diagnostics Remote must not be used') }
     }
     new DiagnosticsRemote()
   } })
@@ -97,7 +96,7 @@ async function fixture(footer: boolean, routingAvailable = false, bundle = true,
   if (routingAvailable) await addRouting()
   const client = root.plugin({ inject, apply })
   await client
-  return { root, client, registrations, addRouting, addContinuation, addDiagnostics, addNativeSearch, describeSettings, mutateSettings, status, settings: settingsRemote, remoteDisposals: () => remoteDisposals }
+  return { root, client, registrations, addRouting, addContinuation, addDiagnostics, addNativeSearch, describeSettings, mutateSettings, status, continuationDefaults, setContinuationDefault, settings: settingsRemote, remoteDisposals: () => remoteDisposals }
 }
 
 const settingsId = 'github-copilot-options'
@@ -123,7 +122,7 @@ describe('plugin settings without a search Remote', () => {
       Reflect.deleteProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT')
     }
   })
-  it('mounts late diagnostics without blocking other settings', async () => {
+  it('does not mount local diagnostics even when a legacy Remote is present', async () => {
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
     const f = await fixture(true, false, true)
     const element = document.createElement('div')
@@ -132,12 +131,13 @@ describe('plugin settings without a search Remote', () => {
       await act(async () => { mounted.render(f.registrations.get(settingsId)!.render({ view: 'page' })) })
       expect(element.querySelector('[data-dsh-parent-model-follow]')).toBeNull()
       expect(element.querySelector('[data-dsh-web-search-routing]')).toBeNull()
-      expect(element.textContent).toContain('Diagnostics controls are unavailable')
+      expect(element.textContent).not.toContain('Local diagnostics')
+      expect(element.textContent).not.toContain('Diagnostics controls are unavailable')
       let diagnostics!: ReturnType<typeof f.addDiagnostics>
       await act(async () => { diagnostics = f.addDiagnostics(); await diagnostics })
-      expect(element.textContent).toContain('Local collection paused')
+      expect(element.textContent).not.toContain('Local diagnostics')
       await act(async () => { await diagnostics.dispose() })
-      expect(element.textContent).toContain('Diagnostics controls are unavailable')
+      expect(element.textContent).not.toContain('Local diagnostics')
     } finally {
       await act(async () => { mounted.unmount(); await f.root.fiber.dispose() })
       Reflect.deleteProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT')
@@ -203,7 +203,7 @@ describe('plugin settings without a search Remote', () => {
     } finally { await f.root.fiber.dispose() }
   })
 
-  it('keeps one account owner while the optional continuation Remote appears and disappears', async () => {
+  it('keeps one account owner without mounting legacy continuation when its Remote changes', async () => {
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
     const f = await fixture(true, true, true, true, false)
     const container = document.createElement('div')
@@ -218,17 +218,24 @@ describe('plugin settings without a search Remote', () => {
       await act(async () => {
         Array.from(container.querySelectorAll('button')).find(button => button.textContent === 'Manage')!.click()
       })
-      await vi.waitFor(() => expect(container.textContent).toContain('COPILOT_CONTINUATION_STATUS_UNAVAILABLE'))
+      expect(container.textContent).toContain('Model preferences')
+      const expectRetired = () => {
+        expect(container.textContent).not.toContain('New Session continuation default')
+        expect(container.textContent).not.toContain('COPILOT_CONTINUATION_STATUS_UNAVAILABLE')
+        expect(f.continuationDefaults).not.toHaveBeenCalled()
+        expect(f.setContinuationDefault).not.toHaveBeenCalled()
+      }
+      expectRetired()
       let continuation!: ReturnType<typeof f.addContinuation>
       await act(async () => { continuation = f.addContinuation(); await continuation })
-      await vi.waitFor(() => expect(container.textContent).not.toContain('COPILOT_CONTINUATION_STATUS_UNAVAILABLE'))
+      expectRetired()
       const attached = f.registrations.get('github-copilot-preview')!.render()!
       expect(attached.props.surfaces).toBe(first.props.surfaces)
       expect(attached.props.remote).toBe(first.props.remote)
       expect(attached.props.surfaces.getSnapshot()!.account).toBe(owner)
       expect(f.status).toHaveBeenCalledOnce()
       await act(async () => { await continuation.dispose() })
-      await vi.waitFor(() => expect(container.textContent).toContain('COPILOT_CONTINUATION_STATUS_UNAVAILABLE'))
+      expectRetired()
       const detached = f.registrations.get('github-copilot-preview')!.render()!
       expect(detached.props.surfaces).toBe(first.props.surfaces)
       expect(detached.props.remote).toBe(first.props.remote)

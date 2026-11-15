@@ -128,7 +128,7 @@ async function runtime() {
   } })
   await ctx.plugin(LlmRuntime)
   const register = vi.spyOn(ctx.llm, 'registerAdapter')
-  await ctx.plugin(previewPlugin)
+  await ctx.plugin(previewPlugin, { registerLegacyProvider: true })
   const adapter = register.mock.calls[0]?.[1]
   register.mockRestore()
   expect(adapter).toBeInstanceOf(PiAiAdapter)

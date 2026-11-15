@@ -139,7 +139,7 @@ function expectOnlyRetainedUi(f: Fixture, footer: boolean) {
   expect(account.type).toBe(client.GitHubCopilotAccountSurface)
   const options = f.registrations.get(`${settingsSlot}:github-copilot-options`)!.render({})!
   expect(options.type).toBe(client.CopilotPluginSettingsPage)
-  expect(options.props.diagnosticsControl.type).toBeTypeOf('function')
+  expect(options.props.diagnosticsControl).toBeUndefined()
   const provider = f.registrations.get(`${providerSlot}:llm-pi-ai`)!.render({
     provider: { provider: 'github-copilot', settingsNs: 'llm-pi-ai' }, configured: true,
   })!

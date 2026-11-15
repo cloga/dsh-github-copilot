@@ -326,9 +326,11 @@ for (const [file, name] of [
 }
 const nativeSubagent = manifest.capabilities?.find(capability => capability.id === 'native-subagent-copilot-invocation')
 assert(nativeSubagent?.required === true
-  && nativeSubagent.evidenceScope === 'synthetic-two-account-tagged-source-production-host-child-invocation-with-default-switch-not-live-or-explicit-child-account-policy'
+  && nativeSubagent.evidenceScope === 'synthetic-two-account-tagged-source-native-provider-child-invocation-with-default-switch-and-explicit-model-configuration-not-live-or-session-account-policy'
   && nativeSubagent.tests?.some(entry => entry.file === 'tests/fixtures/subagent-copilot-core.fixture.ts'
-    && entry.name === 'routes concurrently authorized native children to their selected Copilot models and efforts')
+    && entry.name === 'routes native Copilot children across a confirmed account switch')
+  && nativeSubagent.tests?.some(entry => entry.file === 'tests/fixtures/native-subagent-copilot-core.fixture.ts'
+    && entry.name === 'selects and concurrently dispatches native Copilot subagents with the plugin %s')
   && nativeSubagent.tests?.some(entry => entry.file === 'tests/session-accounts-host.spec.ts'
     && entry.name === 'freezes a running turn while allowing later Session/default choices independently'),
   'native subagent invocation must retain explicitly scoped source and account isolation evidence')
@@ -443,7 +445,7 @@ assert(capabilityIds.size === manifest.capabilities.length, 'capability IDs must
 const missingEvidence = []
 for (const required of ['confirmed-native-model-sync', 'independent-copilot-accounts', 'account-quota-composer-usage', 'account-driven-provider-metadata', 'account-scoped-discovery-snapshot',
   'public-adapter-account-model-route', 'managed-request-budget-and-compaction-policy', 'managed-model-generation-and-lifetime', 'managed-http-auth-rejection-recovery', 'managed-responses-replay-scope-isolation', 'account-discovery-native-oauth',
-  'canonical-owner-preservation', 'single-managed-route-native-oauth', 'legacy-route-conflict-protection', 'legacy-global-override-restoration',
+  'canonical-owner-preservation', 'native-route-account-metadata', 'legacy-route-conflict-protection', 'legacy-global-override-restoration',
   'read-only-status-and-explicit-discovery', 'shared-copilot-credential-refresh', 'compact-account-row-and-auth-disclosure']) {
   assert(capabilityIds.has(required), `required plugin-only capability is missing: ${required}`)
 }

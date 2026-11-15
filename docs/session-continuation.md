@@ -1,5 +1,10 @@
 # Session cross-account continuation
 
+> Historical managed-route behavior: the production plugin no longer registers
+> `github-copilot-preview`. These controls do not apply to native Copilot calls,
+> and the old Models new-Session default is no longer shown. Stored settings
+> and histories are preserved.
+
 Explicit **visible-history continuation** is a plugin-owned, lossy outgoing
 Responses policy. It is not a new memory service or portable encrypted state.
 Native Core and pi-ai already preserve replay signatures and reconstruct history;
@@ -7,12 +12,11 @@ their same-provider/API/model check does not establish Copilot account identity.
 
 ## Experience
 
-The composer **Credits/usage** pill opens a popover containing
-**Visible-history continuation** only for an open Session whose effective
-selection is the managed account-discovered Copilot route. Expand it and set
-**Session policy → On** to explicitly enable an existing Session after
-reviewing the loss disclosure. The canonical/native route does not show this
-control.
+Earlier releases showed **Visible-history continuation** in the composer
+**Credits/usage** popover only for an open Session whose effective selection
+was the managed account-discovered Copilot route. **Session policy → On**
+enabled an existing Session after the loss disclosure. The canonical/native
+route does not show this control.
 
 ![Built Client continuation policy in the composer Credits popover](./images/copilot-session-continuation.png)
 
@@ -23,9 +27,9 @@ source commit, build and image hashes. It is not evidence of live availability.
 New, unseeded Sessions created after this feature's first successful
 activation default on. Activation persists a bounded creation-time policy
 epoch using Settings CAS; existing Sessions, seeded histories, forks and
-unknown birth evidence remain off. Manage the separate new-Session default in
-**Models → GitHub Copilot → Manage → New Session continuation default**.
-Changing it affects only subsequently created Sessions. Session overrides (on, off or
+unknown birth evidence remain off. Earlier releases exposed the separate
+new-Session default in Models; the current production UI does not. Changes
+to that historical default affected only subsequently created Sessions. Session overrides (on, off or
 creation-time default) persist across account changes and restarts. No failed
 request is required first and no hourly confirmation is needed.
 

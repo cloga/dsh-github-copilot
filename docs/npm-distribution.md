@@ -5,6 +5,16 @@ npm, using the **same original verified tarball**. Package bootstrap is complete
 subsequent publication uses the configured OIDC Trusted Publisher. Earlier
 Release-only policy and one-time bootstrap tooling are historical.
 
+Not every repository change creates a new plugin version. Agent guidance, CI,
+tests and unshipped engineering tools normally deliver through reviewed merge
+and required CI alone; they do not require users to install or restart anything.
+Classify consumer impact before changing a version or package whitelist. Do not
+add engineering files to the package merely to justify publication. Distribution
+of such an artifact needs its own explicit plugin-artifact request; a generic
+delivery or release-status question does not expand scope. Existing shipped-file
+and immutable-byte gates remain unchanged. See
+[delivery classification](../AGENTS.md#classify-delivery-before-packaging-502).
+
 ## Authorization and readiness
 
 Use approved registry access and build environments.

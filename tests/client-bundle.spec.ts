@@ -257,9 +257,10 @@ describe('tsdown client artifact', () => {
       else { footer.render(footerElement); provider.render(providerElement) }
       const tree = provider.render(providerElement)
       expect(tree?.props['data-dsh-github-copilot-account-surface']).toBe('provider')
-      const connection = fixture.instance().render(tree!.props.children)
-      expect(connection?.type).toBe(fixture.client.exports.GitHubCopilotCompactAccount)
-      expect(connection?.props.embedded).toBe(true)
+      const account = tree!.props.children
+      expect(account.type).toBe(fixture.client.exports.GitHubCopilotCompactAccount)
+      expect(account.props.embedded).toBe(true)
+      expect(account.props.continuationSettings).toBeUndefined()
       expect(footer.render(footerElement)).toBeNull()
       expect(fixture.remote.status).toHaveBeenCalledOnce()
       expect(fixture.remote.start).not.toHaveBeenCalled()
@@ -275,9 +276,8 @@ describe('tsdown client artifact', () => {
       const element = fixture.registrations.get('plugins.bundle.config')!({ view: 'page' })
       expect(element.type).toBe(fixture.client.exports.CopilotPluginSettingsPage)
       const page = fixture.instance().render(element)
-      expect(page?.props.children).toHaveLength(2)
-      expect(page?.props.children[0].props.ctx).toBe(fixture.ctx)
-      expect(page?.props.children[1].props.ctx).toBe(fixture.ctx)
+      expect(page?.props.children).toBe(element.props.searchModelControl)
+      expect(page?.props.children.props.ctx).toBe(fixture.ctx)
       expect(fixture.client.exports.ParentModelFollowCard).toBeUndefined()
       expect(element.props).not.toHaveProperty('routing')
       expect(fixture.registrations.get('plugins.bundle.config')!({ view: 'summary' })).toBeNull()
@@ -296,9 +296,7 @@ describe('tsdown client artifact', () => {
       expect(draftWarning.type).toBe('p')
       expect(draftWarning.props['data-dsh-github-copilot-native-add-warning']).toBe(true)
       expect(draftWarning.props.children).toContain('canonical account')
-      expect(draftWarning.props.children).toContain('separately selected plugin account')
-      expect(draftWarning.props.children).toContain('GitHub Copilot (multi-account)')
-      expect(draftWarning.props.children).toContain('Both routes can coexist')
+      expect(draftWarning.props.children).toContain('does not add a second model provider')
       footer.render(footerElement)
       const fallback = footer.render(footerElement)
       const account = fallback?.props.children.props.account
@@ -413,8 +411,7 @@ describe('tsdown client artifact', () => {
     expect(contributions).toHaveLength(1)
     expect(contributions[0]?.descriptors.filter(descriptor => descriptor.namespace !== 'githubCopilotAccounts'
       && descriptor.namespace !== 'githubCopilotSessionAccount'
-      && descriptor.namespace !== 'githubCopilotSessionContinuation'
-      && descriptor.namespace !== 'githubCopilotDiagnostics').map(descriptor => descriptor.method)).toEqual([
+      && descriptor.namespace !== 'githubCopilotSessionContinuation').map(descriptor => descriptor.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
       'excludeModel', 'restoreModel', 'setModelExcluded', 'setModelHighCost',
       'prepareNativeModelSync', 'previewNativeModelSync', 'applyNativeModelSync', 'migrationStatus',
@@ -428,25 +425,7 @@ describe('tsdown client artifact', () => {
       .toEqual(['ensureIdentity', 'get', 'refreshIdentity', 'refreshUsage', 'set', 'turn', 'usage'])
     expect(contributions[0]?.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotSessionContinuation').map(descriptor => descriptor.method).sort())
       .toEqual(['authorizeNext', 'defaults', 'get', 'set', 'setDefault'])
-    const diagnosticsDescriptors = contributions[0]!.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotDiagnostics')
-    expect(diagnosticsDescriptors.map(descriptor => descriptor.method).sort())
-      .toEqual(['clear', 'get', 'recordClient', 'setAutoAllocationEnabled', 'setEnabled', 'setNativeEnabled', 'setRequestEnabled'])
-    const diagnosticsView = { enabled: false, autoAllocationEnabled: false, state: 'ready', diagnostic: 'none', dirty: false,
-      snapshot: { schemaVersion: 1, coverageVersion: 1, epoch: 0, updatedAt: 0, rows: [], pending: [],
-        dropped: 0, clientDropped: 0, clientUnconfirmed: 0, saturated: 0, evicted: 0, interrupted: 0 } }
-    for (const descriptor of diagnosticsDescriptors) {
-      expect(descriptor).toMatchObject({
-        id: `${PLUGIN_ID}:githubCopilotDiagnostics.${descriptor.method}`,
-        service: 'githubCopilotDiagnostics', invocation: { kind: 'direct' },
-        result: { mode: 'strict', typeSymbol: `${PLUGIN_ID}#DiagnosticsView` },
-      })
-      expect(descriptor.scope).toBeUndefined()
-      if (descriptor.result.mode !== 'strict') throw new Error('expected independent strict diagnostics codec')
-      const schema = descriptor.result.create()
-      expect(schema.parse(diagnosticsView)).toEqual(diagnosticsView)
-      expect(() => schema.parse({ ...diagnosticsView, credentials: 'private' })).toThrow()
-      expect(() => schema.parse({ ...diagnosticsView, snapshot: { ...diagnosticsView.snapshot, sessionId: 'private' } })).toThrow()
-    }
+    expect(contributions[0]!.descriptors.some(descriptor => descriptor.namespace === 'githubCopilotDiagnostics')).toBe(false)
     for (const descriptor of contributions[0]!.descriptors.filter(item => item.namespace === 'githubCopilot')) {
       expect(descriptor.invocation).toEqual({ kind: 'direct' })
       if (descriptor.method === 'excludeModel' || descriptor.method === 'restoreModel') {
