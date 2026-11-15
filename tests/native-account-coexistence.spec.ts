@@ -48,12 +48,12 @@ it('applies confirmed account switches to native credentials and retains the nat
     const next = await mutate(grants.get(recordKey))
     if (next === undefined) grants.delete(recordKey)
     else grants.set(recordKey, next as SyntheticGrant)
-    ctx.emit('credentials/record-updated', recordKey)
+    ctx.emit('credentials/record-updated', recordKey as never)
     return next
   })
   const deleteRecord = vi.fn(async (recordKey: string) => {
     grants.delete(recordKey)
-    ctx.emit('credentials/record-updated', recordKey)
+    ctx.emit('credentials/record-updated', recordKey as never)
   })
   const nativeAgent = { id: 'native-session', status: 'running',
     session: { id: 'native-session', requestHeader: () => ({ config: nativeSelection, adapterDefaults: {} }) } }
@@ -125,7 +125,7 @@ it('applies confirmed account switches to native credentials and retains the nat
     const requestAgent = { ctx, session: nativeAgent.session } as unknown as Agent
     const requestSignal = new AbortController()
     await ctx.waterfall(scopeTarget(requestAgent, requestAgent), 'agent/request',
-      { agent: requestAgent, turn: 1, signal: requestSignal.signal }, async () => nativeSelection)
+      { agent: requestAgent, turn: 1, step: 1, signal: requestSignal.signal }, async () => nativeSelection)
     expect(await accounts.switchAccount(B, revision)).toMatchObject({
       state: 'error', activeAccountId: A, diagnostic: 'COPILOT_ACCOUNTS_BUSY',
     })
