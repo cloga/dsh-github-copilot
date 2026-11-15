@@ -52,6 +52,8 @@ it('routes concurrently authorized native children to their selected Copilot mod
   const directory = await mkdtemp(join(tmpdir(), 'copilot-subagent-fixture-'))
   const ctx = new Context()
   const release = Promise.withResolvers<void>()
+  const releaseThird = Promise.withResolvers<void>()
+  let holdThird = false
   let advertisedModels = MODELS
   const wire: Array<{ model: string; reasoning?: { effort?: string } }> = []
   const authorizations: Array<string | null> = []
@@ -89,7 +91,7 @@ it('routes concurrently authorized native children to their selected Copilot mod
     authorizations.push(new Headers(init?.headers).get('authorization'))
     signals.push(init?.signal)
     signalsActiveAtDispatch.push(Boolean(init?.signal && !init.signal.aborted))
-    await release.promise
+    await (holdThird ? releaseThird.promise : release.promise)
     return response(body.model)
   })
 
@@ -239,17 +241,18 @@ it('routes concurrently authorized native children to their selected Copilot mod
     expect(await accountHost.switchAccount(SECOND, accountSettingsRevision)).toMatchObject({
       state: 'ready', activeAccountId: SECOND,
     })
-    const third = await call('third', MODELS[0]!, 'high')
-    expect(third.isError).toBe(false)
+    holdThird = true
+    const thirdRun = call('third', MODELS[0]!, 'high')
     await vi.waitFor(() => expect(wire).toHaveLength(3), { timeout: 15_000 })
     expect(wire[2]).toMatchObject({ model: MODELS[0], reasoning: { effort: 'high' } })
     expect(authorizations).toEqual(['Bearer synthetic-access', 'Bearer synthetic-access', 'Bearer synthetic-access-second'])
     expect(signalsActiveAtDispatch).toEqual([true, true, true])
     const laterChildren = ctx.agents.list().filter(agent => agent.session.header.parentSession === parent.session.id)
-    expect(laterChildren).toHaveLength(3)
-    expect(laterChildren.map(child => accounts.turns.current(child.session)?.accountId).sort())
-      .toEqual([SECOND, 'canonical', 'canonical'].sort())
-    release.resolve()
+    expect(laterChildren).toHaveLength(1)
+    expect(accounts.turns.current(laterChildren[0]!.session)).toMatchObject({ accountId: SECOND, source: 'global' })
+    releaseThird.resolve()
+    const third = await thirdRun
+    expect(third.isError).toBe(false)
     do { await parent.whenIdle() } while (await ctx.subagents.waitForTreeWork(parent))
     expect(completed).toHaveLength(3)
     expect(completed.every(info => info.stopReason === 'completed')).toBe(true)

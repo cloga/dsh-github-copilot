@@ -378,7 +378,7 @@ describe('independent Copilot account ownership', () => {
     expect(f.settings.mutate).not.toHaveBeenCalled()
     f.host.dispose()
   })
-  it('reevaluates native managed activity but never bypasses incomplete or blocked route evidence', async () => {
+  it('reevaluates native route availability without requiring managed registration or bypassing incomplete evidence', async () => {
     const f = fixture(A)
     let running = true, native = false, managed = true, complete = true
     f.settings.describe = () => [
@@ -400,16 +400,18 @@ describe('independent Copilot account ownership', () => {
     running = false
     expect(await host.get()).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_ROUTE_BLOCKED', switchable: false })
     native = true
-    expect(await host.get()).toMatchObject({ state: 'ready', switchable: true })
+    host.dispose()
+    const availableHost = new CopilotAccountsHost(f.ctx)
+    expect(await availableHost.get()).toMatchObject({ state: 'ready', switchable: true })
     managed = false
-    expect(await host.get()).toMatchObject({ state: 'ready', switchable: true })
+    expect(await availableHost.get()).toMatchObject({ state: 'ready', switchable: true })
     f.credentials.readRecord.mockClear()
     managed = true; complete = false
-    expect(await host.get()).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_EVIDENCE_INCOMPLETE', switchable: false })
+    expect(await availableHost.get()).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_EVIDENCE_INCOMPLETE', switchable: false })
     expect(f.fetch).not.toHaveBeenCalled()
     expect(f.credentials.readRecord).not.toHaveBeenCalled()
     expect(f.settings.mutate).not.toHaveBeenCalled()
-    host.dispose(); f.host.dispose()
+    availableHost.dispose(); f.host.dispose()
   })
   it('keeps selected-missing requests fail-closed while exposing explicit recovery', async () => {
     const f = fixture(A)
