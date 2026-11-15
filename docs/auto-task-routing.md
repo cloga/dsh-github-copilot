@@ -1,13 +1,13 @@
 # Contextual Auto routing and captured selection reasons
 
-> Historical documentation for earlier releases. The `0.2.2-rc.3` candidate
-> retires plugin-owned Auto routing and its semantic assessment; DSH owns Auto.
+> Historical documentation for earlier releases. The integration targeting DSH
+> `0.2.2-rc.3` retires plugin-owned Auto routing and its semantic assessment; DSH owns Auto.
 > Existing settings and histories are not deleted.
 
 Tracking: [#258](https://github.com/cloga/dsh-github-copilot/issues/258) and
 [evidence refinement #262](https://github.com/cloga/dsh-github-copilot/issues/262).
 
-**Current contract:** source candidate `0.4.2-alpha.10`, targeting official DSH/Windows
+**Historical contract at that revision:** source candidate `0.4.2-alpha.10`, targeting official DSH/Windows
 Desktop `0.2.0-rc.2`. Semantic assessment is enabled by default with bounded
 auxiliary timing/output evidence. Neither publication nor
 these explanations prove the version loaded in a particular Host.
