@@ -96,6 +96,7 @@ const remote = (await import(pathToFileURL(resolve(root, 'lib/remote.js')).href)
 const authorizationDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilot')
 const roleDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotDualModel')
 const catalogDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotSearchRouting')
+const nativeSearchDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotNativeSearch')
 const usageDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotUsage')
 const selectionDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotTurnSelection')
 const replayDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotReplayRecovery')
@@ -104,12 +105,13 @@ const sessionAccountDescriptors = remote.descriptors.filter(descriptor => descri
 const continuationDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotSessionContinuation')
 const diagnosticsDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotDiagnostics')
 const methods = authorizationDescriptors.map(descriptor => descriptor.method).sort()
-if (remote.descriptors.length !== 58 || JSON.stringify(methods) !== JSON.stringify([
+if (remote.descriptors.length !== 59 || JSON.stringify(methods) !== JSON.stringify([
   'applyNativeModelSync', 'cancel', 'discoverModels', 'ensureModels', 'excludeModel', 'migrationStatus',
   'previewNativeModelSync', 'reconcile', 'restoreModel', 'setModelExcluded', 'setModelHighCost', 'signOut', 'start', 'status',
 ])
   || JSON.stringify(roleDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['create', 'save', 'view'])
   || JSON.stringify(catalogDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['providers'])
+  || JSON.stringify(nativeSearchDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['models'])
   || JSON.stringify(usageDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['ensureNativeIdentity', 'get', 'getNative', 'refresh', 'refreshNative', 'refreshNativeIdentity'])
   || JSON.stringify(selectionDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['get', 'requestedModels', 'allocationSummary'])
   || JSON.stringify(replayDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['authorize', 'get', 'setEnabled'])
@@ -297,6 +299,17 @@ if (catalog.id !== 'dsh-github-copilot:githubCopilotSearchRouting.providers'
 catalog.result.schema.parse({ supported: true, providers: [{ id: 'fixture-provider' }] })
 if (catalog.result.schema.safeParse({ supported: true, providers: [{ id: 'fixture-provider', credentials: 'private' }] }).success) {
   throw new Error('search catalog output accepts private provider fields')
+}
+const nativeSearch = nativeSearchDescriptors[0]
+if (nativeSearch.id !== 'dsh-github-copilot:githubCopilotNativeSearch.models'
+  || nativeSearch.service !== 'githubCopilotNativeSearch' || nativeSearch.invocation.kind !== 'direct'
+  || nativeSearch.parameters.length !== 0 || nativeSearch.result.mode !== 'strict'
+  || nativeSearch.result.typeSymbol !== 'dsh-github-copilot#NativeCopilotSearchModels') {
+  throw new Error('native search model Remote identity or codec differs')
+}
+nativeSearch.result.schema.parse({ models: [{ id: 'fixture-model' }] })
+if (nativeSearch.result.schema.safeParse({ models: [{ id: 'fixture-model', credentials: 'private' }] }).success) {
+  throw new Error('native search model output accepts private fields')
 }
 for (const descriptor of authorizationDescriptors) {
   if (descriptor.id !== `dsh-github-copilot:githubCopilot.${descriptor.method}`

@@ -337,7 +337,9 @@ const clientEntry = await read('src/client.ts')
 const overlay = await read('cordis.patch.yml')
 assert(!/githubCopilotSearchRouter|resolveCandidates|routeSearchTools/u.test(hostEntry),
   'plugin Host must not own native web routing')
-assert(hostEntry.includes('scope.effect(() => scope.web.registerSearchProvider(createNativeCopilotSearch(scope)))')
+assert(hostEntry.includes('const provider = createNativeCopilotSearch(scope)')
+  && hostEntry.includes('scope.effect(() => scope.web.registerSearchProvider(provider))')
+  && hostEntry.includes('new NativeCopilotSearchController(scope, provider)')
   && (hostEntry.match(/registerSearchProvider/gu) ?? []).length === 1,
   'plugin Host may register only the optional native Copilot search backend')
 const nativeSearch = await read('src/native-copilot-search.ts')

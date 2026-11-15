@@ -51,6 +51,9 @@ class ReviewerFixtureLoader extends Loader {
       return process.env.DSH_CORE_EVIDENCE === 'published-artifact-runtime'
         ? super.import(name, () => []) : import('@deepseek-ai/dsh-web')
     }
+    if (name === 'fixture-copilot-search-settings') {
+      return { Config: GitHubCopilotPlugin.Config, apply() {} }
+    }
     if (name !== '@deepseek-ai/dsh-experimental-auto-review' && name !== 'fixture-reviewer-alias') {
       throw new Error('unexpected fixture import')
     }
@@ -205,10 +208,16 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
   ctx.provide('workingDirectory', { ensure: async () => process.cwd() })
   if (scope === 'bound-account') {
     ctx.provide('settings', {
+      configure: () => () => {},
       describe: () => [{ ns: 'github-copilot', revision: 1, value: {
         activeAccountId: 'canonical', sessionAccounts: [{ sessionId: `auto-review-${outcome}`, accountId: second }],
-      } }, { ns: 'llm-pi-ai', revision: 1, value: { providers: {} } }],
+      } }, { ns: 'llm-pi-ai', revision: 1, value: { providers: { 'github-copilot': {} } } }],
       mutate: async () => { throw new Error('reviewer qualification must not write settings') },
+    })
+    ctx.llm.registerAdapter(['github-copilot'], new class extends LlmAdapter {
+      async *stream(): AsyncGenerator<StreamChunk> {
+        yield { type: 'finish', reason: { kind: 'stop' } }
+      }
     })
     const host = new CopilotAccountsHost(ctx)
     ctx.provide('githubCopilotAccounts', { host })
@@ -284,7 +293,7 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
       // The editor supplies read-only fixture layers only; no profile is persisted.
       ctx.provide('profileContext', { home: join(tmpdir(), `copilot-review-settings-${randomUUID()}`) })
       ctx.provide('configEditor', {
-        configuration: () => [...ctx.loader.entries()].filter(entry => ['llm-pi-ai', 'web'].includes(entry.options.id))
+        configuration: () => [...ctx.loader.entries()].filter(entry => ['llm-pi-ai', 'web', 'github-copilot'].includes(entry.options.id))
           .map(entry => ({ entry, inherited: entry.options.config ?? {}, override: {} })),
         edit: async () => { throw new Error('native enhancement must not write settings') },
       })
@@ -312,9 +321,13 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
       const reasons: string[] = []
       expect(await captureNativeCopilot(ctx, code => reasons.push(code)), reasons.join(',')).toBeDefined()
       if (scope === 'canonical-native' && outcome === 'allow') {
+        // #480 reads the plugin namespace before choosing its automatic model.
+        await ctx.loader.create({ id: 'github-copilot', name: 'fixture-copilot-search-settings', config: {} })
         await ctx.loader.create({ id: 'web', name: '@deepseek-ai/dsh-web',
           config: { searchProvider: 'github-copilot-hosted' } })
         await ctx.loader.await()
+        expect(ctx.settings.describe({ redactSecrets: true }).find(row => row.ns === 'github-copilot')?.value)
+          .toMatchObject({ nativeSearchModel: '' })
         const stopSearch = ctx.web.registerSearchProvider(createNativeCopilotSearch(ctx))
         ctx.effect(() => stopSearch)
         const beforeReady = vi.mocked(fetch).mock.calls.length
