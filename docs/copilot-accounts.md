@@ -3,9 +3,10 @@
 ## Delivery status
 
 This document records the approved requirements and implementation design for
-issues #297 and #305. It is not a release receipt or a claim of current
-installation/runtime state. The existing single-account behavior remains the
-compatibility baseline; publication, installation and loaded runtime state are
+issues #297 and #305, including the later explicit native account-switch
+exception (#474). Native switching is profile-wide; managed-route Session
+selection remains separate. This is not a release receipt or a claim of current
+installation/runtime state; publication, installation and loaded state require
 separate evidence.
 
 > Current production does not register the `github-copilot-preview` model
@@ -17,9 +18,8 @@ separate evidence.
 
 ### GitHub login environments (#424)
 
-For DSH `0.2.1-alpha.5`, prepared plugin iteration
-`0.1.0-alpha.2.dsh.0.2.1.alpha.5` adds **Login environment** to the existing
-Models account controls (and the shared add-only surface). Choose **GitHub.com**
+Originally introduced for DSH `0.2.1-alpha.5`, **Login environment** appears
+in the existing Models account controls. Choose **GitHub.com**
 or **GitHub Enterprise Cloud (GHE.com)** before Add/Reauthorize. Enter a
 single-label data-residency tenant such as `company.ghe.com`; an HTTPS origin
 with an optional trailing slash is also accepted and normalized locally.
@@ -29,7 +29,7 @@ The environment choice is an unsaved login draft, not the global account selecto
 For reauthorization, choose the saved account's original host; changing hosts
 requires Add, never overwriting the existing record.
 
-The exact published pi-ai `1.1.0` flow owns the device code exchange,
+The exact published pi-ai `1.3.0` flow owns the device code exchange,
 `https://api.<tenant>.ghe.com/copilot_internal/v2/token`, native model permissions
 and refresh. The plugin answers only its known Enterprise-domain prompt.
 Device verification must be exactly `https://<selected-host>/login/device`
@@ -47,7 +47,7 @@ the native OAuth-derived endpoint, never a hand-built model transport or a
 model-name routing rule. Unsupported stored hosts are rejected before native
 refresh; changing account/host invalidates the existing proof as before.
 
-**Native OAuth redirect control is unavailable** in pi-ai `1.1.0`: its OAuth
+**Native OAuth redirect control is unavailable** in pi-ai `1.3.0`: its OAuth
 implementation uses global Fetch and exposes no request-Fetch/redirect option in
 the published login/refresh contracts. This plugin does not patch global Fetch,
 replace the flow, or claim OAuth redirect rejection. Its own identity request
@@ -149,16 +149,17 @@ timing. Synthetic deferred tests establish ordering, not production speed.
 - Keep multiple independently authorized GitHub Copilot accounts in one DSH
   profile. Models retains the global default. Sessions without an override
   inherit that default at each new turn; explicit Session choices take priority.
-- Models manages reauthorization/removal and the global default; Credits supports
-  add-only authorization without selection. Its compact no-search dropdown
-  applies to this Session's subsequent turns. No standalone
+- Models manages authorization, reauthorization/removal and the global default.
+  The managed-route Credits compact no-search dropdown applies to this Session's
+  subsequent turns; it does not add accounts. No standalone
   composer selector, one-turn override or DSH application identity replacement.
 - Persist OAuth grants through the existing DSH credentials service. Use
-  official pi-ai login, refresh and transport, not copied credentials, a token
-  backup/refill scheme, a separate credential store, a second wire or Core edits.
-- Preserve the existing `llm-pi-ai/github-copilot` record without moving or
-  copying it. It is the compatibility account when no active account is stored.
-  Newly added accounts are directly authorized into plugin-owned records.
+  official pi-ai login, refresh and transport, not a separate credential store,
+  second wire or Core edits. Only the explicit confirmed native switch projects
+  a selected grant to canonical and preserves the replaced grant as described below.
+- The existing `llm-pi-ai/github-copilot` record is the compatibility account
+  when no active account is stored. Newly added accounts are directly authorized
+  into plugin-owned records; no automatic credential migration occurs.
 - Changing the account must not change Session histories, selected models,
   future global defaults, model exclusions or billing/Usage records. A selected
   model unavailable to the new account fails explicitly, without substitution.
@@ -416,16 +417,23 @@ The [composer capture](./images/copilot-session-continuation.png) and
 [continuation contract](./session-continuation.md) document the retired route's
 behavior, not native-route parity.
 
-Completed managed turns have a compact **Account** disclosure alongside native
-Usage actions through the public assistant-actions slot. This is
-request-account evidence, not billing attribution or a subagent account rollup.
+Completed native and managed turns have a compact **Account** disclosure
+alongside native Usage actions through the public assistant-actions slot. This
+is request-account evidence, not billing attribution or a subagent account rollup.
 It freezes a verified cached identity at admission. Missing identity starts one
 nonforcing, bounded lookup for the exact admitted account without delaying model
 delivery. A successful lookup may fill missing identity only while that same
 turn/signal remains active and uncancelled, retaining the first verified name.
-Account execution evidence is still created only on the first real ordinary
-native chunk, not discovery, preparation or auxiliary Auto assessment. Late
-lookups never backfill completed turns. Host memory retains at
+Native turns use the profile-wide canonical credential, not plugin Session-account
+overrides. Native evidence additionally requires the public native adapter and
+configuration proof, a canonical OAuth grant, and a match with the selected
+account. A credential change before qualification and delivery, an unproven
+route, or an account mismatch leaves the evidence unknown. Qualification does
+not delay the model stream. Account execution evidence is created only after an
+ordinary AgentLoop chunk for the same Session and signal, not selection,
+discovery, preparation or auxiliary calls; it is not proof of supplier execution.
+Native evidence does not change managed Session-account admission. Late lookups
+never backfill completed turns. Host memory retains at
 most 64 Sessions and 128 turns per Session. Restart, cold history, eviction or a
 request with no native delivery is unknown. Failed reads are distinct from
 unknown evidence; Retry rereads the same turn without inference. Official rc.2

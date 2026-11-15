@@ -6,6 +6,7 @@ import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { captureNativeCopilot, nativeCopilotModels } from '../src/native-copilot-access.ts'
 import { createNativeCopilotSearch } from '../src/native-copilot-search.ts'
+import { DiagnosticsController } from '../src/diagnostics-host.ts'
 
 vi.mock('../src/native-copilot-access.ts', async importOriginal => ({
   ...await importOriginal<typeof import('../src/native-copilot-access.ts')>(),
@@ -119,6 +120,38 @@ describe('optional native Copilot hosted search', () => {
     expect(fixture.requests).toHaveLength(0)
     expect(fixture.fetch).toHaveBeenCalledTimes(1)
     expect(String(fixture.fetch.mock.calls[0]?.[0])).toMatch(/\/models$/u)
+  })
+  it('records only the independently enabled logical search result without retaining the query', async () => {
+    const fixture = setup()
+    let diagnostics!: DiagnosticsController
+    await fixture.ctx.plugin({ apply(ctx) { diagnostics = new DiagnosticsController(ctx) } })
+    diagnostics.collector.setNativeEnabled(true)
+    await fixture.provider.search({ query: 'private unique search text' })
+    expect(diagnostics.collector.snapshot().rows).toContainEqual(expect.objectContaining({
+      operation: 'native-copilot-search', metric: 'success',
+    }))
+    expect(JSON.stringify(diagnostics.collector.snapshot())).not.toContain('private unique search text')
+  })
+  it('does not restore native search observations after clear while work is pending', async () => {
+    const fixture = setup()
+    let diagnostics!: DiagnosticsController
+    await fixture.ctx.plugin({ apply(ctx) { diagnostics = new DiagnosticsController(ctx) } })
+    diagnostics.collector.setNativeEnabled(true)
+    const gate = Promise.withResolvers<void>()
+    const original = fixture.fetch.getMockImplementation()!
+    fixture.fetch.mockImplementation(async (url, init) => {
+      if (String(url).endsWith('/responses')) await gate.promise
+      return original(url, init)
+    })
+    const result = fixture.provider.search({ query: 'private pending query' })
+    try {
+      await vi.waitFor(() => expect(diagnostics.collector.snapshot().pending).toContainEqual(
+        expect.objectContaining({ operation: 'native-copilot-search' })))
+      diagnostics.collector.clear()
+      gate.resolve()
+      await result
+      expect(diagnostics.collector.snapshot().rows).toEqual([])
+    } finally { gate.resolve(); await result.catch(() => {}) }
   })
 
   it('uses the explicitly selected eligible model for both proof and query', async () => {

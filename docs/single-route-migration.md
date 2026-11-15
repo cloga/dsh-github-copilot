@@ -12,12 +12,13 @@ native model synchronization and account-related enhancements; discovery does
 not silently modify the native catalog or a selected model.
 
 No profile cleanup or migration is required to stop the plugin from creating a
-second provider. The plugin does not rewrite user settings, credentials,
-selections or conversation history. An existing `github-copilot-preview`
-selection may be unavailable because that provider is no longer registered.
-Choose a supported native model explicitly if needed. Do not silently map the
-old route to a native model: matching names do not prove equivalent protocol,
-capability or account entitlement.
+second provider. This change does not automatically rewrite existing provider
+settings, credentials, selections or conversation history. Account switches
+and model sync retain their separate confirmation requirements. An existing
+`github-copilot-preview` selection may be unavailable because that provider is
+no longer registered. Choose a supported native model explicitly if needed.
+Do not silently map the old route to a native model: matching names do not
+prove equivalent protocol, capability or account entitlement.
 
 Existing Web settings are also left untouched. If a Web provider explicitly
 names `github-copilot-hosted`, removing the plugin can leave that configured
@@ -57,10 +58,10 @@ loaded or making successful supplier calls.
 由 DSH 原生 `github-copilot` provider 所有。账号元数据仅供显式原生模型同步及
 账号增强功能使用；发现元数据不会静默修改原生目录或当前模型。
 
-无需清理 profile 或执行迁移，插件即可停止创建第二个 provider。插件不会改写用户设置、
-凭据、模型选择或对话历史。已有的 `github-copilot-preview` 选择可能因 provider
-不再注册而不可用；需要时请显式选择受支持的原生模型。不要按名称自动映射旧路线，
-名称相同不能证明协议、能力或账号权限等价。
+无需清理 profile 或执行迁移，插件即可停止创建第二个 provider。此变更不会自动改写现有
+provider 设置、凭据、模型选择或对话历史；账号切换和模型同步仍需分别确认。
+已有的 `github-copilot-preview` 选择可能因 provider 不再注册而不可用；需要时请显式选择
+受支持的原生模型。不要按名称自动映射旧路线，名称相同不能证明协议、能力或账号权限等价。
 
 Web 设置也不会被改写。如果 Web 明确配置了 `github-copilot-hosted`，卸载插件后该
 provider 可能不可用；DSH 会报告已配置 provider 缺失，不会静默切换搜索后端。

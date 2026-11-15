@@ -62,17 +62,19 @@ it('binds diagnostics through actual strict Client and Host gateways with durabl
     const registry = new TypertRegistry(host)
     registry.register({ package: contribution.package, face: 'host', schemas: [],
       model: { services: [], events: [], objects: [] }, invocations: contribution.descriptors })
-    let revision = 0, enabled = false, autoEnabled = false, requestEnabled = false
+    let revision = 0, enabled = false, autoEnabled = false, requestEnabled = false, nativeEnabled = false
     host.provide('settings', {
       describe: () => [{ ns: 'github-copilot', revision, value: {
         diagnosticsEnabled: enabled, autoAllocationDiagnosticsEnabled: autoEnabled,
         requestDiagnosticsEnabled: requestEnabled,
+        nativeDiagnosticsEnabled: nativeEnabled,
       } }],
       mutate: vi.fn(async (ns: string, operations: readonly { path: readonly string[]; value: boolean }[], expected: number) => {
         expect(ns).toBe('github-copilot'); expect(expected).toBe(revision)
         if (operations[0]?.path[0] === 'diagnosticsEnabled') enabled = operations[0]!.value
         else if (operations[0]?.path[0] === 'autoAllocationDiagnosticsEnabled') autoEnabled = operations[0]!.value
         else if (operations[0]?.path[0] === 'requestDiagnosticsEnabled') requestEnabled = operations[0]!.value
+        else if (operations[0]?.path[0] === 'nativeDiagnosticsEnabled') nativeEnabled = operations[0]!.value
         else throw new Error('UNEXPECTED_DIAGNOSTICS_SETTING')
         revision++
       }),
@@ -137,6 +139,14 @@ it('binds diagnostics through actual strict Client and Host gateways with durabl
       credentialChanges: { rows: [{ reason: 'unknown-source', dispatched: 2, revoked: 3 }] },
     } } } })
     await expect(remote.setRequestEnabled(false)).resolves.toMatchObject({ ok: true, value: { requestEnabled: false } })
+    await expect(remote.setNativeEnabled(true)).resolves.toMatchObject({ ok: true, value: {
+      nativeEnabled: true, requestEnabled: false, enabled: false,
+    } })
+    diagnostics.collector.beginNative('native-copilot-llm').finish('success')
+    await expect(remote.get()).resolves.toMatchObject({ ok: true, value: { snapshot: {
+      rows: expect.arrayContaining([expect.objectContaining({ operation: 'native-copilot-llm', metric: 'success' })]),
+    } } })
+    await expect(remote.setNativeEnabled(false)).resolves.toMatchObject({ ok: true, value: { nativeEnabled: false } })
     await expect(remote.setEnabled(true)).resolves.toMatchObject({ ok: true, value: { enabled: true, dirty: false } })
     await expect(remote.setAutoAllocationEnabled(true)).resolves.toMatchObject({
       ok: true, value: { enabled: true, autoAllocationEnabled: true, dirty: false },

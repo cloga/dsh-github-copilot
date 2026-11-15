@@ -1,5 +1,8 @@
 # DSH 0.2.1-rc.3 compatibility
 
+> Historical qualification for this exact release. The current source target
+> and later evidence are in [model compatibility acceptance](./model-compatibility-acceptance.md).
+
 DSH `0.2.1-rc.3` is a prerelease. This plugin line targets the exact official
 tag `dsh-v0.2.1-rc.3` at
 [`1f81c047fc48fa190a683e469daa699857e9afe8`](https://github.com/deepseek-ai/deepseek-harness/commit/1f81c047fc48fa190a683e469daa699857e9afe8).

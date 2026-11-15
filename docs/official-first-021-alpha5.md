@@ -1,5 +1,8 @@
 # Official-first qualification: DSH 0.2.1-alpha.5
 
+> Historical qualification for this exact release, not current delivery status.
+> See [model compatibility acceptance](./model-compatibility-acceptance.md).
+
 Tracking: [#422](https://github.com/cloga/dsh-github-copilot/issues/422).
 The fixed official target is
 [`dsh-v0.2.1-alpha.5`, `1517a4dbca0a2789ff1d41ba439600f8547d23fa`](https://github.com/deepseek-ai/deepseek-harness/tree/1517a4dbca0a2789ff1d41ba439600f8547d23fa).

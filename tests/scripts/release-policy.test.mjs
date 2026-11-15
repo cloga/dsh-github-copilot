@@ -42,6 +42,7 @@ const lineBaseline = () => ({
 test('important paths cover runtime, packaged scripts, package metadata and build inputs', () => {
   for (const path of [
     'src/index.ts', 'src/nested/file.ts', 'lib/index.js', 'scripts/check-search-composition.mjs',
+    'scripts/autonomy-evaluation.mjs', 'tests/fixtures/autonomy-evaluation.json',
     'cordis.patch.yml', 'deployment-baseline.json', 'package.json',
     'scripts/release-policy.mjs', 'scripts/select-core-release.mjs',
     'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'tsconfig.json', 'tsconfig.tests.json',

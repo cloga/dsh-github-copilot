@@ -3,13 +3,24 @@ import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { Context } from '@deepseek-ai/cordis'
 import Authorization from '@deepseek-ai/dsh-authorization'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import LlmRuntime, { BlockAssembler, createUserMessage } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { BlockAssembler, createUserMessage, markAgentLoopRequest } from '@deepseek-ai/dsh-llm'
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
+import { SessionId } from '@deepseek-ai/dsh-session'
 import * as CorePiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { afterEach, expect, it, vi } from 'vitest'
 import * as Companion from '../src/index.ts'
 import type { InlineConfig } from '../src/config.ts'
 import { GITHUB_COPILOT_CREDENTIAL_KEY as KEY, GITHUB_COPILOT_PREVIEW_PROVIDER_ID as MANAGED } from '../src/copilot-identity.ts'
+
+vi.mock('../src/native-copilot-access.ts', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../src/native-copilot-access.ts')>()
+  const { getBuiltinModels } = await import('@earendil-works/pi-ai/providers/all')
+  return { ...original, captureNativeCopilot: vi.fn(async () => ({
+    namespace: 'llm-pi-ai',
+    models: new Map(getBuiltinModels('github-copilot').map(({ id, api }) => [id, { id, api }])),
+    assertCurrent: () => {},
+  })) }
+})
 
 const A = '11111111-1111-4111-8111-111111111111'
 const B = '22222222-2222-4222-8222-222222222222'
@@ -56,9 +67,10 @@ it('applies confirmed account switches to native credentials and retains the nat
     grants.delete(recordKey)
     ctx.emit('credentials/record-updated', recordKey as never)
   })
+  let hasNativeHeader = true
   const nativeAgent = { id: 'native-session', status: 'running',
     session: { id: 'native-session', header: { id: 'native-session' },
-      requestHeader: () => ({ config: nativeSelection, adapterDefaults: {} }) } }
+      requestHeader: () => hasNativeHeader ? { config: nativeSelection, adapterDefaults: {} } : undefined } }
   const wireAccounts: string[] = []
   vi.stubGlobal('fetch', vi.fn(async (input: unknown, init?: RequestInit) => {
     const url = String(input)
@@ -127,8 +139,27 @@ it('applies confirmed account switches to native credentials and retains the nat
     await send('github-copilot')
     const requestAgent = { ctx, session: nativeAgent.session } as unknown as Agent
     const requestSignal = new AbortController()
+    hasNativeHeader = false
+    await Reflect.apply(ctx.waterfall, ctx, [scopeTarget(requestAgent, requestAgent), 'agent/pre-step',
+      { agent: requestAgent, turn: 1, step: 1, messages: [], signal: requestSignal.signal, modelSelection: nativeSelection },
+      async () => ({ kind: 'enter', messages: [] })])
     await ctx.waterfall(scopeTarget(requestAgent, requestAgent), 'agent/request',
       { agent: requestAgent, turn: 1, step: 1, signal: requestSignal.signal }, async () => nativeSelection)
+    // Core records the first request header before the stream is dispatched.
+    hasNativeHeader = true
+    const auxiliary = await ctx.llm.prepareCall({ provider: 'github-copilot', model: model.id })
+    for await (const _chunk of auxiliary.stream({ ...auxiliary.config, signal: requestSignal.signal, messages: [] })) {}
+    expect(ctx.get('githubCopilotSessionAccounts')?.turns.evidence(nativeAgent.session, 1)).toBeUndefined()
+    const review = await ctx.llm.prepareCall({ provider: 'github-copilot', model: model.id })
+    for await (const _chunk of review.stream(markAgentLoopRequest({ ...review.config, signal: requestSignal.signal,
+      sessionId: SessionId(nativeAgent.session.id), purpose: 'auto-review', messages: [] }))) {}
+    expect(ctx.get('githubCopilotSessionAccounts')?.turns.evidence(nativeAgent.session, 1)).toBeUndefined()
+    const ordinary = await ctx.llm.prepareCall({ provider: 'github-copilot', model: model.id })
+    for await (const _chunk of ordinary.stream(markAgentLoopRequest({ ...ordinary.config, signal: requestSignal.signal,
+      sessionId: SessionId(nativeAgent.session.id),
+      messages: [createUserMessage({ content: [{ type: 'text', text: 'hello' }], source: { kind: 'user' } })] }))) {}
+    await vi.waitFor(() => expect(ctx.get('githubCopilotSessionAccounts')?.turns.evidence(nativeAgent.session, 1))
+      .toMatchObject({ accountId: A, source: 'global' }))
     expect(await accounts.switchAccount(B, revision)).toMatchObject({
       state: 'error', activeAccountId: A, diagnostic: 'COPILOT_ACCOUNTS_BUSY',
     })
@@ -151,6 +182,7 @@ it('applies confirmed account switches to native credentials and retains the nat
     expect(ctx.get('githubCopilotAccounts')).toBeUndefined()
     await send('github-copilot')
     expect(wireAccounts).toEqual([
+      `Bearer synthetic-access-${A}`, `Bearer synthetic-access-${A}`, `Bearer synthetic-access-${A}`,
       `Bearer synthetic-access-${A}`, `Bearer synthetic-access-${A}`,
       `Bearer synthetic-access-${B}`, `Bearer synthetic-access-${B}`,
     ])

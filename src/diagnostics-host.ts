@@ -10,6 +10,7 @@ import type { DiagnosticsOperation, DiagnosticsSnapshot, DiagnosticsView } from 
 import { onSettingsNamespaceUpdated } from './settings-reader.ts'
 import { ClientDiagnosticsBatchSchema } from './diagnostics-remote.ts'
 import type { ClientDiagnosticsBatch } from './diagnostics-remote.ts'
+import { observeNativeStream } from './native-diagnostics.ts'
 import packageJson from '#package.json' with { type: 'json' }
 
 const diagnosticsStorageGlobal: DomainGlobalSpec<DiagnosticsSnapshot> = {
@@ -40,6 +41,7 @@ export class DiagnosticsController extends TypertRemoteService {
   private enabled = false
   private autoAllocationEnabled = false
   private requestEnabled = false
+  private nativeEnabled = false
   private dirty = false
   private persistedAt: number | undefined
   private revision = 0
@@ -62,9 +64,12 @@ export class DiagnosticsController extends TypertRemoteService {
         && 'autoAllocationDiagnosticsEnabled' in value && value.autoAllocationDiagnosticsEnabled === true
       this.requestEnabled = typeof value === 'object' && value !== null
         && 'requestDiagnosticsEnabled' in value && value.requestDiagnosticsEnabled === true
+      this.nativeEnabled = typeof value === 'object' && value !== null
+        && 'nativeDiagnosticsEnabled' in value && value.nativeDiagnosticsEnabled === true
       this.collector.setEnabled(this.enabled && this.state === 'ready')
       this.collector.setAutoAllocationEnabled(this.autoAllocationEnabled && this.state === 'ready')
       this.collector.setRequestEnabled(this.requestEnabled && this.state === 'ready')
+      this.collector.setNativeEnabled(this.nativeEnabled && this.state === 'ready')
       if (!this.enabled) this.brackets.clear()
     }
     ctx.inject(['settings'], scope => {
@@ -93,6 +98,7 @@ export class DiagnosticsController extends TypertRemoteService {
         this.collector.setEnabled(false)
         this.collector.setAutoAllocationEnabled(false)
         this.collector.setRequestEnabled(false)
+        this.collector.setNativeEnabled(false)
         ctx.logger.warn('[github-copilot] COPILOT_DIAGNOSTICS_STORAGE_UNAVAILABLE')
       }
       if (this.closed) return
@@ -109,6 +115,8 @@ export class DiagnosticsController extends TypertRemoteService {
         }
       })
     })
+    ctx.on('llm/stream', (options, next) => observeNativeStream(options, next, this.collector,
+      () => ctx.logger.warn('[github-copilot] COPILOT_NATIVE_DIAGNOSTICS_OBSERVATION_FAILED')))
     ctx.on('session/event', (session, event) => {
       if (event.type === 'compaction/start') {
         if (!this.enabled || this.state !== 'ready') return
@@ -169,9 +177,32 @@ export class DiagnosticsController extends TypertRemoteService {
   @Remote
   get(): DiagnosticsView {
     return { enabled: this.enabled, autoAllocationEnabled: this.autoAllocationEnabled, requestEnabled: this.requestEnabled,
+      nativeEnabled: this.nativeEnabled,
       state: this.state, diagnostic: this.problem,
       ...(this.persistedAt === undefined ? {} : { persistedAt: this.persistedAt }),
       dirty: this.dirty, snapshot: this.collector.snapshot() }
+  }
+  @Remote
+  async setNativeEnabled(enabled: boolean): Promise<DiagnosticsView> {
+    if (typeof enabled !== 'boolean') throw new Error('COPILOT_DIAGNOSTICS_INVALID_CONTROL')
+    if (this.settingsBusy) throw new Error('COPILOT_DIAGNOSTICS_CONTROL_BUSY')
+    if (enabled && !this.domain) throw new Error('COPILOT_DIAGNOSTICS_STORAGE_UNAVAILABLE')
+    this.settingsBusy = true
+    try {
+      const settings = this.ctx.get('settings')
+      const row = settings?.describe({ redactSecrets: true }).find(item => item.ns === 'github-copilot')
+      if (!settings || !row) throw new Error('COPILOT_DIAGNOSTICS_SETTINGS_UNAVAILABLE')
+      await settings.mutate('github-copilot', [{
+        op: 'set', path: ['nativeDiagnosticsEnabled'], value: enabled,
+      }], row.revision)
+      const saved = settings.describe({ redactSecrets: true }).find(item => item.ns === 'github-copilot')?.value
+      if (typeof saved !== 'object' || saved === null || !('nativeDiagnosticsEnabled' in saved)
+        || saved.nativeDiagnosticsEnabled !== enabled) throw new Error('COPILOT_DIAGNOSTICS_SETTINGS_COMMIT_UNCERTAIN')
+      this.nativeEnabled = enabled
+      this.collector.setNativeEnabled(enabled && this.state === 'ready')
+      await this.flush()
+      return this.get()
+    } finally { this.settingsBusy = false }
   }
   @Remote
   async setRequestEnabled(enabled: boolean): Promise<DiagnosticsView> {

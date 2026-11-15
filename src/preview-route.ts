@@ -1066,7 +1066,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     if (directory === publishedDirectory && snapshot === publishedSnapshot || view.state === 'disposed') return
     publishedDirectory = directory
     publishedSnapshot = snapshot
-    registration?.replace([GITHUB_COPILOT_PREVIEW_PROVIDER_ID])
+    registration.replace([GITHUB_COPILOT_PREVIEW_PROVIDER_ID])
   }
   const selections = new TurnSelectionStore()
   new TurnSelectionController(ctx, selections)
