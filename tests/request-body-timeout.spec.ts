@@ -43,7 +43,7 @@ describe('verified request-body timeout diagnostics', () => {
     ['synthetic/model', false],
   ] as const)('keeps strict model correlation bounds for %s', async (model, valid) => {
     const text = await requestBodyTimeoutDiagnostic(new Response(JSON.stringify(error), { status: 408 }),
-      '{"input":[]}', undefined, { protocol: 'openai-responses', model })
+      '{"input":[]}', undefined, { protocol: 'openai-responses', model, responseHeadersMs: 1 })
     expect(text).toContain(valid ? `model ${model}` : 'model unavailable')
   })
   it('does not recommend changing image budgets for a measured zero-image request', async () => {
