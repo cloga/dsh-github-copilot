@@ -1,5 +1,16 @@
 # Optional migration to the account-discovered Copilot route
 
+> **Superseded historical proposal — do not execute.** Current product direction
+> retains DSH's native `github-copilot` route; the separate managed route still
+> exists and native-only acceptance is incomplete. Removing the native profile
+> as proposed below is not a current migration recommendation or authorization.
+> Follow the [current README](../README.md#use) instead.
+>
+> **历史方案，已被取代，请勿执行。** 当前方向保留 DSH 原生
+> `github-copilot` 路线；托管路线仍然存在，纯原生验收尚未完成。
+> 下文移除原生配置的步骤不再是当前迁移建议或授权，请参阅
+> [当前使用指南](../README.zh.md#使用)。
+
 [English guide](../README.md) · [中文操作说明](#中文操作说明)
 
 ## Result and boundaries
@@ -12,7 +23,7 @@ explicit migration. This is configuration removal, not hiding a card.
 
 Native Add/Save can recreate another group. The warning is additive, not
 single-route enforcement; Core Edit/Delete remains. Model discovery/UI lifecycle
-is described in the [current README](../README.md#install-and-sign-in), not a
+is described in the [current README](../README.md#use), not a
 prerequisite to removing a route.
 
 Keep `llm-pi-ai` and authorization mounted and preserve the canonical credential
@@ -72,6 +83,8 @@ Keep the existing profile if any prerequisite is uncertain.
 
 ## Apply the reviewed Ops migration after release
 
+Historical procedure only; do not apply it to the current native-first design.
+
 1. Recheck readiness/capabilities/completeness and approved selections. Obtain the
    cold-history acknowledgement. Any Host interruption needs separate approval.
 2. Take a private settings-only backup outside Git/shared docs. Do not copy or
@@ -109,6 +122,8 @@ and selections separately; this is not model-call proof. Older plugin rollback
 may recreate canonical, not a second account.
 
 ## 中文操作说明
+
+以下仅保留历史记录；不要按此移除当前原生 provider。
 
 新安装无需原生 provider；升级保留已有 canonical 配置，两组都是真实路由，
 不是两个账号。迁移只在明确批准后移除审核过的

@@ -1,8 +1,9 @@
 # Official-first review: DSH 0.1.6-alpha.2
 
 > **Historical review:** this preserves the earlier evaluation, not current
-> support or delivery readiness. Use the [rc.2 review](./official-first-020-rc2.md)
-> and current README for the supported host.
+> support or delivery readiness. Use the [current README](../README.md) and
+> [model compatibility acceptance](./model-compatibility-acceptance.md) for
+> the current target.
 
 ## Target and evidence boundary
 

@@ -1,7 +1,7 @@
 # Follow a parent model
 
-> Historical documentation for earlier releases. The `0.2.2-rc.3` candidate
-> retires plugin-owned parent-follow routing and its control; DSH owns native
+> Historical documentation for earlier releases. The integration targeting DSH
+> `0.2.2-rc.3` retires plugin-owned parent-follow routing and its control; DSH owns native
 > parent/child behavior. Existing settings and histories are not deleted.
 
 Implemented for official DSH / Windows Desktop `0.2.0-rc.2` through plugin-owned
@@ -22,7 +22,7 @@ and Save. Default Off; applies to the current profile without child IDs.
 | Root, fork, other-provider parent or dedicated legacy policy | Keep native/legacy ownership |
 | Eligible parent evidence missing | Named error, not a guessed route |
 
-![Current switch and search section from the published Client](images/copilot-search-routing.png)
+![Historical switch and search section from an earlier Client](images/copilot-search-routing.png)
 
 Actual built components, synthetic settings, isolated browser; presentation
 evidence only, not installation, a real Team turn or model transport.
