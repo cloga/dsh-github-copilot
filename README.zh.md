@@ -61,15 +61,15 @@ node scripts/select-core-release.mjs 0.2.2-rc.3
 精确兼容版本发布且通过验证后，在空目录下载原始制品并校验：
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.16.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.16.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.16.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.17.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.17.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.17.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 例如安装到 `web` profile：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.16.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.16.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.17.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.17.dsh.0.2.2.rc.3.tgz
 ```
 
 请明确选择目标 profile，然后：
@@ -141,9 +141,8 @@ alpha.13 发布版本修复了该资格判断；实际运行状态仍需单独�
 账号不匹配、原生路线无法确认，或返回数据前凭据发生变化时，账号证据显示未知。
 证据仅保留在 Host 内存中；更早的历史，以及重启或淘汰后缺失的记录仍显示未知。
 原生上下文异常诊断不依赖可选的托管续接服务，也不会替代 DSH 的上下文计量。
-Local diagnostics 可另行启用不含内容的原生 Copilot 逻辑流和可选 Copilot 搜索观察；
-它不显示 HTTP 细节，也不证明供应商收到请求或执行成功。参见
-[本地诊断说明](./docs/plugin-diagnostics.md)。
+Local diagnostics 已移除；现有诊断数据和设置均不改动。若旧版插件重新加载，且原有开关仍开启，
+它可能恢复采集。参见[功能退役说明](./docs/plugin-diagnostics.md)。
 
 ### 其他可选能力
 
@@ -152,8 +151,7 @@ Local diagnostics 可另行启用不含内容的原生 Copilot 逻辑流和可�
   不会静默为已有 Session 开启，也不会自动发送或重试。
 - [分段压缩恢复](./docs/manual-compaction-recovery.md)需要明确选择对应引擎；
   安装插件不会替换 Core 的引擎。
-- [本地诊断](./docs/plugin-diagnostics.md)和托管 Responses gzip 默认关闭；
-  开启诊断不会上传数据。支持 GitHub Enterprise Cloud 租户登录，
+- 托管 Responses gzip 默认关闭。支持 GitHub Enterprise Cloud 租户登录，
   不支持 GHES 和 Enterprise 额度查询。
 
 ### 移除增强

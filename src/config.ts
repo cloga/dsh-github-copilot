@@ -18,13 +18,10 @@ import type { SessionContinuationPreference } from './session-continuation-types
 
 /** Plugin configuration. Defaults make the current chat route decide. */
 export interface InlineConfig {
-  /** Opt-in local aggregate diagnostics; no uploads or scheduled analysis. */
+  /** Retired hidden leaves preserve existing settings; they do not enable collection. */
   diagnosticsEnabled?: boolean
-  /** Independent opt-in persistence of Auto allocation aggregates. */
   autoAllocationDiagnosticsEnabled?: boolean
-  /** Separate opt-in content-free physical request observations. */
   requestDiagnosticsEnabled?: boolean
-  /** Separate opt-in native Copilot logical observations. */
   nativeDiagnosticsEnabled?: boolean
   /** Hosted-search switch; managed chat requests remain enabled. */
   enabled: boolean

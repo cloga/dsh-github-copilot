@@ -5,6 +5,12 @@ release tags do not update this file after publication. Check the exact
 [GitHub Release](https://github.com/cloga/dsh-github-copilot/releases) and npm
 version separately rather than treating an old `prepared` label as current status.
 
+## 0.1.0-alpha.17.dsh.0.2.2.rc.3 (prepared)
+
+- Remove Local diagnostics collection, controls, storage access, Remotes and the offline analyzer (#499).
+- Leave existing data and hidden legacy settings untouched; older releases may resume collection if their saved switches are enabled.
+- Preserve native Usage, account and search behavior, credential-refresh safeguards and immediate request error guidance.
+
 ## 0.1.0-alpha.16.dsh.0.2.2.rc.3 (prepared)
 
 - Record native Copilot turn-account evidence only after an ordinary native stream chunk is yielded for the admitted account (#488).

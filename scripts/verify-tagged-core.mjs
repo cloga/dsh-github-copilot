@@ -25,7 +25,7 @@ const tests = ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 't
 function runtimeTests(release) {
   if (release === '0.2.2-rc.3') return [...runtimeTests('0.2.1-rc.3'),
     'tests/native-web-composition.spec.ts', 'tests/dual-model-host.spec.ts',
-    'tests/fixtures/diagnostics-native-core.fixture.ts',
+    'tests/loader-composition.spec.ts',
     'tests/fixtures/tool-schema-core.fixture.ts', 'tests/fixtures/subagent-copilot-core.fixture.ts',
     'tests/fixtures/native-subagent-copilot-core.fixture.ts', 'tests/fixtures/native-model-sync-core.fixture.ts']
   if (['0.2.1-alpha.5', '0.2.1-rc.3'].includes(release)) return [...runtimeTests('0.2.0-rc.2'),
@@ -36,7 +36,6 @@ function runtimeTests(release) {
         ...release.startsWith('0.2.0-') ? ['tests/tool-schema-compat.spec.ts', 'tests/fixtures/alpha2-contracts-core.fixture.ts', 'tests/fixtures/compaction-pressure-core.fixture.ts', 'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts'] : [],
         ...release === '0.2.0-rc.2' ? ['tests/fixtures/scoped-compaction-core.fixture.ts', 'tests/fixtures/model-exclusions-core.fixture.ts', 'tests/fixtures/turn-usage-core.fixture.ts', 'tests/fixtures/copilot-accounts-persistence-core.fixture.ts', 'tests/fixtures/copilot-accounts-host-core.fixture.ts', 'tests/fixtures/copilot-accounts-gateway-core.fixture.ts', 'tests/fixtures/copilot-accounts-request-core.fixture.ts', 'tests/copilot-stream-liveness.spec.ts', 'tests/copilot-stream-adapter.spec.ts'] : [],
         ...release === '0.2.0-rc.2' ? ['tests/fixtures/auto-review-copilot-core.fixture.ts'] : [],
-        ...release === '0.2.0-rc.2' ? ['tests/fixtures/diagnostics-storage-core.fixture.ts', 'tests/fixtures/diagnostics-gateway-core.fixture.ts'] : [],
         'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts']
     : tests
 }
