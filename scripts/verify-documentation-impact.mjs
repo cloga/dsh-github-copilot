@@ -33,7 +33,9 @@ function fieldsFromBody(body) {
 
 function normalized(text, versions) {
   let value = text.replaceAll('\r\n', '\n')
-  for (const version of versions) value = value.replaceAll(version, '<version>')
+  for (const version of [...versions].sort((a, b) => b.length - a.length)) {
+    value = value.replaceAll(version, '<version>')
+  }
   return value
 }
 

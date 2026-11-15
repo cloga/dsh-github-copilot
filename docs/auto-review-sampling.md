@@ -9,8 +9,24 @@ native Responses route. The adapter and plugin may resolve separate pi-ai copies
 protocol facts come from the adapter's copy, not an assumed equivalent plugin
 catalog. Missing exports or incomplete metadata leave the enhancement
 unavailable with a diagnostic. It requires `purpose: 'auto-review'` and excludes
-loop-owned requests. Custom credential, endpoint and compatibility overrides
-remain native; unknown models are diagnosed, never assigned a guessed protocol.
+loop-owned requests. Custom credential, endpoint and unqualified compatibility
+overrides remain native; unknown models are diagnosed, never assigned a guessed protocol.
+
+Qualification reads the native Settings schema output, not raw YAML (#483).
+The schema materializes empty `compat.chatTemplateKwargs` and
+`compat.chatTemplateArgs` maps at provider and model levels. These empty maps
+are not custom transport. The only additionally qualified compatibility leaf
+is boolean `supportsStrictMode`, which controls native tool-schema strictness,
+not credentials, endpoint, protocol or sampling. Apply the same narrow rule to
+provider, configured model and model-override entries without mutating any of
+them. Nonempty template maps, unknown compatibility keys and malformed values
+remain unqualified; credential, endpoint, headers, ownership and lifecycle
+checks are unchanged.
+
+Deleting `compat` from stored configuration is not a workaround: schema
+normalization recreates its empty defaults. The regression must pass real native
+Config/Settings output through reviewer and hosted-search qualification; raw
+handwritten profile fixtures alone cannot establish this compatibility.
 
 The auxiliary request is cloned without temperature and prepared through public
 `llm.prepareCall`. Identity and configuration are checked again after awaits,
@@ -21,15 +37,15 @@ responses for allow, deny, malformed verdict, HTTP error and cancellation.
 Disposing the enhancement reproduces the unsupported-temperature failure.
 These are synthetic acceptance requirements, not proof of live supplier access.
 
-### Known native configuration limitation
+### Historical native configuration limitation
 
-Open [#483](https://github.com/cloga/dsh-github-copilot/issues/483) reports
-that DSH `0.2.2-rc.3` can populate empty compatibility maps even when no
-override was configured. The current qualification can reject these defaults,
-leaving both reviewer-only temperature omission and canonical hosted search
-unavailable. The report observed unsupported-temperature reviewer errors on
-alpha.8; it is not proof that every request or configuration fails. No profile
-rewrite, unsafe workaround, automatic retry or merged fix is implied.
+[#483](https://github.com/cloga/dsh-github-copilot/issues/483) reports that
+plugin releases through alpha.12 could reject DSH's schema-default empty maps,
+leaving both reviewer temperature omission and canonical hosted search
+unavailable. The alpha.13 source includes the narrow qualification fix from
+[#485](https://github.com/cloga/dsh-github-copilot/pull/485); verify its
+publication, exact CI and live runtime independently. The report observed
+unsupported-temperature errors on alpha.8, not on every configuration.
 
 ## Managed-route compatibility
 

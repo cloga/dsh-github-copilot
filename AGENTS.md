@@ -125,22 +125,24 @@ subagent invocation must be verified on `github-copilot`, not inferred from
 managed-route tests. Record enhancements that cannot safely attach to native
 APIs rather than patching Core or misrepresenting support.
 
-For official DSH `0.2.2-rc.3`, plugin `0.1.0-alpha.11.dsh.0.2.2.rc.3`
-at `cbaf3095298b75f48782e7962849e9ff7cfa1be0` passed the Windows/Linux
-source/artifact CI in [run 43670239458](https://github.com/cloga/dsh-github-copilot/actions/runs/43670239458)
+For official DSH `0.2.2-rc.3`, plugin `0.1.0-alpha.12.dsh.0.2.2.rc.3`
+at `b1763aa3d7f4040bcb50072b291514a7b1a4a779` passed the Windows/Linux
+source/artifact CI in [run 43689149698](https://github.com/cloga/dsh-github-copilot/actions/runs/43689149698)
 and was published to GitHub Releases and npm. This evidence is limited to that
-revision; Desktop signatures, installation, loaded state, OAuth and supplier
-calls are not established. The `desktopCandidateQualified: false` contract
+revision; the alpha.13 source requires its own CI and publication evidence.
+Desktop signatures, installation, loaded state, OAuth and supplier calls are not
+established. The `desktopCandidateQualified: false` contract
 tracks the unverified Desktop artifact/live-acceptance layer, not a failed CI.
 Earlier pins are historical evidence, not current support gates. A prerelease
 is not a production Core upgrade recommendation. DSH's built-in `llm-pi-ai`
 owns the canonical GitHub Copilot provider, OAuth, grant format, token exchange,
 refresh, and normal model transport.
 
-Open [#483](https://github.com/cloga/dsh-github-copilot/issues/483): native
-schema-generated empty compatibility maps can prevent hosted-search proof and
-reviewer-only temperature omission. Do not claim those enhancements work for
-such configurations or suggest unsafe profile edits as a workaround.
+Historical [#483](https://github.com/cloga/dsh-github-copilot/issues/483):
+releases through alpha.12 could reject native schema-default compatibility
+maps, blocking hosted-search proof and reviewer-only temperature omission.
+The alpha.13 source includes a narrow fix; confirm publication and live
+behavior independently. Do not suggest profile edits as a workaround.
 
 The following is a historical architecture inventory, not a requirement to keep
 every surface as a product feature; apply the confirmed scope above when deciding
@@ -279,8 +281,14 @@ Alpha.25 admits native `subagent/descriptor` v3, already v3 in the retained rc.1
 - `src/index.ts`: authorization bootstrap, dependency-gated Host entry, settings registration, listener, and `ctx.web` provider composition.
 - `src/authorization-controller.ts`: sign-in/status/sign-out and route mutation.
 - `src/copilot-grant.ts`, `src/copilot-auth.ts`: strict grant normalization and narrow pi-ai `CredentialStore` adapter; canonical compatibility and explicitly selected account records follow the account-binding contract.
-- `src/client.ts`: `settings.models.provider-card` account UI, a `plugins.bundle.config` provider-routing page with Models/footer/section fallback, and independently managed optional Chat integration.
-- `src/web-search-routing-config.ts`, `src/web-search-routing-card.ts`: plugin-owned cross-provider live routing settings and the plugin-detail control surface. The user-facing page exposes only primary and fallback providers. Routing is stored directly under the existing `github-copilot` settings namespace at `searchRouting`, mutating both leaves via nested paths `['searchRouting', 'searchProvider']` and `['searchRouting', 'defaultSearchProvider']` in one CAS call; legacy separate routing namespaces are read as fallback only. Revisions coordinate between routing and legacy `searchModel` resets so subsequent edits do not false-conflict. Hosted-search safety settings remain schema-owned rather than a routine tuning form. The Models fallback retains routing only.
+- `src/client.ts`: account and model controls, the native search-model setting,
+  and additive optional Chat integration through public slots.
+- `src/native-copilot-access.ts`, `src/native-copilot-search.ts`,
+  `src/native-search-model-card.ts`: proof-bound canonical hosted search in
+  DSH's existing Web service and its explicit model choice.
+- `src/web-search-routing-config.ts`, `src/web-search-routing-card.ts`: retained
+  legacy routing code and compatibility exports; the old routing UI and facade
+  are not mounted current behavior. Never reactivate them implicitly.
 - `tests/fixtures/reasoning-presentation-core.fixture.ts`: native blank-reasoning rendering acceptance and independent Auto/Usage mount evidence. Do not restore the retired plugin renderer/provenance projection or change messages, replay indexes or Usage.
 - `src/remote.ts`: Typert Remote contribution. Never add credential payloads here.
 - `src/copilot-usage-host.ts`, `src/copilot-usage-remote.ts`, `src/copilot-usage-card.ts`, `src/copilot-usage-ui.ts`: bounded Host quota snapshots, an independent strict namespace and reversible composer presentation. No real account fetches in tests, private Client store/DOM injection, quota-specific credential owner or general model wire.
@@ -298,12 +306,13 @@ Alpha.25 admits native `subagent/descriptor` v3, already v3 in the retained rc.1
 - `src/temporary-models.ts`: exact, account-gated corrections with semantic protocol/capability retirement.
 - `src/model-protocol.ts`: explicit Core capability detection and conservative legacy fallback.
 - `src/responses-reasoning.ts`, `src/responses-reasoning-text.ts`: selected-model effort mapping and public summary assembly.
-- `src/tool-schema-compat.ts`: Copilot-only prompt-assembly filter for unusable escalation arguments and action-specific Goal update schemas.
-- `src/plan.ts`: Copilot-only, fail-closed hosted-search candidate lifecycle.
-- `src/auto-assessment-evidence.ts`: bounded request-local semantic classifier milestones copied into strict ephemeral turn evidence; no prompts, replay, credentials or error bodies. Total includes preparation; adapter start and first text are not HTTP dispatch/byte timings. Keep one configured monotonic deadline (30s default, 1000–120000ms) checked at preparation/native request/result boundaries and 128-token compact output; delayed timer settlement is not a real-time guarantee. The user-approved budget trial is not calibrated latency or proof of past timeout causes. Empty classifier setting retains metadata-driven automatic selection; a nonempty exact account ID preserves proof/exclusion/text/headroom guards, never a virtual Auto ID or silent alternate-model fallback. Both native volatile Config leaves affect future assessments and preserve admitted turns. Prefer eligible supplier-advertised reasoning-off classifiers, but request off only when supplier and public prepared-model effort agree; unsupported native controls stay unchanged. No guessed optimal/latency ranking, benchmark requests, adaptive timeout, cooldown or cross-turn cache without reviewed observations.
-- `src/probe.ts`: bounded native-search capability proof.
-- `src/wire.ts`, `src/wire-anthropic.ts`: inline hosted-search streaming.
-- `src/traditional-search.ts`: `github-copilot-hosted` `ctx.web` provider.
+- `src/tool-schema-compat.ts`: Copilot-only prompt-assembly filter for unusable escalation arguments; Goal schemas remain native.
+- `src/plan.ts`, `src/probe.ts`, `src/wire.ts`, `src/wire-anthropic.ts`,
+  `src/traditional-search.ts`: retained historical hosted-search and routing
+  implementation; current registration is owned by `src/native-copilot-search.ts`.
+- `src/auto-assessment-evidence.ts`: retained historical classifier evidence;
+  plugin-owned Auto assessment and routing are not mounted. Preserve bounded,
+  content-free evidence without reactivating them.
 - `src/serialize.ts`, `src/sse.ts`, `src/failure.ts`: protocol conversion and bounded error handling.
 - `src/response-error-body.ts`, `src/request-body-timeout.ts`, `src/request-upload-evidence.ts`: bounded clone-only HTTP error evidence and safe managed upload-timeout guidance. Request-scoped public Node diagnostic events supply numeric local body-write/header/ALPN evidence only after an exact verified `408/user_request_timeout`; absent events, multiple native requests and work limits stay explicit. Always dispose subscriptions when Fetch settles, without changing its arguments, Response/errors, dispatcher, proxy or retry owner. Local body-write completion is not upload duration, kernel ACK, supplier receipt or execution; its absence does not prove incomplete upload. Native failure classification/retry metadata stay unchanged; final JSON bytes are not tokens or a payload limit. A separate explicit opt-in compression setting is default-off and never activated by a 408; never infer overflow, auto-compact, trim history, switch models or add retries from a 408.
 - `src/responses-request-compression.ts`: asynchronous `node:zlib` gzip at `Z_BEST_SPEED` only for exact account-proven official Copilot HTTPS `/responses` JSON POSTs through the existing public Fetch seam. `github-copilot.responsesRequestCompression` defaults false; enforce the 256 KiB minimum, 32 MiB compression-work bound and both 5%/4 KiB savings thresholds. Skips retain the original request with a fixed reason, and cancellation/account/deadline fences run before dispatch. No custom Fetch, other protocol, explicit `auto`/WebSocket, DNS/proxy/dispatcher changes, context-admission or replay changes, resend after an encoding rejection, or new retry. Gzip is wire encoding, not compaction or proof of supplier receipt.
@@ -316,6 +325,10 @@ Alpha.25 admits native `subagent/descriptor` v3, already v3 in the retained rc.1
 - `lib/`: generated release output; never edit it.
 
 ## Non-negotiable invariants
+
+The following two classifier and context-projection paragraphs are historical
+constraints on retained plugin Auto code, not a current runtime feature or
+authorization to reactivate it.
 
 Auxiliary classifier disable proof accepts explicit supplier `off` or the
 selected protocol's native `none` (Responses/Completions) or `disabled`
@@ -605,7 +618,7 @@ verify its own packed bytes before publishing.
 | Last metadata display | Same-account data may display during TTL refresh/loading/error but never authorize requests; credential/account/permission invalidation or proof expiry immediately revokes evidence; TTL does not extend tokens |
 | Last-success timestamp (alpha.7, #97) | Show `snapshot.discoveredAt` once beside count outside Manage: English relative text, full LOCAL date/time/zone tooltip and accessible semantic `time`; missing/invalid/no account hides it, future uses absolute text. Pending/error retains last success, successful refresh replaces it and sign-out clears it. One mounted 60s display-only timer makes no RPC/status/discovery calls and is disposed with timestamp/unmount; cache/discovery lifecycle unchanged |
 | Definitive `UNKNOWN_MODEL` | One bounded metadata refresh, never message replay or automatic model switching; generic HTTP/network errors are not guessed to be unknown models |
-| README screenshot | `copilot-search-routing.png` shows the current built plugin-detail routing card with synthetic providers in an isolated browser fixture. It proves only the current presentation surface, not live credentials, provider availability, search success or Desktop activation. |
+| Historical routing screenshot | `copilot-search-routing.png` records a retired plugin-detail routing card with synthetic providers; it does not depict the current UI or prove live search or Desktop activation. |
 | Host attach/restart | Does not repair or rewrite the stored native profile; search proofs stay lazy and do not start at attach |
 | Background credential/reset notifications | Invalidate evidence and clear Client state with read-only status; no forced discovery on every token event; next Models open/use ensures metadata |
 | Eligible model/search request | May resolve/refresh credentials and run bounded capability proof; changes during proof must fail closed rather than reuse another account's proof |

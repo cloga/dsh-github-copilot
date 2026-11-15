@@ -1,7 +1,7 @@
 # Contextual Auto routing and captured selection reasons
 
-> Historical documentation for earlier releases. The `0.2.2-rc.3` candidate
-> retires plugin-owned Auto routing and its semantic assessment; DSH owns Auto.
+> Historical documentation for earlier releases. The integration targeting DSH
+> `0.2.2-rc.3` retires plugin-owned Auto routing and its semantic assessment; DSH owns Auto.
 > Existing settings and histories are not deleted.
 
 Tracking: [#258](https://github.com/cloga/dsh-github-copilot/issues/258) and
@@ -332,7 +332,7 @@ no-fit recovery, one-call semantic success/invalid/failure/timeout/cancellation,
 omitted context, strict Remote and footer English/Chinese explanations.
 
 Retain native gateway, parent following, manual selection, exclusion admission,
-account proof, image admission and compaction fixture coverage. Full protected
+account proof, general image eligibility and compaction fixture coverage. Full protected
 Windows/Linux CI remains mandatory before merge/release. No live inference
 calls are needed for synthetic acceptance.
 

@@ -68,15 +68,15 @@ After the exact compatible release is available and verified, download its
 original asset and checksum in an empty directory:
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.11.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.11.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.11.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.13.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.13.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.13.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 For the `web` profile, install the same Release asset:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.11.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.11.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.13.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.13.dsh.0.2.2.rc.3.tgz
 ```
 
 Choose the intended profile explicitly. Then:
@@ -103,8 +103,10 @@ account snapshot without forcing discovery; if it is unavailable, use
 `llm-pi-ai.providers.github-copilot.models` with Settings CAS and readback.
 The nonempty saved list replaces the native built-in catalog and remains after
 the plugin is unloaded or uninstalled. Copying model settings does not transfer
-the managed route's image admission checks or tool-schema filtering to native
-requests, nor prove that supplier calls will succeed.
+the managed route's permission-field filtering to native requests, nor prove
+that supplier calls will succeed. Neither route checks the projected image MIME
+against the account model's format list before dispatch.
+The managed route also uses the native Goal update schema without rewriting it.
 Models with unproven or incompatible native catalog protocols, unknown or
 narrower server input caps, unknown context or vision support, or unknown or
 unsupported reasoning controls are skipped rather than guessed.
@@ -150,12 +152,17 @@ When qualification succeeds, the native Auto reviewer's Copilot Responses reques
 omit `temperature`; ordinary Chat and native allow/deny/error/cancel behavior remain
 unchanged. Qualification uses the native adapter's pi-ai catalog even when
 the plugin resolves a separate copy; missing protocol facts remain unavailable.
+Native schema-default empty `chatTemplateKwargs`/`chatTemplateArgs` maps and a
+boolean `supportsStrictMode` do not disqualify this route, including per-model
+configuration. Other compatibility overrides remain unqualified. No settings
+rewrite is needed to remove schema defaults; do not disable review or search
+proof as a workaround. CI acceptance and live Desktop activation are separate.
 See [reviewer compatibility](./docs/auto-review-sampling.md).
 
-**Known limitation (alpha.11):** DSH schema-default compatibility maps can
-prevent native hosted-search qualification and reviewer temperature omission;
-see open [#483](https://github.com/cloga/dsh-github-copilot/issues/483).
-Do not treat registration or model metadata as proof that either works.
+Plugin releases through alpha.12 can reject DSH's schema-default compatibility
+maps and disable both enhancements ([#483](https://github.com/cloga/dsh-github-copilot/issues/483)).
+The alpha.13 source fixes that qualification; check its publication and live
+runtime separately. Registration or model metadata alone proves neither works.
 
 The native route's quota and optional identity display use only the canonical OAuth account. If the
 provider names a credential, endpoint or nonempty headers override, or its configuration

@@ -56,15 +56,15 @@ node scripts/select-core-release.mjs 0.2.2-rc.3
 精确兼容版本发布且通过验证后，在空目录下载原始制品并校验：
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.11.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.11.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.11.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.13.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.13.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.13.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 例如安装到 `web` profile：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.11.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.11.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.13.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.13.dsh.0.2.2.rc.3.tgz
 ```
 
 请明确选择目标 profile，然后：
@@ -84,7 +84,9 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 重新发现；如果快照不可用，请使用 **Refresh models**。此显式单次快照只通过
 Settings CAS 和回读替换 `llm-pi-ai.providers.github-copilot.models`。原生 profile
 中保存的非空列表会替代原生内置目录，卸载或停用插件后仍然保留。复制模型设置不会将
-托管路线的图像准入检查或工具 schema 过滤迁移到原生请求，也不能证明供应商调用成功。
+托管路线的权限参数过滤迁移到原生请求，也不能证明供应商调用成功。两条路线均不会在
+发送前将实际投影的图片 MIME 与账号模型的格式清单进行对照检查。
+托管路线也直接使用原生 Goal 更新 schema，不再改写。
 无法证明或与原生目录不兼容的协议、未知或更窄的服务端输入上限、未知上下文或图像支持，
 以及未知或不支持的推理控制会被跳过，不会猜测。缺少原生目录兼容性基线的新 Completions 和
 Anthropic 模型也会被跳过；已有目录模型保留原生兼容性。只有账号明确支持 PNG、JPEG、WebP、GIF 四种原生请求图像格式时，
@@ -113,12 +115,17 @@ Anthropic 模型也会被跳过；已有目录模型保留原生兼容性。只�
 Web 服务替换或旧插件路由 UI。
 原生 Auto reviewer 的 Copilot Responses 请求只有在资格验证通过时才会省略 `temperature`；
 普通聊天和原生 allow/deny/error/cancel 行为不变。即使插件解析到另一份 pi-ai，
-资格判断也使用原生适配器的目录；无法确认协议时仍不可用。参见
+资格判断也使用原生适配器的目录；无法确认协议时仍不可用。
+原生 Schema 自动生成的空 `chatTemplateKwargs`／`chatTemplateArgs` 映射及布尔型
+`supportsStrictMode` 不会使路线失去资格，逐模型配置也遵守同一规则；其他兼容覆盖仍不获准。
+无须改写设置来删除 Schema 默认值，也不应通过关闭审核或搜索能力探测来绕过故障。
+CI 验收和 Desktop 实际加载属于不同证据层级。参见
 [审核兼容说明](./docs/auto-review-sampling.md)。
 
-**已知限制（alpha.11）：**DSH schema 生成的默认兼容性映射可能使原生托管搜索
-及 reviewer 省略 temperature 的资格验证失败；见未关闭的
-[#483](https://github.com/cloga/dsh-github-copilot/issues/483)。
+截至 alpha.12 的插件发布版本可能错误拒绝 DSH schema 默认兼容性映射，
+使原生托管搜索及 reviewer 省略 temperature 的资格验证失败
+（[#483](https://github.com/cloga/dsh-github-copilot/issues/483)）。
+alpha.13 源码修复了该资格判断；是否已发布及实际运行状态仍需单独核实。
 注册成功或存在模型元数据不代表这两项能力实际可用。
 
 原生路线的额度和可选身份显示只使用 canonical OAuth 账号；如果 provider 指定了其他凭据、

@@ -8,14 +8,14 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.1.0-alpha.11.dsh.0.2.2.rc.3"
+    "version": "0.1.0-alpha.13.dsh.0.2.2.rc.3"
   },
   "releaseLines": [
     { "core": "0.2.0-rc.2", "version": "0.4.2-alpha.15", "status": "published" },
     { "core": "0.2.1-alpha.4", "version": "0.4.2-alpha.16", "status": "published" },
     { "core": "0.2.1-alpha.5", "version": "0.1.0-alpha.2.dsh.0.2.1.alpha.5", "status": "published" },
     { "core": "0.2.1-rc.3", "version": "0.1.0-alpha.5.dsh.0.2.1.rc.3", "status": "published" },
-    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.11.dsh.0.2.2.rc.3", "status": "pending" }
+    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.13.dsh.0.2.2.rc.3", "status": "pending" }
   ],
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -1220,12 +1220,11 @@
       "sourceMarkers": [
         {"file": "src/tool-schema-compat.ts", "marker": "options.provider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID"},
         {"file": "src/tool-schema-compat.ts", "marker": "ESCALATION_FIELDS"},
-        {"file": "src/tool-schema-compat.ts", "marker": "GOAL_UPDATE_TOOL_NAME"},
         {"file": "scripts/verify-upstream-baseline.mjs", "marker": "baseline.strictModeCompat === 'route-switch'"}
       ],
       "tests": [
         {"file": "tests/tool-schema-compat.spec.ts", "name": "removes escalation properties and required entries only for Copilot"},
-        {"file": "tests/tool-schema-compat.spec.ts", "name": "turns update_goal into action-specific schemas only for Copilot"},
+        {"file": "tests/tool-schema-compat.spec.ts", "name": "preserves the native update_goal schema for Copilot"},
         {"file": "tests/tool-schema-compat.spec.ts", "name": "preserves every schema for non-Copilot providers"},
         {"file": "tests/fixtures/tool-schema-core.fixture.ts", "name": "preserves frozen native requests and conditional tool execution while adapting managed wire schemas"},
         {"file": "tests/authorization-controller.spec.ts", "name": "preserves configured Anthropic and OpenAI models during explicit strict mode repair"},

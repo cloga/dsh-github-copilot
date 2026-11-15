@@ -1,11 +1,11 @@
 # GitHub Copilot Auto routing contracts
 
-> Historical documentation for earlier releases. The `0.2.2-rc.3` candidate
-> retires plugin-owned Auto and parent-follow routing; DSH owns those behaviors.
+> Historical documentation for earlier releases. The integration targeting DSH
+> `0.2.2-rc.3` retires plugin-owned Auto and parent-follow routing; DSH owns those behaviors.
 > Existing settings and histories are not deleted.
 
 Target: official DSH / Windows Desktop `0.2.0-rc.2`. Implementation is plugin-only.
-For ordinary use, start with [task assessment and explanations](./auto-task-routing.md)
+For historical context, see [task assessment and explanations](./auto-task-routing.md)
 and [parent following](./parent-model-follow.md).
 
 ## User contract
@@ -74,9 +74,9 @@ the [latest review](./auto-iteration-review.json) before implementation.
 
 Image eligibility includes historical user/tool image blocks in all entered
 messages, not only current user text. Text-only candidates are removed; Auto
-advertises image input only with an eligible image model. Actual fixed/Auto
-dispatch independently checks explicit account MIME restrictions against
-Core's projected image. Missing MIME lists stay unverified.
+advertises image input only with an eligible image model. Fixed/Auto dispatch
+does not check the projected MIME against the account model's format list;
+supplier acceptance and errors remain native.
 [Image admission limits](./image-input-compatibility.md).
 
 Auto does not trim history or own compaction transactions. Estimated pressure

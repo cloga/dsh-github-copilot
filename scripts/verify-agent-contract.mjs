@@ -34,11 +34,34 @@ export function verifyDocumentationReview(policy, template, workflow) {
   }
 }
 
+export function verifyCurrentTaskStatus(contract) {
+  const statuses = {
+    autointent: 'retired-legacy-only',
+    autorouting: 'retired-legacy-only',
+    models: 'native-selection-managed-route-no-plugin-auto-or-follow',
+    search: 'native-web-canonical-backend-legacy-router-retired',
+    client: 'native-controls-legacy-router-not-mounted',
+  }
+  if (Object.entries(statuses).some(([name, status]) => {
+    const task = contract.tasks?.[name]
+    return task?.runtimeStatus !== status || typeof task.riskContext !== 'string'
+      || !task.riskContext.toLowerCase().includes('historical')
+  })
+    || typeof contract.tasks?.continuation?.accountUiBoundary !== 'string'
+    || !contract.tasks.continuation.accountUiBoundary.includes('no add-only OAuth entry in Chat')
+    || !contract.tasks.search.read?.includes('src/native-copilot-search.ts')
+    || !contract.tasks.search.tests?.includes('tests/native-copilot-search.spec.ts')
+    || !contract.tasks.client.read?.includes('src/native-search-model-card.ts')) {
+    throw new Error('Agent contract: current task status and historical routing boundaries must remain explicit')
+  }
+}
+
 export async function verifyAgentContract(root = repositoryRoot) {
   const contract = JSON.parse(await readFile(resolve(root, 'agent-contract.json'), 'utf8'))
   const pkg = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
   const require = (condition, message) => { if (!condition) throw new Error(`Agent contract: ${message}`) }
   require(contract.schemaVersion === 1, 'unsupported schemaVersion')
+  verifyCurrentTaskStatus(contract)
   const review = contract.tasks?.autorouting?.iterationReview
   require(review?.report === 'docs/auto-iteration-review.json'
     && review.policy === 'docs/evidence-driven-iteration.md'

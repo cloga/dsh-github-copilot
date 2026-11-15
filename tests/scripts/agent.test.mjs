@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { spawnSync } from 'node:child_process'
 import { attribution, describeRepository, doctor, planTask, repositoryRoot } from '../../scripts/agent.mjs'
-import { verifyAgentContract, verifyCurrentCoreDocument, verifyDocumentationReview } from '../../scripts/verify-agent-contract.mjs'
+import { verifyAgentContract, verifyCurrentCoreDocument, verifyCurrentTaskStatus, verifyDocumentationReview } from '../../scripts/verify-agent-contract.mjs'
 import { assessDocumentationImpact } from '../../scripts/verify-documentation-impact.mjs'
 
 const documentationImpactBody = `### Documentation impact
@@ -56,6 +56,12 @@ test('user-facing changes require substantive bilingual and named domain documen
   for (const invalid of [
     { ...input, changedFiles: input.changedFiles.filter(path => path !== 'README.zh.md') },
     { ...input, after: { ...input.after, 'README.md': 'Install 1.1.0.\nOld behavior.' } },
+    {
+      ...input,
+      versions: ['1.0.0', '1.0.0-rc.1'],
+      before: { ...input.before, 'README.md': 'Install 1.0.0.\nOld behavior.' },
+      after: { ...input.after, 'README.md': 'Install 1.0.0-rc.1.\nOld behavior.' },
+    },
     { ...input, body: documentationImpactBody.replace(', docs/accounts.md', '') },
     { ...input, body: documentationImpactBody.replace('docs/accounts.md', 'docs/../accounts.md') },
     { ...input, after: { ...input.after, 'docs/accounts.md': 'Old account behavior.' } },
@@ -129,6 +135,19 @@ test('current documentation targets track package metadata rather than historica
       'Current source target: official DSH `0.0.0-stale`',
     ), pkg.engines.dsh), /current-Core document/)
   }
+})
+
+test('task map distinguishes retired routing from current native controls', async () => {
+  const contract = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
+  verifyCurrentTaskStatus(contract)
+  for (const name of ['autointent', 'autorouting', 'models', 'search', 'client']) {
+    const changed = structuredClone(contract)
+    changed.tasks[name].runtimeStatus = 'active'
+    assert.throws(() => verifyCurrentTaskStatus(changed), /current task status/)
+  }
+  const missingContext = structuredClone(contract)
+  missingContext.tasks.search.riskContext = ''
+  assert.throws(() => verifyCurrentTaskStatus(missingContext), /current task status/)
 })
 
 test('agent contract keeps documentation review and PR-body edit checks wired into CI', async () => {

@@ -5,10 +5,10 @@
 > backend for DSH's native Web service; select it explicitly in native Web
 > settings. It uses the canonical account and a separate native search-model
 > setting, not the old routing controls. See the [current README](../README.md#use)
-> and known limitation [#483](https://github.com/cloga/dsh-github-copilot/issues/483).
+> and historical qualification issue [#483](https://github.com/cloga/dsh-github-copilot/issues/483).
 
-Target: official DSH / Windows Desktop `0.2.0-rc.2`. The routed facade and
-configuration page are shipped plugin functionality, not a pending proposal.
+Historical target: official DSH / Windows Desktop `0.2.0-rc.2`. At that revision
+the routed facade and configuration page were shipped, not a pending proposal.
 
 ## Choose who searches
 
