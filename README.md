@@ -67,15 +67,15 @@ After the exact compatible release is available and verified, download its
 original asset and checksum in an empty directory:
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.8.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.8.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.8.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.10.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.10.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.10.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 For the `web` profile, install the same Release asset:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.8.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.8.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.10.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.10.dsh.0.2.2.rc.3.tgz
 ```
 
 Choose the intended profile explicitly. Then:
@@ -131,8 +131,13 @@ The plugin registers optional `github-copilot-hosted` search in DSH's existing
 Web service. Select it explicitly in native Web settings and enable the native
 search tool as needed; installation does not change the selected backend.
 Search uses only the canonical OAuth account and models shared by the native
-configured catalog and current account metadata. Each search makes one fixed
-capability probe and, only after proof, one user query; both may incur charges.
+configured catalog and current account metadata. In **Plugins → dsh-github-copilot
+→ details → Copilot search model**, choose **Automatic** (the default) or one
+eligible model. Opening or reloading this control fetches account metadata and
+may refresh native OAuth; metadata alone does not prove search support. If an
+explicitly selected model is no longer eligible, search fails without choosing
+another model. Each search makes one fixed capability probe and, only after
+proof, one user query; both may incur charges.
 Custom endpoint, credential or transport overrides and unproven models remain
 unavailable. There is no model retry, backend replacement or plugin routing UI.
 The native Auto reviewer's qualified Copilot Responses requests omit

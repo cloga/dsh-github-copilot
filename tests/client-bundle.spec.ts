@@ -416,7 +416,7 @@ describe('tsdown client artifact', () => {
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
       'excludeModel', 'restoreModel', 'setModelExcluded', 'setModelHighCost',
       'previewNativeModelSync', 'applyNativeModelSync', 'migrationStatus',
-      'view', 'save', 'create', 'providers', 'get', 'refresh', 'getNative', 'refreshNative',
+      'view', 'save', 'create', 'providers', 'models', 'get', 'refresh', 'getNative', 'refreshNative',
       'ensureNativeIdentity', 'refreshNativeIdentity', 'get', 'requestedModels', 'allocationSummary', 'get', 'authorize', 'setEnabled',
     ])
     expect(contributions[0]?.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotAccounts').map(descriptor => descriptor.method).sort())

@@ -46,6 +46,11 @@ Use public native ownership/configuration proof and prepared dispatch; never
 replace Web, select a backend, migrate accounts/settings, or bypass review.
 Search permits one fixed capability proof and one final query within 25 seconds,
 with four concurrent operations and configuration/credential/disposal fences.
+The plugin settings may explicitly choose the native search model, defaulting to
+automatic. List only the canonical account/native Responses intersection; metadata
+is not search proof. Invalid or unavailable explicit choices fail without fallback.
+Use a separate hidden volatile `nativeSearchModel` leaf with path-level CAS and
+readback; never migrate or interpret the old `searchModel` as this choice.
 The former plugin routing UI and managed Auto remain retired. Supplier calls,
 live installation and restarts are separate from synthetic CI acceptance.
 

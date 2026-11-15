@@ -14,6 +14,7 @@ import type { GitHubCopilotAuthorizationView } from './authorization-controller.
 import type { ProviderCardExtrasOwnerProps, SettingsSectionOwnerProps } from './dsh-supported-types.ts'
 import githubCopilotRemote, { GitHubCopilotAuthorizationViewSchema } from './remote.ts'
 import { DiagnosticsCard } from './diagnostics-card.ts'
+import { NativeSearchModelCard } from './native-search-model-card.ts'
 import type { DiagnosticsRemote } from './diagnostics-card.ts'
 import { installDiagnosticsClient } from './diagnostics-client.ts'
 import { installAccountUsagePresentation, installAccountUsageProjections } from './auto-model-presentation.ts'
@@ -1036,9 +1037,28 @@ function registerUi(ctx: ClientContext): () => void {
 export function CopilotPluginSettingsPage(props: {
   diagnostics?: DiagnosticsRemote
   diagnosticsControl?: ReactElement
+  searchModelControl?: ReactElement
 }) {
   return createElement('div', null,
+    props.searchModelControl,
     props.diagnosticsControl ?? createElement(DiagnosticsCard, { remote: props.diagnostics }))
+}
+function NativeSearchModelConnectionCard({ ctx }: { ctx: ClientContext }): ReactElement {
+  const [services, setServices] = useState<{
+    settings: ClientContext['remote']['settings']
+    search: ClientContext['remote']['githubCopilotNativeSearch']
+  }>()
+  useEffect(() => {
+    let active = true
+    const injection = ctx.inject(['remote.settings', 'remote.githubCopilotNativeSearch'], scope => {
+      const captured = { settings: scope.remote.settings, search: scope.remote.githubCopilotNativeSearch }
+      if (active) setServices(captured)
+      return () => { if (active) setServices(undefined) }
+    })
+    return () => { active = false; void injection.dispose() }
+  }, [ctx])
+  return services ? createElement(NativeSearchModelCard, services)
+    : createElement('p', { role: 'status', style: nativeCaptionStyle }, 'Copilot search model settings are unavailable.')
 }
 function DiagnosticsConnectionCard({ ctx }: { ctx: ClientContext }): ReactElement {
   const [remote, setRemote] = useState<DiagnosticsRemote>()
@@ -1063,7 +1083,8 @@ function registerPluginSettingsUi(ctx: ClientContext): () => void {
   let footerSeat: (() => void) | undefined
   let fallback: (() => void) | undefined
   const diagnosticsControl = createElement(DiagnosticsConnectionCard, { ctx })
-  const render = () => createElement(CopilotPluginSettingsPage, { diagnosticsControl })
+  const searchModelControl = createElement(NativeSearchModelConnectionCard, { ctx })
+  const render = () => createElement(CopilotPluginSettingsPage, { diagnosticsControl, searchModelControl })
   const syncFallback = () => {
     if (active && footerReady && !bundleActive && footerSeat === undefined) {
       try {
