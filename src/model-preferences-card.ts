@@ -45,7 +45,7 @@ function preferenceMessage(code: string): string {
 function nativeSyncMessage(code: string): string {
   switch (code) {
     case 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH':
-      return 'The selected Copilot account does not match the native provider account. Verify the account before syncing.'
+      return 'Could not confirm the selected Copilot account matches the native provider. Review the account before syncing.'
     case 'NATIVE_MODEL_SYNC_ACCOUNT_UNAVAILABLE':
       return 'Could not verify the current Copilot account. No native settings were changed.'
     case 'NATIVE_MODEL_SYNC_DISCOVERY_UNAVAILABLE':

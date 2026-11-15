@@ -226,7 +226,7 @@ it('explains an account mismatch without requiring the canonical account selecto
   } })
   await mount({ remote: face, models, preferences })
   await openPreferences()
-  expect(document.body.textContent).toContain('The selected Copilot account does not match the native provider account')
+  expect(document.body.textContent).toContain('Could not confirm the selected Copilot account matches the native provider')
   expect(document.querySelector<HTMLButtonElement>('[data-dsh-github-copilot-native-model-sync-apply]')!.disabled).toBe(true)
 })
 
