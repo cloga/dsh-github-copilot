@@ -509,7 +509,7 @@ describe('native Auto reviewer Copilot compatibility', () => {
       ])
       await vi.waitFor(() => expect(owner.turns.evidence(agent.session, 1))
         .toMatchObject({ accountId: 'canonical', source: 'global' }))
-      ctx.emit('session/event', agent.session, { type: 'turn/end', data: { turn: 1 } } as never)
+      agent.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
       controller.abort()
       expect(owner.turns.evidence(agent.session, 1)).toMatchObject({ accountId: 'canonical', source: 'global' })
       await plugin.dispose()
