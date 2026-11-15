@@ -437,7 +437,7 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
 
 describe('native Auto reviewer Copilot compatibility', () => {
   it.each(['allow', 'deny', 'malformed', 'http-error', 'cancel'] as const)(
-    'uses real Config/Settings defaults for canonical review/search without changing the native %s boundary', async outcome => {
+    'uses the actual canonical adapter without changing the native %s boundary', async outcome => {
       const result = await run(outcome, true, undefined, 'canonical-native')
       expect(result.wireBodies.filter(body => body.temperature === 0.37)).toHaveLength(1)
       expect(result.wireBodies.filter(body => !Object.hasOwn(body, 'temperature')), JSON.stringify(result.result)).toHaveLength(1)
