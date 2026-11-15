@@ -6,6 +6,18 @@ const base: InlineConfig = { enabled: true, providers: [], includeSources: true,
   idleTimeoutMs: 300_000, probe: true, probeTimeoutMs: 30_000 }
 
 describe('session search settings', () => {
+  it('preserves legacy search configuration without exposing it as an active setting', () => {
+    for (const field of ['enabled', 'providers', 'includeSources', 'stripServerTools', 'idleTimeoutMs',
+      'probe', 'probeTimeoutMs', 'routeWebSearch', 'searchFallback', 'searchModel', 'searchRouting'] as const) {
+      expect(Config.dict?.[field]?.meta.hidden).toBe(true)
+    }
+    const saved = Config({ ...base, enabled: false, routeWebSearch: false, searchModel: 'saved-model',
+      searchRouting: { searchProvider: 'github-copilot-hosted', defaultSearchProvider: 'none' } })
+    expect(readInlineConfig(saved)).toMatchObject({
+      enabled: false, routeWebSearch: false, searchModel: 'saved-model',
+      searchRouting: { searchProvider: 'github-copilot-hosted', defaultSearchProvider: 'none' },
+    })
+  })
   it('keeps request diagnostics independently default-off, hidden, volatile and boolean-only', () => {
     expect(readInlineConfig(Config({ ...base, diagnosticsEnabled: true,
       autoAllocationDiagnosticsEnabled: true })).requestDiagnosticsEnabled).toBe(false)
@@ -124,10 +136,13 @@ describe('session search settings', () => {
 })
 
 describe('managed request and compaction settings', () => {
-  it('exposes a bounded assessment budget and optional exact classifier without changing opt-out', () => {
+  it('retains retired Auto settings as hidden legacy values without changing saved data', () => {
     for (const field of ['autoSemanticAssessmentTimeoutMs', 'autoSemanticAssessmentModel'] as const) {
-      expect(Config.dict?.[field]?.meta.hidden).not.toBe(true)
+      expect(Config.dict?.[field]?.meta.hidden).toBe(true)
       expect(Config.dict?.[field]?.meta.volatile).toBe(true)
+    }
+    for (const field of ['followParentModel', 'autoSemanticAssessment', 'autoAllocationEvidence'] as const) {
+      expect(Config.dict?.[field]?.meta.hidden).toBe(true)
     }
     expect(readInlineConfig(Config(base))).toMatchObject({
       autoSemanticAssessmentTimeoutMs: 30000, autoSemanticAssessmentModel: '',

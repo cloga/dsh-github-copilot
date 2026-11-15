@@ -23,6 +23,7 @@ const RC_020_2 = '0.2.0-rc.2'
 const ALPHA_021_4 = '0.2.1-alpha.4'
 const ALPHA_021_5 = '0.2.1-alpha.5'
 const RC_021_3 = '0.2.1-rc.3'
+const RC_022_3 = '0.2.2-rc.3'
 const alphaPins = new Map([
   [ALPHA, 'd347e703908d0406b7a7ef80e3a0e594d86b2215'],
   [ALPHA_015, '5dda764ed3aa172535a7967b06ff95d9cbfe536a'],
@@ -36,6 +37,7 @@ const alphaPins = new Map([
   [ALPHA_021_4, '86a402200d95fecef4529d969836f1fe13c6cb0d'],
   [ALPHA_021_5, '1517a4dbca0a2789ff1d41ba439600f8547d23fa'],
   [RC_021_3, '1f81c047fc48fa190a683e469daa699857e9afe8'],
+  [RC_022_3, '38a6a5c965aa99ab525161efb7cc5cf1fe62fced'],
 ])
 function packageInfo(name: string): { version: string; path: string } {
   const path = realpathSync(require.resolve(`${name}/package.json`))
@@ -82,7 +84,7 @@ const expectedRelease = process.env.DSH_PUBLISHED_CORE_RELEASE ?? runtimeInfo.ve
 // An explicitly requested alpha or tagged-source run MUST execute the file
 // tests. Wrong installed packages/aliases fail identity checks rather than skip.
 const runAlpha = taggedEvidence || alphaPins.has(expectedRelease) || alphaPins.has(runtimeInfo.version)
-const runLegacyFileProjection = runAlpha && ![RC_020, RC_020_2, ALPHA_021_4, ALPHA_021_5, RC_021_3].includes(expectedRelease)
+const runLegacyFileProjection = runAlpha && ![RC_020, RC_020_2, ALPHA_021_4, ALPHA_021_5, RC_021_3, RC_022_3].includes(expectedRelease)
 const evidenceLabel = taggedEvidence ? 'unchanged tagged-source Core fixture' : 'published unmodified Core fixture'
 const MODEL = 'published-fixture-model'
 const contexts: Context[] = []

@@ -100,7 +100,7 @@ describe('Auto model Host integration', () => {
     const messages = [message('Continue.')]
     try {
       await ctx.serial(scope, 'agent/created', { agent, source: 'startup' })
-      await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal },
+      await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal, modelSelection: { provider: PREVIEW, model: AUTO } },
         async () => ({ kind: 'enter' as const, messages }))
       await ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
         async () => ({ provider: PREVIEW, model: AUTO }))
@@ -158,7 +158,7 @@ describe('Auto model Host integration', () => {
     }
     const request = async () => {
       const messages = [message('A child-specific question.')]
-      await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn, step: 1, signal },
+      await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn, step: 1, signal, modelSelection: { provider: PREVIEW, model: explicit?.model ?? 'old-model' } },
         async () => ({ kind: 'enter' as const, messages }))
       return ctx.waterfall(scope, 'agent/request', { agent, turn, step: 1, signal },
         async () => ({ provider: PREVIEW, model: explicit?.model ?? 'old-model', reasoningEffort: ReasoningEffortId('high'), maxTokens: 100 }))
@@ -204,7 +204,7 @@ describe('Auto model Host integration', () => {
     const signal = new AbortController().signal
     const messages = [message('Continue.')]
     try {
-      await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal },
+      await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal, modelSelection: { provider: PREVIEW, model: AUTO } },
         async () => ({ kind: 'enter' as const, messages }))
       await expect(ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
         async () => ({ provider: PREVIEW, model: AUTO }))).rejects.toThrow('COPILOT_AUTO_TOKEN_METER_UNAVAILABLE')
@@ -230,7 +230,7 @@ describe('Auto model Host integration', () => {
       const signal = new AbortController().signal
       const messages = [message('Continue.')]
       try {
-        await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal },
+        await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal, modelSelection: { provider: PREVIEW, model: AUTO } },
           async () => ({ kind: 'enter' as const, messages }))
         await expect(ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
           async () => ({ provider: PREVIEW, model: AUTO }))).rejects.toThrow('COPILOT_AUTO_TOKEN_ESTIMATE_INVALID')
@@ -258,7 +258,7 @@ describe('Auto model Host integration', () => {
     const signal = new AbortController().signal
     try {
       const messages = [message('Short question.')]
-      await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal },
+      await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal, modelSelection: { provider: PREVIEW, model: AUTO } },
         async () => ({ kind: 'enter' as const, messages }))
       await expect(ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
         async () => ({ provider: PREVIEW, model: AUTO }))).resolves.toMatchObject({ model: 'fixture-real' })
@@ -297,7 +297,8 @@ describe('Auto model Host integration', () => {
     const signal = new AbortController().signal
     const enter = async (turn: number, text: string) => {
       const messages = [message(text)]
-      await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn, step: 1, signal },
+      await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn, step: 1, signal,
+        modelSelection: selection.pending ?? header?.config ?? { provider: PREVIEW, model: INTELLIGENCE } },
         async () => ({ kind: 'enter' as const, messages }))
     }
     const request = (turn: number, id: string) => ctx.waterfall(scope, 'agent/request',
@@ -363,7 +364,8 @@ describe('Auto model Host integration', () => {
     const signal = new AbortController().signal
     const enter = (turn: number, text: string) => {
       const messages = [message(text)]
-      return ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn, step: 1, signal },
+      return ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn, step: 1, signal,
+        modelSelection: selection.pending ?? header?.config ?? { provider: PREVIEW, model: AUTO } },
         async () => ({ kind: 'enter' as const, messages }))
     }
     const request = (turn: number, modelId: string) => ctx.waterfall(scope, 'agent/request',
@@ -428,7 +430,8 @@ describe('Auto model Host integration', () => {
     const signal = new AbortController().signal
     const enter = async (turn: number, text: string) => {
       const messages = [message(text)]
-      return ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn, step: 1, signal },
+      return ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn, step: 1, signal,
+        modelSelection: { provider: PREVIEW, model: AUTO } },
         async () => ({ kind: 'enter' as const, messages }))
     }
     const request = (turn: number, step = 1) => ctx.waterfall(scope, 'agent/request',
@@ -484,7 +487,7 @@ describe('Auto model Host integration', () => {
     try {
       const input = [message('Continue.')]
       const result = await ctx.waterfall(scope, 'agent/pre-step',
-        { agent, messages: input, turn: 1, step: 1, signal },
+        { agent, messages: input, turn: 1, step: 1, signal, modelSelection: { provider: PREVIEW, model: AUTO } },
         async () => ({ kind: 'enter' as const, messages: input }))
       expect(result).toMatchObject({ kind: 'enter' })
       if (result.kind !== 'enter') throw new Error('expected enter')
@@ -514,7 +517,7 @@ describe('Auto model Host integration', () => {
     const signal = new AbortController().signal
     try {
       const messages = [message('Explain this symbol.')]
-      await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal },
+      await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal, modelSelection: { provider: PREVIEW, model: AUTO } },
         async () => ({ kind: 'enter' as const, messages }))
       const resolved = await ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
         async () => ({ provider: PREVIEW, model: AUTO }))
@@ -544,7 +547,8 @@ describe('Auto model Host integration', () => {
     const signal = new AbortController().signal
     try {
       const messages = [message('Perform teammate work.')]
-      await ctx.waterfall(scope, 'agent/pre-step', { agent: childAgent, messages, turn: 1, step: 1, signal },
+      await ctx.waterfall(scope, 'agent/pre-step', { agent: childAgent, messages, turn: 1, step: 1, signal,
+        modelSelection: { provider: PREVIEW, model: 'fixture-concrete' } },
         async () => ({ kind: 'enter' as const, messages }))
 
       // Child agent request with its concrete model

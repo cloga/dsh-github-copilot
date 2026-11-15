@@ -60,6 +60,10 @@ export function verifyDesktopPackageGraph(manifest, contracts) {
   const declared = [...new Set([...Object.keys(dependencies), ...Object.keys(peers), ...clientExternals])].sort()
   const requiredPeers = new Set(['@deepseek-ai/dsh-authorization', '@deepseek-ai/schemastery'])
   const currentRuntimeVersion = manifest.engines?.dsh
+  const currentContracts = contracts.filter(contract => contract?.runtimeVersion === currentRuntimeVersion)
+  if (currentContracts.length !== 1) {
+    throw new Error('Exactly one current Desktop shared-package audit is required')
+  }
 
   for (const contract of contracts) {
     if (typeof contract?.id !== 'string' || !/^[a-f0-9]{64}$/u.test(contract.sourceSha256)
@@ -69,7 +73,8 @@ export function verifyDesktopPackageGraph(manifest, contracts) {
       throw new Error('Desktop shared-package contract entry is invalid')
     }
     const audited = Object.keys(contract.auditedPackages).sort()
-    if (JSON.stringify(audited) !== JSON.stringify(declared)) {
+    if ((contract.runtimeVersion === currentRuntimeVersion && JSON.stringify(audited) !== JSON.stringify(declared))
+      || audited.some(name => !declared.includes(name))) {
       throw new Error(`${contract.id}: dependency declarations changed without a shared-package audit`)
     }
     for (const [name, hostVersion] of Object.entries(contract.auditedPackages)) {

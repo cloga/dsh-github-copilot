@@ -314,7 +314,7 @@ describe('independent Copilot account ownership', () => {
   })
   it('reevaluates native managed activity but never bypasses incomplete or blocked route evidence', async () => {
     const f = fixture(A)
-    let running = true, native = false, complete = true
+    let running = true, native = false, managed = true, complete = true
     f.settings.describe = () => [
       { ns: 'github-copilot', revision: 1, value: { activeAccountId: A } },
       { ns: 'llm-pi-ai', revision: 1, value: { providers: {} } },
@@ -325,16 +325,19 @@ describe('independent Copilot account ownership', () => {
       }) } }] })
     f.ctx.provide('sessionProjections', { stateOf: () => complete ? { pending: null } : undefined })
     f.ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'github-copilot-preview', model: 'synthetic' }) })
-    f.ctx.provide('llm', { listProviders: () => native
-      ? [{ id: 'github-copilot-preview' }, { id: 'github-copilot' }] : [{ id: 'github-copilot-preview' }] })
+    f.ctx.provide('llm', { listProviders: () => [
+      ...managed ? [{ id: 'github-copilot-preview' }] : [], ...native ? [{ id: 'github-copilot' }] : [],
+    ] })
     const host = new CopilotAccountsHost(f.ctx)
     expect(await host.switchAccount(B, 1)).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_BUSY', switchable: false })
     expect(await host.get()).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_BUSY', switchable: false })
     running = false
     expect(await host.get()).toMatchObject({ state: 'ready', switchable: true })
     native = true
+    expect(await host.get()).toMatchObject({ state: 'ready', switchable: true })
+    managed = false
     expect(await host.get()).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_ROUTE_BLOCKED', switchable: false })
-    native = false; complete = false
+    managed = true; complete = false
     expect(await host.get()).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_EVIDENCE_INCOMPLETE', switchable: false })
     expect(f.fetch).not.toHaveBeenCalled()
     expect(f.credentials.readRecord).not.toHaveBeenCalled()

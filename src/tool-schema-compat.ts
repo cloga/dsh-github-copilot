@@ -1,17 +1,10 @@
-import type { Context } from '@deepseek-ai/cordis'
-import type { ToolSchema } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, ToolSchema } from '@deepseek-ai/dsh-llm'
 
-import { GITHUB_COPILOT_PROVIDER_ID, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
-import { isPluginPreviewProvider } from './model-protocol.ts'
+import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
 const ESCALATION_FIELDS = new Set(['sandbox_permissions', 'justification'])
 const GOAL_UPDATE_TOOL_NAME = 'update_goal'
 const GOAL_BASE_FIELDS = ['goal_id', 'revision'] as const
 const GOAL_ACTIONS = ['edit', 'pause', 'resume', 'complete', 'blocked'] as const
-
-interface PromptAssemblyView {
-  readonly variables: Readonly<Record<string, string | undefined>>
-  readonly tools: readonly ToolSchema[]
-}
 
 function objectProperties(tool: ToolSchema): Record<string, unknown> | undefined {
   const properties = tool.parameters.properties
@@ -88,24 +81,32 @@ function makeCopilotCompatible(tool: ToolSchema): ToolSchema {
   return withActionSpecificGoalSchema(withoutEscalationFields(tool))
 }
 
-/**
- * Copilot models repeatedly emit optional arguments even when runtime state
- * makes them invalid. Remove unusable sandbox escalation fields and expose the
- * multi-action Goal update as a discriminated union, so each action advertises
- * only its legal fields. Other model providers retain the original schemas.
- */
-export function filterCopilotToolAssembly<T extends PromptAssemblyView>(assembly: T, ownedPreview = false): T {
-  if (assembly.variables.provider !== GITHUB_COPILOT_PROVIDER_ID
-    && !(ownedPreview && assembly.variables.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID)) return assembly
-  const tools = assembly.tools.map(makeCopilotCompatible)
-  if (tools.every((tool, index) => tool === assembly.tools[index])) return assembly
-  return { ...assembly, tools } as T
+function compatibleTools(tools: ToolSchema[]): ToolSchema[]
+function compatibleTools(tools: readonly ToolSchema[]): readonly ToolSchema[]
+function compatibleTools(tools: readonly ToolSchema[]): readonly ToolSchema[] {
+  const filtered = tools.map(makeCopilotCompatible)
+  return filtered.every((tool, index) => tool === tools[index]) ? tools : filtered
 }
 
-/** Install the provider-scoped filter after Agent model selection has run. */
-export function installCopilotToolSchemaCompatibility(ctx: Context): void {
-  ctx.on('system-prompt/assemble', async (_assembly, _context, next) => {
-    const assembled = await next()
-    return filterCopilotToolAssembly(assembled, isPluginPreviewProvider(ctx, assembled.variables.provider ?? ''))
-  })
+/**
+ * Adapt only the managed route's provider-facing declarations. Core retains its
+ * frozen request, conditional-tool selection, execution and recorded history.
+ */
+export function filterCopilotToolRequest(options: GenerateOptions): GenerateOptions {
+  if (options.provider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID) return options
+  const tools = options.tools === undefined ? undefined : compatibleTools(options.tools)
+  const originalHistory = options.toolHistory
+  let toolHistory = originalHistory
+  if (originalHistory !== undefined) {
+    const historyTools = compatibleTools(originalHistory.tools)
+    const updates = originalHistory.updates.map(update => {
+      const additions = compatibleTools(update.additions)
+      return additions === update.additions ? update : { ...update, additions }
+    })
+    if (historyTools !== originalHistory.tools || updates.some((update, index) => update !== originalHistory.updates[index])) {
+      toolHistory = { ...originalHistory, tools: historyTools, updates }
+    }
+  }
+  if (tools === options.tools && toolHistory === originalHistory) return options
+  return { ...options, ...tools === undefined ? {} : { tools }, ...toolHistory === undefined ? {} : { toolHistory } }
 }

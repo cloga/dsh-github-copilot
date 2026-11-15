@@ -11,6 +11,7 @@ import Projections from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import Tools from '@deepseek-ai/dsh-tools'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Group from '@deepseek-ai/cordis-plugin-group'
 import AgentPresets from '@deepseek-ai/dsh-agent-preset-registry'
@@ -21,7 +22,7 @@ import ManualRecovery from '../../src/manual-compaction-recovery.ts'
 const provider = 'github-copilot-preview'
 beforeAll(() => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
-  expect(['0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
+  expect(['0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
 })
 
 test.each([
@@ -37,6 +38,7 @@ test.each([
     await root.plugin(Projections)
     await root.plugin(SystemPrompt, {})
     await root.plugin(Tools, {})
+    await root.plugin(NativeToolExecutor)
     await root.plugin(Agents)
     await root.plugin(AgentLoop, { agents: [] })
     await root.plugin(TokenMeter)

@@ -58,6 +58,7 @@ describe('GitHub Copilot Models client', () => {
     vi.mocked(React.useState).mockReturnValue([false, vi.fn()])
     const closed = descendants(GitHubCopilotCompactAccount({ remote: remote as never, accountsRemote, account, continuationRemote, locale: 'zh-CN' }))
     expect(closed.filter(element => element.type === 'button').map(element => element.props.children)).toEqual(['Manage'])
+    expect(closed.some(element => element.props.children === 'Account catalog: 0 models')).toBe(true)
     expect(closed.filter(element => element.type === CopilotAccountsPanel)).toHaveLength(1)
     vi.mocked(React.useState).mockReturnValue([true, vi.fn()])
     const open = descendants(GitHubCopilotCompactAccount({ remote: remote as never, accountsRemote, account, continuationRemote, locale: 'zh-CN' }))
@@ -129,18 +130,17 @@ describe('GitHub Copilot Models client', () => {
     return { models, preferences }
   }
 
-  it('saves a high-cost row through its narrow Remote without discovery and retains exclusion state', async () => {
+  it('does not expose retired Auto cost controls or treat saved cost marks as model availability', () => {
     const { models, preferences } = preferencesFixture()
-    const known = { ...preferences, highCostModelIds: [] }
+    const known = { ...preferences, highCostModelIds: ['enabled', 'retired-only'] }
     const remote = modelRemote()
-    remote.setModelHighCost.mockResolvedValue({ ok: true, value: { ...known, highCostModelIds: ['enabled'], revision: 2 } })
     const panel = panelHarness(remote, face => GitHubCopilotModelPreferencesPanel({ remote: face as never,
       models, preferences: known }))
-    await descendants(panel.render()).find(element => element.props['data-high-cost-model-id'] === 'enabled')!
-      .props.onChange({ currentTarget: { checked: true } })
-    expect(remote.setModelHighCost).toHaveBeenCalledExactlyOnceWith('enabled', true)
-    expect(descendants(panel.render()).find(element => element.props['data-high-cost-model-id'] === 'enabled')?.props.checked).toBe(true)
-    expect(descendants(panel.render()).find(element => element.props['data-model-id'] === 'excluded')?.props.children).toBe('Restore')
+    const elements = descendants(panel.render())
+    expect(elements.some(element => element.props['data-high-cost-model-id'])).toBe(false)
+    expect(elements.some(element => element.props['data-model-id'] === 'retired-only')).toBe(false)
+    expect(elements.find(element => element.props['data-model-id'] === 'excluded')?.props.children).toBe('Restore')
+    expect(remote.setModelHighCost).not.toHaveBeenCalled()
     expect(remote.status).not.toHaveBeenCalled()
     expect(remote.discoverModels).not.toHaveBeenCalled()
     expect(remote.ensureModels).not.toHaveBeenCalled()
@@ -265,20 +265,19 @@ describe('GitHub Copilot Models client', () => {
     const remote = modelRemote()
     const first = deferred<{ ok: true; value: typeof preferences }>()
     remote.setModelExcluded.mockReturnValueOnce(first.promise)
-    remote.setModelHighCost.mockResolvedValue({ ok: true, value: { ...preferences, revision: 3,
-      excludedModelIds: [...preferences.excludedModelIds, 'enabled'], highCostModelIds: ['excluded'] } })
+    remote.setModelExcluded.mockResolvedValueOnce({ ok: true, value: { ...preferences, revision: 3,
+      excludedModelIds: ['absent', 'enabled'] } })
     const panel = panelHarness(remote, face => GitHubCopilotModelPreferencesPanel({ remote: face as never, models, preferences }))
     const action = (id: string) => descendants(panel.render()).find(element => element.props['data-model-id'] === id)!
     const firstSave = action('enabled').props.onClick()
     expect(action('excluded').props.disabled).toBe(false)
-    const secondSave = descendants(panel.render()).find(element => element.props['data-high-cost-model-id'] === 'excluded')!
-      .props.onChange({ currentTarget: { checked: true } })
+    const secondSave = action('excluded').props.onClick()
     expect(action('excluded').props.children).toBe('Waiting…')
-    expect(remote.setModelHighCost).not.toHaveBeenCalled()
+    expect(remote.setModelExcluded).toHaveBeenCalledTimes(1)
     first.resolve({ ok: true, value: { ...preferences, revision: 2,
       excludedModelIds: [...preferences.excludedModelIds, 'enabled'] } })
     await Promise.all([firstSave, secondSave])
-    expect(remote.setModelHighCost).toHaveBeenCalledExactlyOnceWith('excluded', true)
+    expect(remote.setModelExcluded).toHaveBeenLastCalledWith('excluded', false)
     expect(action('enabled').props.children).toBe('Restore')
     expect(remote.status).not.toHaveBeenCalled()
   })
@@ -326,7 +325,8 @@ describe('GitHub Copilot Models client', () => {
   function modelRemote(discoverModels: ReturnType<typeof vi.fn> = vi.fn(async () => accountResult({ state: 'ready', models: [], rejected: [] }))) {
     return { discoverModels, ensureModels: vi.fn(async () => accountResult({ state: 'ready', models: [], rejected: [] })),
       status: vi.fn(), reconcile: vi.fn(), start: vi.fn(), cancel: vi.fn(), signOut: vi.fn(),
-      excludeModel: vi.fn(), restoreModel: vi.fn(), setModelExcluded: vi.fn(), setModelHighCost: vi.fn() }
+      excludeModel: vi.fn(), restoreModel: vi.fn(), setModelExcluded: vi.fn(), setModelHighCost: vi.fn(),
+      previewNativeModelSync: vi.fn(), applyNativeModelSync: vi.fn() }
   }
   // Tiny deterministic hook host: component state/ref identity and effect cleanup,
   // without mounting a browser or invoking any real Remote implementation.
@@ -1063,9 +1063,10 @@ describe('GitHub Copilot Models client', () => {
     expect(text).toContain('UNSUPPORTED_ENDPOINT')
     expect(text).toContain('COPILOT_MODEL_METADATA_REJECTED')
     expect(text).not.toContain('secret=value')
-    expect(text).toContain('Select models under GitHub Copilot')
-    expect(text).not.toContain(GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
+    expect(text).toContain(GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
+    expect(text).toContain('native github-copilot route uses a separate catalog')
     expect(text).toContain('does not prove')
+    expect(text).not.toContain('hosted search')
     expect(text).not.toContain('Snapshot time')
     expect(elements.some(element => element.type === 'time' || element.type === GitHubCopilotAccountModelsUpdatedAt)).toBe(false)
     expect(elements.some(element => element.type === 'script' || element.props.dangerouslySetInnerHTML !== undefined)).toBe(false)
@@ -1419,12 +1420,11 @@ describe('GitHub Copilot Models client', () => {
     const disposeRemote = vi.fn(async () => undefined)
     let cleanupUi: (() => void) | undefined
     const disposeUi = vi.fn(async () => { cleanupUi?.(); cleanupUi = undefined })
-    const disposePresentation = vi.fn(async () => undefined)
     const registrations = new Map<string, ReturnType<typeof vi.fn>>()
     const injections = new Map<string, () => unknown>()
     const register = vi.fn((options: { name: string; id?: string; order?: number }, _component: unknown) => {
       const dispose = vi.fn()
-      const key = options.id === 'github-copilot-search-routing'
+      const key = options.id === 'github-copilot-options'
         ? `${options.name}:${options.id}` : options.name
       registrations.set(key, dispose)
       return dispose
@@ -1446,17 +1446,16 @@ describe('GitHub Copilot Models client', () => {
       inject: ReturnType<typeof vi.fn>
     }
     const inject = vi.fn((services: string[], callback: (value: unknown) => unknown) => {
-      if (services.includes('uiConversation')) {
-        return Object.assign(new Promise<void>(() => {}), { dispose: disposePresentation })
-      }
-      if (services.includes('remote.githubCopilotUsage') || services.includes('remote.githubCopilotDiagnostics')) {
+      if (services.includes('remote.githubCopilotUsage') || services.includes('remote.githubCopilotDiagnostics')
+        || services.includes('uiConversation') || services.includes('remote.githubCopilotTurnSelection')
+        || services.length === 1 && services[0] === 'remote.githubCopilotSessionContinuation') {
         return Object.assign(new Promise<void>(() => {}), { dispose: vi.fn() })
       }
       const cleanup = callback(ctx)
-      if (services.includes('remote.settings') || services.includes('remote.githubCopilotTurnSelection')
-        || services.includes('remote.githubCopilotReplayRecovery')
+      if (services.includes('remote.githubCopilotReplayRecovery')
         || services.length === 2 && services[0] === 'remote.githubCopilotSessionContinuation' && services[1] === 'slots'
-        || services.length === 1 && services[0] === 'slots') {
+        || services.length === 1 && services[0] === 'slots'
+        || services.length === 2 && services[0] === 'remote' && services[1] === 'slots') {
         return Object.assign(Promise.resolve(), { dispose: async () => { if (typeof cleanup === 'function') cleanup() } })
       }
       if (typeof cleanup === 'function') cleanupUi = cleanup as () => void
@@ -1495,47 +1494,52 @@ describe('GitHub Copilot Models client', () => {
       on: vi.fn(() => vi.fn()),
       inject,
     }
-    return { ctx, disposeRemote, disposeUi, disposePresentation, register, registrations, injections }
+    return { ctx, disposeRemote, disposeUi, register, registrations, injections }
   }
 
-  it('warns before native Copilot re-add without pretending to disable Core Save or creating another account owner', async () => {
+  it('guides native Copilot setup without moving the account panel into a potentially hidden draft', async () => {
     const { ctx, register } = clientContext(['settings.models.provider-card', 'settings.models.footer'])
     const dispose = await apply(ctx as never)
     const render = register.mock.calls.find(([options]) => options.name === 'settings.models.provider-card')?.[1] as (props: object) => ReactElement
     const draft = { provider: { provider: GITHUB_COPILOT_PROVIDER_ID, displayName: 'GitHub Copilot', settingsNs: 'llm-pi-ai' }, configured: false, keyConfigured: false }
     const warning = render(draft)
     expect(warning.props['data-dsh-github-copilot-native-add-warning']).toBe(true)
-    expect(warning.props.children).toContain('another model group')
-    expect(warning.props.children).toContain('cannot disable the native Save action')
-    expect(warning.type).not.toBe(GitHubCopilotAccountSurface)
+    expect(warning.props.children).toContain('canonical account')
+    expect(warning.props.children).toContain('account panel')
+    expect(warning.props.children).toContain('separately selected plugin account')
+    expect(warning.props.children).toContain('GitHub Copilot (multi-account)')
+    expect(warning.props.children).toContain('Both routes can coexist')
+    expect(warning.type).toBe('p')
     expect(render({ ...draft, provider: { ...draft.provider, provider: 'openai' } }).props['data-dsh-github-copilot-native-add-warning']).toBeUndefined()
     expect(render({ ...draft, configured: true }).type).toBe(GitHubCopilotAccountSurface)
     await dispose()
   })
 
-  it('captures stable search Remotes instead of resetting the card on parent renders', async () => {
+  it('does not depend on retired settings or search Remotes for the diagnostics page', async () => {
     const { ctx, register } = clientContext(['settings.models.footer'])
     const settings = vi.fn(() => ({ describe: vi.fn(), mutate: vi.fn() }))
     const routing = vi.fn(() => ({ providers: vi.fn() }))
     Object.defineProperty(ctx.remote, 'settings', { get: settings })
     Object.defineProperty(ctx.remote, 'githubCopilotSearchRouting', { get: routing })
     const dispose = await apply(ctx as never)
-    const render = register.mock.calls.find(([options]) => options.id === 'github-copilot-search-routing')?.[1] as () => ReactElement
-    const first = render(), second = render()
-    expect(first.props.settings).toBe(second.props.settings)
-    expect(first.props.routing).toBe(second.props.routing)
-    expect(settings).toHaveBeenCalledTimes(1)
-    expect(routing).toHaveBeenCalledTimes(1)
-    expect(ctx.inject).toHaveBeenCalledWith(['remote.settings', 'remote.githubCopilotSearchRouting', 'slots'], expect.any(Function))
+    const render = register.mock.calls.find(([options]) => options.id === 'github-copilot-options')?.[1] as () => ReactElement
+    const first = render()
+    expect(first.props).not.toHaveProperty('settings')
+    expect(settings).not.toHaveBeenCalled()
+    expect(routing).not.toHaveBeenCalled()
+    expect(ctx.inject).toHaveBeenCalledWith(['slots'], expect.any(Function))
+    expect(first.props).not.toHaveProperty('routing')
     expect(first.props).not.toHaveProperty('copilot')
     await dispose()
   })
-  it('declares account namespace access for both Models and Credits injection scopes', async () => {
+  it('does not make native Credits or context diagnostics depend on managed services', async () => {
     const { ctx } = clientContext(['settings.models.footer'])
     const dispose = await apply(ctx as never)
-    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilot', 'remote.githubCopilotAccounts', 'remote.githubCopilotSessionContinuation', 'slots'], expect.any(Function))
-    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotUsage', 'remote.githubCopilotAccounts', 'remote.githubCopilotSessionAccount', 'remote.githubCopilotSessionContinuation', 'slots'], expect.any(Function))
-    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotSessionContinuation', 'slots'], expect.any(Function))
+    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilot', 'remote.githubCopilotAccounts', 'slots'], expect.any(Function))
+    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotUsage', 'slots'], expect.any(Function))
+    expect(ctx.inject).not.toHaveBeenCalledWith(['remote.githubCopilotSessionContinuation', 'slots'], expect.any(Function))
+    expect(ctx.inject).toHaveBeenCalledWith(['remote', 'slots'], expect.any(Function))
+    expect(ctx.inject.mock.calls.filter(([services]) => services.length === 1 && services[0] === 'slots')).toHaveLength(1)
     await dispose()
   })
 
@@ -1568,6 +1572,7 @@ describe('GitHub Copilot Models client', () => {
         const next = render(props)
         expect(next.props.remote).toBe(first.props.remote)
         expect(next.props.continuationRemote).toBe(first.props.continuationRemote)
+        expect(next.props.continuationContext).toBe(first.props.continuationContext)
         expect(next.props.seat).toBe(first.props.seat)
         surfaces.mount(next.props.seat, token, next.props.remote)
         expect(surfaces.getSnapshot()!.account).toBe(account)
@@ -1575,7 +1580,7 @@ describe('GitHub Copilot Models client', () => {
         expect(account.getSnapshot().view?.modelPreferences).toEqual(view.modelPreferences)
       }
       expect(namespace).toHaveBeenCalledTimes(1)
-      expect(continuation).toHaveBeenCalledTimes(1)
+      expect(continuation).not.toHaveBeenCalled()
       expect(status).toHaveBeenCalledTimes(1)
       expect(ensureModels).not.toHaveBeenCalled()
       expect(discoverModels).not.toHaveBeenCalled()
@@ -1583,20 +1588,20 @@ describe('GitHub Copilot Models client', () => {
       await dispose()
     })
 
-  it('moves search routing between the bundle page and Models fallback as the bundle slot appears and disappears', async () => {
+  it('moves plugin settings between the bundle page and Models fallback as the bundle slot appears and disappears', async () => {
     const { ctx, register, registrations, injections } = clientContext(['settings.models.footer'])
     const dispose = await apply(ctx as never)
-    const footer = registrations.get('settings.models.footer:github-copilot-search-routing')!
+    const footer = registrations.get('settings.models.footer:github-copilot-options')!
     const unmountBundle = injections.get('plugins.bundle.config')?.() as (() => void)
     expect(register).toHaveBeenCalledWith({
       name: 'plugins.bundle.config', key: 'dsh-github-copilot',
     }, expect.any(Function))
     expect(footer).toHaveBeenCalledOnce()
     expect(registrations.get('plugins.bundle.config')).toBeDefined()
-    expect(register.mock.calls.filter(([options]) => options.id === 'github-copilot-search-routing')).toHaveLength(1)
+    expect(register.mock.calls.filter(([options]) => options.id === 'github-copilot-options')).toHaveLength(1)
     unmountBundle()
     expect(registrations.get('plugins.bundle.config')).toHaveBeenCalledOnce()
-    expect(register.mock.calls.filter(([options]) => options.id === 'github-copilot-search-routing')).toHaveLength(2)
+    expect(register.mock.calls.filter(([options]) => options.id === 'github-copilot-options')).toHaveLength(2)
     await dispose()
   })
 
@@ -1706,27 +1711,15 @@ describe('GitHub Copilot Models client', () => {
     expect(fallback).toHaveBeenCalledOnce()
   })
 
-  it('does not delay authorization while optional Auto projections wait for Core services', async () => {
-    const { ctx, disposeRemote, disposeUi, disposePresentation } = clientContext(['settings.section'])
+  it('mounts account and usage evidence without restoring plugin-owned Auto UI', async () => {
+    const { ctx, disposeRemote, disposeUi } = clientContext(['settings.section'])
     const dispose = await apply(ctx as never)
     expect(ctx.inject).toHaveBeenCalledWith(['uiConversation', 'slots'], expect.any(Function))
     expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotTurnSelection', 'remote.githubCopilotSessionAccount', 'slots'], expect.any(Function))
     expect(ctx.inject).not.toHaveBeenCalledWith(['remote.githubCopilotDualModel', 'slots'], expect.any(Function))
-    expect(disposePresentation).not.toHaveBeenCalled()
     await dispose()
-    expect(disposePresentation).toHaveBeenCalledOnce()
     expect(disposeUi).toHaveBeenCalledOnce()
     expect(disposeRemote).toHaveBeenCalledOnce()
-  })
-
-  it('registers and disposes Auto actions while the optional conversation fiber remains pending', async () => {
-    const { ctx, registrations } = clientContext(['conversation.chat.assistant-actions'])
-    const dispose = await apply(ctx as never)
-    const remove = registrations.get('conversation.chat.assistant-actions')
-    expect(remove).toBeTypeOf('function')
-    expect(remove).not.toHaveBeenCalled()
-    await dispose()
-    expect(remove).toHaveBeenCalledOnce()
   })
 
   it('mounts its Remote contribution and registers the rc.1 provider-card seat', async () => {

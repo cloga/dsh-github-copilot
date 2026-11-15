@@ -10,6 +10,7 @@ import { verifyAgentContract } from '../../scripts/verify-agent-contract.mjs'
 test('describes actual package metadata without claiming a release exists', async () => {
   const result = await describeRepository()
   const pkg = JSON.parse(await readFile(join(repositoryRoot, 'package.json')))
+  const baseline = JSON.parse(await readFile(join(repositoryRoot, 'deployment-baseline.json')))
   assert.equal(result.package.version, pkg.version)
   assert.equal(result.release.tag, `v${pkg.version}`)
   assert.equal(result.release.publicationVerified, false)
@@ -19,34 +20,58 @@ test('describes actual package metadata without claiming a release exists', asyn
   assert.equal(result.acceptance.executed, false)
   assert.equal(result.acceptance.executionVerified, false)
   assert.equal(result.acceptance.independenceVerified, false)
-  assert.deepEqual(result.admittedReleases, ['0.2.1-rc.3'])
-  assert.deepEqual(result.baselines.map(baseline => baseline.release), [
-    '0.1.1-rc.2', '0.1.2-rc.1', '0.1.3-alpha.1', '0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3',
-  ])
+  assert.deepEqual(result.acceptance.liveUi, {
+    schemaVersion: 2, ci: 'guarded-exact-head', source: 'report-consistency-only',
+    browserManualRequireLiveContract: true, automaticClosure: false,
+    upgradeSource: 'exact-github-release-url-or-verified-cache',
+    appLifecycle: 'fresh-discovery-consented-launch-safe-skip-rediscovery-final',
+    disposition: 'separate-explicit-residual-risk-no-required-waiver',
+    maxNavigationMethods: 2, maxObservationMs: 120000,
+  })
+  assert.deepEqual(result.admittedReleases, baseline.supportedBaselines.dsh.admittedReleases)
+  assert.deepEqual(result.baselines.map(item => item.release),
+    baseline.supportedBaselines.dsh.baselines.map(item => item.release))
 })
 
 test('plans only known task IDs with unexecuted argument arrays', async () => {
   const plan = await planTask('models')
   assert.ok(plan.commands.every(command => command.executed === false && Array.isArray(command.argv)))
   for (const testFile of ['tests/account-model-catalog.spec.ts', 'tests/account-model-source.spec.ts', 'tests/preview-route.spec.ts', 'tests/pi-provider-bridge.spec.ts']) {
-    assert.ok(plan.commands.some(command => command.argv.includes(testFile)), `Missing general model gate: ${testFile}`)
+    assert.ok(plan.tests.includes(testFile), `Missing general model gate: ${testFile}`)
   }
   await assert.rejects(planTask('__proto__'), /Unknown task/)
-  assert.ok((await planTask('tooling')).commands.some(command => command.argv[1] === 'test:scripts'))
+  assert.deepEqual((await planTask('tooling')).commands.map(command => command.argv.slice(3)), [
+    ['--task', 'TASK_ID', '--environment', 'local-auxiliary', '--operation', 'scripts-test'],
+    ['--task', 'TASK_ID', '--environment', 'github-actions-evidence', '--operation', 'ci-evidence',
+      '--head', 'FULL_40_CHARACTER_COMMIT'],
+  ])
+  assert.ok(!(await planTask('tooling')).commands.some(command => command.argv.includes('pnpm')))
   assert.deepEqual((await planTask('tooling')).acceptance, (await describeRepository()).acceptance)
 })
 
 test('context diagnostics preserve shared usage and include native whole-turn evidence', async () => {
   const plan = await planTask('context')
-  assert.ok(plan.commands.some(command => command.argv.includes('tests/fixtures/turn-usage-core.fixture.ts')))
+  assert.ok(plan.tests.includes('tests/fixtures/turn-usage-core.fixture.ts'))
   const contract = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
   assert.ok(contract.tasks.context.risk.includes('Never filter or delay shared native usage'))
   await verifyAgentContract()
 })
 
+test('guarded plans retain required read-only iteration review preflight', async () => {
+  const plan = await planTask('autorouting')
+  assert.deepEqual(plan.preflightChecks, [{
+    argv: ['node', 'scripts/iteration-review.mjs', '--report', 'docs/auto-iteration-review.json'],
+    executed: false,
+    requiredBeforeImplementation: true,
+  }])
+  assert.ok(plan.commands.every(command => command.argv[1] === 'scripts/agent.mjs'
+    && command.argv[2] === 'guard' && command.executed === false))
+  assert.deepEqual((await planTask('tooling')).preflightChecks, [])
+})
+
 test('multi-account plan retains explicit direct-grant ownership and UI boundaries', async () => {
   const plan = await planTask('accounts')
-  assert.ok(plan.commands.some(command => command.argv.includes('tests/copilot-accounts-card.spec.ts')))
+  assert.ok(plan.tests.includes('tests/copilot-accounts-card.spec.ts'))
   const contract = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
   assert.match(contract.tasks.accounts.risk, /never grant copies/)
   assert.match(contract.tasks.accounts.risk, /Models alone/)
@@ -63,7 +88,7 @@ test('multi-account plan retains explicit direct-grant ownership and UI boundari
 
 test('upload evidence retains request scope, cleanup and local-only observation boundaries', async () => {
   const plan = await planTask('authorization')
-  assert.ok(plan.commands.some(command => command.argv.includes('tests/request-upload-evidence.spec.ts')))
+  assert.ok(plan.tests.includes('tests/request-upload-evidence.spec.ts'))
   const contract = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
   assert.ok(contract.tasks.authorization.read.includes('src/request-upload-evidence.ts'))
   assert.match(contract.tasks.authorization.requestBodyEvidenceBoundary, /dispose subscriptions/)
@@ -74,7 +99,7 @@ test('upload evidence retains request scope, cleanup and local-only observation 
 test('automatic recovery plan preserves explicit composition and bounded capacity-only escalation', async () => {
   const plan = await planTask('compaction')
   for (const file of ['tests/preview-route.spec.ts', 'tests/fixtures/scoped-compaction-core.fixture.ts']) {
-    assert.ok(plan.commands.some(command => command.argv.includes(file)))
+    assert.ok(plan.tests.includes(file))
   }
   assert.match(plan.automaticRecoveryBoundary, /Default-on only in the explicitly selected replacement/)
   assert.match(plan.automaticRecoveryBoundary, /at most 16 calls including the failed first attempt/)
@@ -99,10 +124,9 @@ test('important updates carry release follow-through without a second approval p
   assert.deepEqual(policy.requiredConditions, ['reviewed-merge', 'green-required-ci', 'fresh-annotated-tag', 'verified-release-assets'])
   assert.equal(policy.localGateWhenRegistryBlocked, 'record-environment-blocker-and-require-complete-github-ci')
   assert.deepEqual(policy.completionEvidence, ['published-release-url', 'tag-and-commit', 'asset-and-sha256', 'npm-version-and-integrity'])
-  assert.ok(plan.commands.some(command => command.argv[0] === 'node' && command.argv[1] === '--test'
-    && command.argv.includes('tests/scripts/npm-distribution.test.mjs')))
-  assert.ok(!plan.commands.some(command => command.argv.includes('vitest')
-    && command.argv.some(arg => arg.startsWith('tests/scripts/'))))
+  assert.ok(plan.tests.includes('tests/scripts/npm-distribution.test.mjs'))
+  assert.ok(plan.commands.every(command => command.argv[1] === 'scripts/agent.mjs'
+    && command.argv[2] === 'guard'))
   for (const boundary of ['merge', 'release']) {
     assert.ok(!plan.boundaries.approvalRequired.includes(boundary))
   }
@@ -111,6 +135,42 @@ test('important updates carry release follow-through without a second approval p
   }
   assert.match(plan.delivery, /reviewed merge without a separate approval prompt; important updates continue to verified Release/)
   assert.ok(plan.commands.every(command => command.executed === false))
+})
+
+test('workspace policy preserves isolation, existing files and tool-specific delivery boundaries', async () => {
+  const description = await describeRepository()
+  assert.deepEqual(description.boundaries.workspaceIsolation, {
+    default: 'app-managed-worktree-when-authorized',
+    nonWorktree: 'inspect-and-preserve-shared-workspace',
+    temporaryArtifacts: 'session-owned-outside-checkout',
+    existingFiles: 'preserve-never-hide-or-delete-for-gates',
+    delivery: 'review-explicit-commit-and-respect-tool-policy',
+    escalation: 'once-for-genuine-blocker-or-risk',
+    enforcement: 'advisory-not-a-sandbox',
+  })
+  const root = await mkdtemp(join(tmpdir(), 'copilot-workspace-policy-'))
+  try {
+    const original = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
+    const guide = await readFile(join(repositoryRoot, 'AGENTS.md'), 'utf8')
+    await writeFile(join(root, 'package.json'), await readFile(join(repositoryRoot, 'package.json')))
+    await writeFile(join(root, 'AGENTS.md'), guide)
+    for (const mutate of [
+      contract => { delete contract.boundaries.workspaceIsolation },
+      contract => { contract.boundaries.workspaceIsolation.temporaryArtifacts = 'inside-checkout' },
+      contract => { contract.boundaries.workspaceIsolation.existingFiles = 'delete-to-pass' },
+      contract => { contract.boundaries.workspaceIsolation.delivery = 'bypass-tool-policy' },
+      contract => { contract.boundaries.workspaceIsolation.enforcement = 'filesystem-sandbox' },
+      contract => { contract.boundaries.workspaceIsolation.allowUnapprovedCheckout = true },
+    ]) {
+      const contract = structuredClone(original)
+      mutate(contract)
+      await writeFile(join(root, 'agent-contract.json'), JSON.stringify(contract))
+      await assert.rejects(verifyAgentContract(root), /workspace isolation/)
+    }
+    await writeFile(join(root, 'agent-contract.json'), JSON.stringify(original))
+    await writeFile(join(root, 'AGENTS.md'), guide.replace('## Session isolation and temporary artifacts (#442)', '## Removed'))
+    await assert.rejects(verifyAgentContract(root), /workspace isolation/)
+  } finally { await rm(root, { recursive: true, force: true }) }
 })
 
 test('manual replay recovery plan retains explicit consent and rejects weakened boundaries', async () => {
@@ -230,7 +290,45 @@ test('every task plan carries the plugin-only implementation boundary', async ()
   }
   for (const task of Object.keys(description.tasks)) {
     assert.deepEqual((await planTask(task)).boundaries.implementationScope, policy)
+    assert.ok((await planTask(task)).commands.every(command => command.argv[2] === 'guard'))
   }
+})
+
+test('contract validation preserves quota and rejects plugin-owned parent-child policy', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'copilot-native-child-policy-'))
+  try {
+    const original = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
+    await writeFile(join(root, 'package.json'), await readFile(join(repositoryRoot, 'package.json')))
+    for (const mutate of [
+      contract => { contract.boundaries.confirmedProductScope.parentChildPolicyOwner = undefined },
+      contract => { contract.boundaries.confirmedProductScope.parentChildPolicyOwner = 'plugin' },
+      contract => { contract.boundaries.confirmedProductScope.preserve = contract.boundaries.confirmedProductScope.preserve.filter(value => value !== 'copilot-account-quota') },
+      contract => { contract.boundaries.confirmedProductScope.enhancementPolicy = 'remove-all' },
+    ]) {
+      const contract = structuredClone(original)
+      mutate(contract)
+      await writeFile(join(root, 'agent-contract.json'), JSON.stringify(contract))
+      await assert.rejects(verifyAgentContract(root), /confirmed Copilot-only model integration scope/)
+    }
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test('contract validation preserves the explicitly confirmed native model sync boundary', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'copilot-native-sync-policy-'))
+  try {
+    const original = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
+    await writeFile(join(root, 'package.json'), await readFile(join(repositoryRoot, 'package.json')))
+    for (const mutate of [
+      contract => { delete contract.tasks.models.nativeModelSyncBoundary },
+      contract => { contract.tasks.models.nativeModelSyncBoundary = 'Automatically replace every provider.' },
+      contract => { contract.tasks.models.tests = contract.tasks.models.tests.filter(value => !value.includes('native-model-sync')) },
+    ]) {
+      const contract = structuredClone(original)
+      mutate(contract)
+      await writeFile(join(root, 'agent-contract.json'), JSON.stringify(contract))
+      await assert.rejects(verifyAgentContract(root), /native model sync/)
+    }
+  } finally { await rm(root, { recursive: true, force: true }) }
 })
 
 test('contract validation rejects removal or weakening of the plugin-only boundary', async () => {
@@ -268,13 +366,16 @@ test('attribution names the actual tool without inventing a co-author email', ()
 test('doctor fails missing dependencies but reports build and runtime evidence honestly', async () => {
   const root = await mkdtemp(join(tmpdir(), 'copilot-doctor-'))
   try {
-    for (const path of ['agent-contract.json', 'package.json', 'deployment-baseline.json']) {
+    for (const path of ['agent-contract.json', 'package.json', 'deployment-baseline.json', 'agent-execution-policy.json']) {
       await writeFile(join(root, path), await readFile(join(repositoryRoot, path)))
     }
     const missing = await doctor(root, '22.0.0')
     assert.equal(missing.ok, false)
     assert.equal(missing.checks.find(check => check.id === 'node-runtime').status, 'fail')
     assert.equal(missing.checks.find(check => check.id === 'build:lib/index.js').status, 'warning')
+    assert.match(missing.next, /guarded environment/)
+    assert.ok(missing.checks.filter(check => check.id.startsWith('dependency:'))
+      .every(check => !check.next.includes('pnpm install')))
     for (const name of ['typescript', 'vitest', 'tsdown', '@earendil-works/pi-ai', '@deepseek-ai/dsh-llm-pi-ai']) {
       const path = join(root, 'node_modules', name)
       await mkdir(path, { recursive: true })

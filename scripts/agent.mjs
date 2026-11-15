@@ -8,15 +8,17 @@ const readJson = async (root, path) => JSON.parse(await readFile(resolve(root, p
 
 /** Read repository-owned metadata only. Never inspect DSH_HOME, credentials or live services. */
 export async function describeRepository(root = repositoryRoot) {
-  const [contract, pkg, baseline] = await Promise.all([
+  const [contract, pkg, baseline, executionPolicy] = await Promise.all([
     readJson(root, 'agent-contract.json'),
     readJson(root, 'package.json'),
     readJson(root, 'deployment-baseline.json'),
+    readJson(root, 'agent-execution-policy.json'),
   ])
   return {
     schemaVersion: 1,
     kind: 'repository-contract',
     package: { name: pkg.name, version: pkg.version, node: pkg.engines.node, packageManager: pkg.packageManager },
+    executionPolicy,
     entrypoints: contract.entrypoints,
     boundaries: contract.boundaries,
     acceptance: contract.acceptance,
@@ -41,17 +43,12 @@ export async function planTask(task, root = repositoryRoot) {
   const description = await describeRepository(root)
   const area = Object.hasOwn(description.tasks, task) ? description.tasks[task] : undefined
   if (area === undefined) throw new Error(`Unknown task. Choose: ${Object.keys(description.tasks).join(', ')}`)
-  const scriptTests = area.tests.filter(path => path.startsWith('tests/scripts/'))
-  const unitTests = area.tests.filter(path => !path.startsWith('tests/scripts/'))
   const commands = [
-    ...area.iterationReview ? [['node', 'scripts/iteration-review.mjs', '--report', area.iterationReview.report]] : [],
-    ['pnpm', 'install', '--frozen-lockfile'],
-    ...(area.tests.length === 0 ? [['pnpm', 'test:scripts']] : []),
-    ...(unitTests.length ? [['pnpm', 'exec', 'vitest', 'run', ...unitTests]] : []),
-    ...(scriptTests.length ? [['node', '--test', ...scriptTests]] : []),
-    ['pnpm', 'verify'],
-    ['pnpm', 'pack', '--pack-destination', 'artifacts'],
-    ['pnpm', 'verify:tarball', '--', `artifacts/${description.release.tarball}`],
+    ['node', 'scripts/agent.mjs', 'guard', '--task', 'TASK_ID',
+      '--environment', 'local-auxiliary', '--operation', 'scripts-test'],
+    ['node', 'scripts/agent.mjs', 'guard', '--task', 'TASK_ID',
+      '--environment', 'github-actions-evidence', '--operation', 'ci-evidence',
+      '--head', 'FULL_40_CHARACTER_COMMIT'],
   ]
   return {
     schemaVersion: 1,
@@ -59,8 +56,14 @@ export async function planTask(task, root = repositoryRoot) {
     task,
     ...area,
     cwd: 'repository root',
+    preflightChecks: area.iterationReview ? [{
+      argv: ['node', 'scripts/iteration-review.mjs', '--report', area.iterationReview.report],
+      executed: false,
+      requiredBeforeImplementation: area.iterationReview.requiredBeforeImplementation,
+    }] : [],
     commands: commands.map(argv => ({ argv, executed: false })),
     acceptance: description.acceptance,
+    executionPolicy: description.executionPolicy,
     delivery: 'Issue -> feature branch -> focused tests -> complete gate -> reviewed merge without a separate approval prompt; important updates continue to verified Release and npm integrity without a second release prompt, unless user scope excludes it. Other changes need an explicit release request. Ask before profile installation or interrupting restart; report any publication blocker.',
     boundaries: description.boundaries,
   }
@@ -77,7 +80,8 @@ export async function doctor(root = repositoryRoot, nodeVersion = process.versio
       const pkg = await readJson(root, `node_modules/${name}/package.json`)
       checks.push({ id: `dependency:${name}`, status: 'pass', detail: pkg.version, next: null })
     } catch {
-      checks.push({ id: `dependency:${name}`, status: 'fail', detail: 'missing-or-unreadable', next: 'pnpm install --frozen-lockfile' })
+      checks.push({ id: `dependency:${name}`, status: 'fail', detail: 'missing-or-unreadable',
+        next: 'Use the guarded GitHub Actions evidence check for full verification; do not restore dependencies on a local checkout.' })
     }
   }
   for (const path of ['lib/index.js', 'lib/client.js', 'lib/remote.js']) {
@@ -92,7 +96,7 @@ export async function doctor(root = repositoryRoot, nodeVersion = process.versio
     package: description.package,
     checks,
     notChecked: ['GitHub authentication/CI/Release', 'npm ownership/authentication/publication', 'live DSH profile and loaded plugin', 'Copilot account availability', 'model transport', 'hosted search', 'build freshness', 'pnpm executable version'],
-    next: 'Run pnpm verify. Do not treat this report as runtime or release validation.',
+    next: 'Choose an explicit guarded environment and task. Use local-auxiliary only for dependency-free script tests; full verification requires actual GitHub Actions evidence.',
   }
 }
 
@@ -111,6 +115,14 @@ export async function main(args = process.argv.slice(2)) {
     const { acceptanceMain } = await import('./acceptance.mjs')
     return acceptanceMain(rest.slice(1))
   }
+  if (command === 'guard') {
+    const { guardErrorResult, guardMain } = await import('./environment-guard.mjs')
+    try { return await guardMain(rest.slice(1)) }
+    catch (error) {
+      console.log(JSON.stringify(guardErrorResult(error)))
+      return 2
+    }
+  }
   try {
     let result
     if (extra !== undefined) throw new Error('Too many arguments.')
@@ -118,7 +130,7 @@ export async function main(args = process.argv.slice(2)) {
     else if (command === 'doctor' && value === undefined) result = await doctor()
     else if (command === 'plan' && value !== undefined) result = await planTask(value)
     else if (command === 'attribution' && value !== undefined) result = { schemaVersion: 1, trailer: attribution(value) }
-    else throw new Error('Usage: node scripts/agent.mjs describe|doctor|plan <task>|attribution "Actual Tool"|accept --contract FILE --report FILE [--json]')
+    else throw new Error('Usage: node scripts/agent.mjs describe|doctor|plan <task>|attribution "Actual Tool"|accept --contract FILE --report FILE [--json]|guard --task TASK_ID --environment local-auxiliary|github-actions-evidence --operation NAME [--head SHA]')
     if (json || command !== 'attribution') console.log(JSON.stringify(result, null, 2))
     else console.log(result.trailer)
     return result.ok === false ? 1 : 0

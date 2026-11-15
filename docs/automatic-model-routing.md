@@ -1,5 +1,9 @@
 # GitHub Copilot Auto routing contracts
 
+> Historical documentation for earlier releases. The `0.2.2-rc.3` candidate
+> retires plugin-owned Auto and parent-follow routing; DSH owns those behaviors.
+> Existing settings and histories are not deleted.
+
 Target: official DSH / Windows Desktop `0.2.0-rc.2`. Implementation is plugin-only.
 For ordinary use, start with [task assessment and explanations](./auto-task-routing.md)
 and [parent following](./parent-model-follow.md).

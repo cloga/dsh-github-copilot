@@ -1,7 +1,8 @@
 import { createRequire } from 'node:module'
 import { Context } from '@deepseek-ai/cordis'
-import AgentRegistry, { agentEvents, installModelSelection } from '@deepseek-ai/dsh-agent'
-import type { Agent, ModelSelectionRef } from '@deepseek-ai/dsh-agent'
+import AgentRegistry, { AgentModel } from '@deepseek-ai/dsh-agent'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import { describe, expect, it, vi } from 'vitest'
 import { currentChatRoute } from '../src/current-provider.ts'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID as provider } from '../src/copilot-identity.ts'
@@ -84,48 +85,46 @@ describe('initiating Session route selection', () => {
   })
 
   it.skipIf(typeof AgentRegistry.prototype.withInitiator !== 'function')(
-    'uses real installModelSelection request headers across concurrent initiators despite stale activation options', async () => {
+    'uses native selected-model request headers across concurrent initiators despite stale activation options', async () => {
       const root = new Context()
+      await root.plugin(SessionProjectionRegistry)
       const fiber = await root.plugin(AgentRegistry)
       const agents = root.agents
       const ctx = new Context()
       const defaultRead = vi.fn(() => ({ provider: 'github-copilot', model: 'global-C' }))
       ctx.get = ((name: string) => name === 'agents' ? agents
         : name === 'agentDefaultModel' ? { currentSelection: defaultRead } : undefined) as typeof ctx.get
-      const aCtx = new Context(), bCtx = new Context()
       const seed = { provider: 'seed-C', model: 'seed-C' }
       const a = { options: seed, session: Session.create('selection-A' as Agent['id']) } as Agent
       const b = { options: seed, session: Session.create('selection-B' as Agent['id']) } as Agent
-      const refA: ModelSelectionRef = { current: { provider: 'github-copilot', model: 'gpt-5.4' }, assembled: undefined }
-      const refB: ModelSelectionRef = { current: { provider: 'anthropic', model: 'claude-sonnet-4' }, assembled: undefined }
-      const disposeA = installModelSelection(aCtx, refA), disposeB = installModelSelection(bCtx, refB)
-      const run = (owner: Agent, ownerCtx: Context) => agents.withInitiator(owner, async () => {
-        const input = { sections: [], contexts: [], tools: [], variables: {} }
-        await ownerCtx.waterfall('system-prompt/assemble', input, {}, async () => input)
-        const config = await agentEvents(ownerCtx, owner).waterfall('agent/request',
-          { turn: 1, step: 0, signal: new AbortController().signal }, async () => seed)
+      const stateA = { lastUsed: null, pending: { provider: 'github-copilot', model: 'gpt-5.4' } }
+      const stateB = { lastUsed: null, pending: { provider: 'anthropic', model: 'claude-sonnet-4' } }
+      const modelA = new AgentModel(() => stateA, a.session, seed)
+      const modelB = new AgentModel(() => stateB, b.session, seed)
+      const run = (owner: Agent, model: AgentModel) => agents.withInitiator(owner, async () => {
+        const config = model.current()
+        if (!config) throw new Error('expected native model selection')
         owner.session.append('request/header', { header: { config }, reason: 'initial' })
         await Promise.resolve()
         return currentChatRoute(ctx)
       })
       try {
         expect(agents.withInitiator(a, () => currentChatRoute(ctx))).toBeUndefined()
-        const [routeA, routeB] = await Promise.all([run(a, aCtx), run(b, bCtx)])
+        const [routeA, routeB] = await Promise.all([run(a, modelA), run(b, modelB)])
         expect(routeA).toMatchObject({ provider: 'github-copilot', model: 'gpt-5.4' })
         expect(routeB).toMatchObject({ provider: 'anthropic', model: 'claude-sonnet-4' })
         expect(a.options).toBe(seed)
         expect(b.options).toBe(seed)
-        refA.current = { provider: 'github-copilot', model: 'gpt-4.1' }
+        stateA.pending = { provider: 'github-copilot', model: 'gpt-4.1' }
         // A pending next-step switch cannot change the route of tools from the prior request.
         expect(agents.withInitiator(a, () => currentChatRoute(ctx))?.model).toBe('gpt-5.4')
-        expect((await run(a, aCtx))?.model).toBe('gpt-4.1')
+        expect((await run(a, modelA))?.model).toBe('gpt-4.1')
         expect(routeA?.model).toBe('gpt-5.4')
         expect(agents.withInitiator(a, () => currentChatRoute(ctx, { provider: 'github-copilot', model: 'gpt-5.6-sol' }))?.model).toBe('gpt-5.6-sol')
         expect(currentChatRoute(ctx)).toBeUndefined()
         expect(defaultRead).not.toHaveBeenCalled()
       } finally {
-        disposeA(); disposeB()
-        await aCtx.fiber.dispose(); await bCtx.fiber.dispose(); await fiber.dispose()
+        await fiber.dispose()
       }
     },
   )

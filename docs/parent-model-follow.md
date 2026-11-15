@@ -1,5 +1,9 @@
 # Follow a parent model
 
+> Historical documentation for earlier releases. The `0.2.2-rc.3` candidate
+> retires plugin-owned parent-follow routing and its control; DSH owns native
+> parent/child behavior. Existing settings and histories are not deleted.
+
 Implemented for official DSH / Windows Desktop `0.2.0-rc.2` through plugin-owned
 public routing. This is separate from retired Model roles and upstream native
 rules/settings UI.

@@ -172,6 +172,8 @@ describe('Copilot reasoning presentation against real Core services', () => {
     const props = {
       node: { kind: 'assistant-step', location: { kind: 'unresolved' }, data: { status, step: 1, finalNode: { seq: 2 }, blocks } },
       useTurnData: () => undefined, openFile: () => {}, fileMentions: () => [],
+      useContextMenu: () => ({ getTriggerProps: () => ({}) }),
+      resolveFilePath: (path: string) => path, renderSlot: () => null,
       useDisclosure: () => ({ expanded: false, setExpanded: () => {}, toggle: () => {} }),
       useGroupAction: () => ({ current: null }),
       usePresentation: (select: (policy: { settledReasoningPreview: boolean }) => unknown) =>

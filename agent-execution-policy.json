@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "repository": "cloga/dsh-github-copilot",
+  "ownerTask": "tooling",
+  "maxTaskScopes": 128,
+  "environments": {
+    "local-auxiliary": {
+      "operations": ["scripts-test"]
+    },
+    "github-actions-evidence": {
+      "operations": ["ci-evidence"]
+    }
+  },
+  "operations": {
+    "dependency-install": {
+      "kind": "network",
+      "maxFailures": 0
+    },
+    "scripts-test": {
+      "kind": "local-command",
+      "environment": "local-auxiliary",
+      "maxFailures": 2,
+      "argv": [
+        "node",
+        "--test",
+        "tests/scripts/agent.test.mjs",
+        "tests/scripts/acceptance.test.mjs",
+        "tests/scripts/environment-guardrails.test.mjs"
+      ]
+    },
+    "ci-evidence": {
+      "kind": "github-actions-read",
+      "environment": "github-actions-evidence",
+      "maxFailures": 2,
+      "maxApiCalls": 3,
+      "requestTimeoutMs": 15000,
+      "workflowPath": ".github/workflows/ci.yml",
+      "workflowName": "CI",
+      "requiredJobs": [
+        "verify (ubuntu-latest)",
+        "verify (windows-latest)",
+        "Published adapter (ubuntu-latest)",
+        "Published adapter (windows-latest)",
+        "release-ready"
+      ],
+      "optionalJobs": [
+        {
+          "name": "release",
+          "allowedConclusions": ["success", "skipped"]
+        }
+      ]
+    }
+  }
+}

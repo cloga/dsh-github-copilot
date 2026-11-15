@@ -1,16 +1,3 @@
-# Keep the official web service and its exact configuration in a named realm.
-# `name` is an include-patch guard, not a replacement: custom web services do not
-# match. Native tools/presets and all execution policies remain unchanged.
-- id: web
-  name: '@deepseek-ai/dsh-web'
-  isolate:
-    web: github-copilot-original-web
 - insert:
-    - id: github-copilot-web-delegate
-      name: dsh-github-copilot/web-delegate
-      isolate:
-        web: github-copilot-original-web
-    - id: github-copilot-routed-web
-      name: dsh-github-copilot/routed-web
     - id: github-copilot
       name: dsh-github-copilot

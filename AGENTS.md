@@ -22,21 +22,108 @@ This repository follows a **plugin-only** policy: implement fixes in `dsh-github
 2. Read this file, then `node scripts/agent.mjs describe --json`. `agent-contract.json` maps each task to its owning files, focused tests, risks and approval boundaries; package scripts and release URLs are derived from current metadata.
 3. Run `node scripts/agent.mjs doctor --json` before install. It is a dependency-free, read-only repository preflight: exit 0 means preflight passed, 1 means prerequisites missing, 2 means invalid arguments/metadata. Build presence is not build freshness, and no live DSH or credential readiness is claimed.
 4. Choose a task with `node scripts/agent.mjs plan models --json` (or authorization/search/client/compatibility/tooling/release). Output is an unexecuted argv plan, never implicit permission to run destructive operations.
-5. Use Node 24 LTS for development and the exact pnpm version in `package.json`; the runtime dependency floor is Node 22.19.0. Run frozen install in this checkout. Dependencies/build output are not carried into worktrees.
+5. Use Node 24 LTS for development and the exact pnpm version in `package.json`; the runtime dependency floor is Node 22.19.0. Select the execution environment and task explicitly with `node scripts/agent.mjs guard`. Local auxiliary checks are limited to the guarded dependency-free script tests; dependency installation and full verification belong to GitHub Actions. Do not retry local dependency restoration, change registries, or treat local reports/idle sessions as CI evidence. The guard applies only to operations routed through it; it cannot prevent direct shell bypass.
 6. Create/reuse a tracking issue and feature branch, implement a regression first, run the full gate, inspect the diff, and open a PR. For requested delivery, merge after required review/CI and branch protection without a separate approval prompt, unless the user limits scope. Important updates continue through the release-delivery rule below. Live-profile install and worktree checkout still require explicit user approval.
 
 Use native DSH tools for goals, background jobs and scoped subagents. Use local Git and the GitHub REST API for delivery; no external orchestration daemon, roster or `vcs_*` tool is required. Do not assume a model provider's identity is the assisting agent.
 
+## Session isolation and temporary artifacts (#442)
+
+- Prefer one app-managed worktree per independent repository session when supported and authorized. A branch-backed session, folder session or shared checkout is not necessarily isolated. Verify the actual workspace and branch; preserve the user's chosen workspace. Creating or checking out another worktree still requires separate approval.
+- Store temporary evidence, downloads, scratch files and backups in the session-owned artifact area outside the repository checkout. Keep only intentional deliverables in the repository. Clean up only explicitly identified temporary files created by the current task; never hide, move, delete or stage pre-existing files merely to make a gate pass.
+- Inspect the explicit staged and committed diff before delivery. Unrelated untracked files are not by themselves a Git conflict or proof of a GitHub permission failure. Respect each delivery tool's own instructions and allowed fallback paths; repository guidance cannot override those requirements or branch protection.
+- Continue routine investigation and authorized delivery without repeated approval prompts. For a genuine decision, safety boundary or tool-policy blocker, ask or report it once with the exact consequence; do not loop while the user is unavailable. Preserve existing approval boundaries for profile installation, sign-out, disruptive restart and worktree checkout.
+
+These are agent instructions and contract-drift checks, not a filesystem sandbox or a guarantee that every session uses a worktree.
+
 ## Product and architecture
 
-`dsh-github-copilot` currently admits and targets only official DSH `0.2.1-rc.3`, a prerelease. The prior thirteen DSH pins remain in `deployment-baseline.json` as historical evidence, not current support or CI release gates. Rc.3 source/artifact CI qualification passed on Windows/Linux in run `40098031196`; Desktop artifacts/signatures remain unverified. Do not treat this unpublished candidate as a production Core upgrade recommendation. The signed rc.2 Desktop evidence is historical peer ownership only. Rc.2 installations must retain alpha.15 or their existing compatible plugin. It does not own a general Copilot chat adapter. DSH's built-in `llm-pi-ai` mount owns the GitHub Copilot provider, catalog, OAuth method and grant format, token exchange, refresh, and normal model transport.
+### Confirmed product scope (#455, #456)
 
-This repository maintains twelve narrow surfaces and ownership boundaries:
+The native enhancement request (#460/#461) adds only reviewer-scoped Responses
+sampling compatibility and an optional canonical-account hosted-search backend.
+Use public native ownership/configuration proof and prepared dispatch; never
+replace Web, select a backend, migrate accounts/settings, or bypass review.
+Search permits one fixed capability proof and one final query within 25 seconds,
+with four concurrent operations and configuration/credential/disposal fences.
+The former plugin routing UI and managed Auto remain retired. Supplier calls,
+live installation and restarts are separate from synthetic CI acceptance.
+
+The user-authorized native model sync (#466) is a narrow exception to the
+no-settings-rewrite rule: after an explicit preview and confirmation, one
+revision-checked write may replace only
+`llm-pi-ai.providers.github-copilot.models` in an existing canonical profile.
+Prove current canonical-account metadata and the native adapter-owned catalog;
+skip unrepresentable or uncertain model capabilities. Disclose additions,
+updates, removals, skipped models and configured output request defaults.
+Recheck account/catalog/preferences and Settings evidence before the one-shot
+write, then read back both user and effective values. Never create a profile,
+change other paths or perform this sync automatically.
+
+The user-confirmed direction on 2026-11-14 supersedes conflicting legacy feature
+requirements below: this plugin is a lightweight GitHub Copilot model integration
+for DSH Desktop, not a second agent product. The qualification target is the exact
+official DSH `0.2.2-rc.3` source and published package graph; it is a candidate,
+not supported or delivered until the required CI gates pass.
+
+DSH owns application login, AgentLoop, model selection, Auto, parent-model
+following, subagents, tools, Web, permissions, history, context/compaction, and
+Usage. The plugin owns only Copilot's native OAuth/credential integration,
+account-proven model and capability discovery, published-adapter composition,
+and narrowly evidenced Copilot compatibility. Do not add a DeepSeek login check,
+read DeepSeek credentials, add another Copilot login or wire, or redirect failed
+Copilot calls to another provider.
+
+Parent/child relationships, inheritance, delegation, lifecycle and scheduling
+follow DSH's native contract, not a plugin-defined policy. Subagent compatibility
+means supplying models to that existing flow. Do not add a child-account
+inheritance mode, parent lookup as credential authority, or plugin-owned child
+routing. Verify authentication and request isolation through the same provider
+contract used by ordinary native calls. A missing public seam is a concrete
+compatibility limit to report, not permission to invent a parallel relationship.
+
+Retire plugin-owned Auto and parent-follow policy/UI and custom hosted-search
+execution/routing. Old conversation continuity is not an acceptance requirement.
+Retain GitHub Copilot account quota and useful
+enhancements; remove other functionality only when it is demonstrably redundant
+or unnecessary, not merely because it extends the basic model route. Never delete
+or rewrite user settings, accounts, or history, silently substitute a model, or
+claim a native replacement until the
+exact public API and behavior are verified. Preserve necessary Copilot
+authentication, account/turn isolation, request correctness, and actionable
+diagnostics. HydraFusion/Max are explicitly out of scope (#441).
+
+Model-facing DSH capabilities added over time, including native subagent model
+selection and actual child invocation (#456), are compatibility goals for
+account-available Copilot models. Verify each against exact public Core APIs and
+supplier-advertised capabilities with focused tests. Unknown metadata or
+unsupported behavior must fail or diagnose explicitly; do not infer support,
+add model-ID routing rules, patch Core, or claim untested parity.
+
+When any later legacy detail in this guide conflicts with this confirmed scope,
+follow this section and the current acceptance criteria in #455/#456.
+
+The user clarified that the ordinary route should be DSH's native
+`github-copilot` provider, with only useful plugin enhancements through public
+APIs. Retire the separate managed route when native-route acceptance is met;
+do not preserve it solely to continue old conversations or create a history
+migration. Existing stored conversations, credentials and settings are not
+authorized for deletion or rewriting. Explicitly document that old managed
+route selections may become unavailable. Native model selection and actual
+subagent invocation must be verified on `github-copilot`, not inferred from
+managed-route tests. Record enhancements that cannot safely attach to native
+APIs rather than patching Core or misrepresenting support.
+
+The last qualified release line is official DSH `0.2.1-rc.3`; its source/artifact CI passed on Windows/Linux in run `40098031196`, while Desktop artifacts/signatures remain unverified. DSH `0.2.2-rc.3` is the current requested candidate and has not passed this repository's required CI. The previous thirteen pins remain historical evidence, not current support or release gates. Do not treat either prerelease as a production Core upgrade recommendation. DSH's built-in `llm-pi-ai` owns the canonical GitHub Copilot provider, OAuth, grant format, token exchange, refresh, and normal model transport.
+
+The following is a historical architecture inventory, not a requirement to keep
+every surface as a product feature; apply the confirmed scope above when deciding
+which runtime registrations, UI, and settings remain active:
 
 1. A conditional authorization-service bootstrap plus Host controller that joins DSH authorization, credentials, and settings.
 2. A Client Models provider-card contribution with one shared account-state owner, Client-safe Remote descriptors and a nested plugin-owned model-preferences disclosure; embed in an existing configured canonical row, suppress its separate footer controller, and retain footer/old-Core section fallback when no such row is mounted.
 3. Strict JSON normalization of pi-ai's provider-owned Copilot OAuth grant.
-4. Preserve intentional absence of `llm-pi-ai.providers.github-copilot`; reconcile only existing legacy profiles and verified ownership journals. Fresh installations use the single account-discovered route; existing profiles require explicit migration, never silent removal.
+4. Preserve intentional absence of `llm-pi-ai.providers.github-copilot`; reconcile only existing legacy profiles and verified ownership journals. The confirmed #466 models-only sync is the narrow explicit exception above; never create or remove a native profile automatically.
 5. Direct provider-hosted search using the same Host-side credential lifecycle.
 6. Provider-scoped tool-schema compatibility for Copilot payload behaviors; Core remains the tool and execution owner.
 7. A bounded account-discovery route that supplies validated endpoint/capability metadata to the published native adapter, including explicit managed Responses sampling compatibility, plus exact plugin-owned model exclusions enforced across its directory, Auto pools and direct admission, without maintaining model-ID routing rules or changing Core's catalog.
@@ -91,6 +178,17 @@ codes, never raw errors. Installation alone neither selects nor invokes recovery
 See `src/compaction-replay.ts` and `docs/manual-compaction-recovery.md` (#349).
 
 ## Approved multi-account ownership extension (#297)
+
+The explicit #470 enhancement permits managed-account switching alongside
+independently configured native Copilot. Keep native UI and label the managed
+route `GitHub Copilot (multi-account)`; do not mirror grants, intercept native
+credentials, redirect native requests or change native selections. Missing
+managed registration and incomplete evidence remain blockers. Reuse native
+canonical quota/search isolation; do not revive retired Auto or routing UI.
+Disposal removes only plugin registrations. Plugin-model selections and explicit
+`web.searchProvider=github-copilot-hosted` need user-selected replacements before
+uninstall; missing configured Web backends return `WEB_PROVIDER_CONFIGURED_MISSING`,
+not automatic fallback. No automatic Settings/history migration or sign-out.
 
 Login environments (#424) use only pinned native pi-ai OAuth for GitHub.com and
 validated single-label `tenant.ghe.com` Enterprise Cloud hosts. Preserve host
@@ -317,6 +415,60 @@ Desktop plugin upgrades do not necessarily reconcile profile-local copies of Hos
 
 ## Mechanical verification
 
+When a task explicitly requires post-upgrade Desktop/UI acceptance, use acceptance
+contract/report schema 2 described in `docs/agent-acceptance.md`. Exact-head CI
+and installed-on-disk evidence cannot replace live behavior or the public loaded
+plugin version. Attempt safe authorized checks on an already-running Desktop;
+unreliable local npm is not a reason to skip them. Use existing computer-use
+tools, never shell activation or a repository script as an App controller.
+Begin with current app discovery, not a historical "already open" claim. If not
+running, start only with explicit launch authorization via controlled `start_app`
+using the exact approved target; then verify discovery and fresh UI, not merely
+the launch receipt. Do not start an already-running app again. A welcome screen
+is not automatically an auth blocker: inspect an official safe skip first. DSH's
+Add API Key -> Set up later path does not submit/store a key or authenticate;
+use it only when actually exposed, within tool permission rules. Never infer
+Copilot account invalidity from welcome UI or bypass real authentication/warnings.
+Welcome dismissal may replace the window: rediscover app/window and read its fresh
+tree before acting, rather than retrying a stale window on an empty immediate diff.
+Honor user-input interruption: reread UI before retrying the same permitted action.
+Before handoff, freshly discover the current app and inspect the target panel or
+workspace, reporting the observation time only; past success does not establish
+current running state or guarantee the app remains running later.
+An action receipt or empty immediate diff is not a navigation failure: obtain
+a fresh post-action `get_window_state` observation first. Keep one attempt per
+supported navigation method, at most two different methods, then report precise
+`automation-blocked` and request the named panel once. User absence or an
+unanswered request never grants permission or proves the panel opened.
+App unavailable, restart/install, account/OAuth/paid actions outside explicit
+permission stay blocked. Do not repeat exhausted methods on ordinary continuation.
+Record only fixed action/outcome codes, numeric times and version/source facts;
+never upload identities, credentials or conversation content. Unknown loaded
+version permits qualified observations only, not a version-specific fix claim.
+For formal upgrade acceptance, prefer the published exact-version GitHub Release
+asset canonical URL, never a local source directory, build, link or worktree.
+A downloaded official tgz is a verified GitHub cache, not a local build; use it
+only as a documented fallback when native URL delivery is unavailable/rejected.
+Record exact source URL/version, archive and Release SHA-256, numeric observation
+time and fixed fallback reason separately. Matching hashes do not grant install
+or restart permission or prove the resulting runtime loaded. The consistency
+checker never downloads/installs or independently authenticates this provenance.
+Missing/not-run/blocked/error/timeout mandatory evidence cannot pass acceptance; even a
+consistent complete report is not trusted proof of execution or automatic closure.
+Keep required-check completeness separate from issue disposition. Controlled
+regressions can exercise timers, never-resolving requests, late results and
+simulated disconnects; production Desktop fault injection is different. Do not
+disconnect networking, alter proxies/accounts or trigger paid requests to fill
+coverage without specific permission. After a specific defect is fixed, relevant
+controlled regressions/exact CI pass, release/install/load premises are met and
+normal live checks do not reproduce it, explicit user risk acceptance may close
+with "fixed/not reproduced; untested faults listed; reopen on recurrence".
+Do not claim the original root cause or production fault coverage was proven.
+Lack of safe/non-destructive production injection alone is not an indefinite
+closure blocker. Known failures/reproduction, critical safety gaps and mandatory
+requirements remain blockers; residual-risk disposition cannot relabel them
+passed or authorize automatic issue closure.
+
 For the opt-in task acceptance pilot, define observable requirements before
 implementation and validate the clean candidate with
 `node scripts/agent.mjs accept --contract CONTRACT_FILE --report REPORT_FILE`.
@@ -327,10 +479,20 @@ live diagnostics automatically. Failed, blocked and not-run requirements cannot
 pass; new commits require new evidence. Existing review/CI/release gates remain
 authoritative. This tooling does not activate agents or access live profiles.
 
-Run from the repository root:
+Choose a bounded local auxiliary check or authoritative remote evidence explicitly
+with `node scripts/agent.mjs guard --task TASK_ID --environment local-auxiliary
+--operation scripts-test` or `--environment github-actions-evidence
+--operation ci-evidence --head FULL_COMMIT_SHA`. The dependency-free scripts
+tests are the only guarded local verification here. Do not run dependency
+installation/recovery locally; full install, build, types, integration and
+package verification use the existing GitHub Actions workflow. See
+[environment and CI evidence guardrails](./docs/environment-evidence-guardrails.md).
+The guard covers only operations invoked through this entry point and is not a
+shell sandbox.
+
+The full gate and package commands, run by the existing CI workflow, are:
 
 ```sh
-pnpm install --frozen-lockfile
 pnpm verify
 pnpm pack --pack-destination artifacts
 ```
@@ -339,7 +501,7 @@ Then run `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.
 
 `pnpm verify` checks the Agent contract, source and local test types, baseline markers, a clean build, Vitest tests, Node tooling tests, and real built Host import/Client-loader/Remote smoke. `tests/fixtures` are intentionally excluded from local test typecheck because they import source from a separate pinned Core checkout. The checked-in code must pass; never suppress compiler errors or weaken a test to get a green report.
 
-If the exact frozen install is blocked solely by an enterprise registry or network policy while the repository's GitHub Actions can obtain the unchanged pinned packages from an authorized official registry, record the attempted command and exact environmental failure as **local validation blocked**, not passed. A PR may proceed with that limitation disclosed; the complete required GitHub CI matrix, including its install, tests, build and package checks, is then the authoritative gate before merge. Never weaken or skip CI, substitute dependencies, bypass organizational restrictions, claim unrun local gates succeeded, or tag/release a revision whose required CI is not green. If CI has the same failure, resolve it through approved infrastructure rather than bypassing it.
+If a historical/approved local installation attempt is blocked solely by an enterprise registry or network policy while GitHub Actions can obtain unchanged pinned packages from an authorized official registry, record it as **local validation blocked**, not passed. Do not repeat dependency recovery, switch sources, or expand permissions. A PR may proceed with that limitation disclosed; the complete required GitHub CI matrix, including install, tests, build and package checks, is authoritative before merge. Never weaken or skip CI, substitute dependencies, bypass organizational restrictions, claim unrun local gates succeeded, or tag/release a revision whose required CI is not green. If CI has the same failure, resolve it through approved infrastructure rather than bypassing it.
 
 The release CI matrix targets only exact official `0.2.1-rc.3` on Windows and Linux; earlier pins are not support gates. It runs the unchanged tagged-source runtime fixture, optional native Chat fixture, exact published-artifact adapter fixture and all 28 native reviewer regressions without skips. This is a required gate, not evidence that an unexecuted qualification passed. `verify:upstream` is static seam-marker evidence. `verify:controlled-core` exclusively installs a temporary config fixture, refuses an existing target, and removes only its own file; it is not full plugin activation. Published-artifact synthetic adapter fixtures do not prove live provider transport. The release job must wait for the complete reusable CI matrix on the tagged revision, then verify its own packed bytes before publishing.
 
@@ -361,7 +523,7 @@ The release CI matrix targets only exact official `0.2.1-rc.3` on Windows and Li
 | Last-success timestamp (alpha.7, #97) | Show `snapshot.discoveredAt` once beside count outside Manage: English relative text, full LOCAL date/time/zone tooltip and accessible semantic `time`; missing/invalid/no account hides it, future uses absolute text. Pending/error retains last success, successful refresh replaces it and sign-out clears it. One mounted 60s display-only timer makes no RPC/status/discovery calls and is disposed with timestamp/unmount; cache/discovery lifecycle unchanged |
 | Definitive `UNKNOWN_MODEL` | One bounded metadata refresh, never message replay or automatic model switching; generic HTTP/network errors are not guessed to be unknown models |
 | README screenshot | `copilot-search-routing.png` shows the current built plugin-detail routing card with synthetic providers in an isolated browser fixture. It proves only the current presentation surface, not live credentials, provider availability, search success or Desktop activation. |
-| Host attach/restart | Reconciles the stored profile; search proofs stay lazy and do not start at attach |
+| Host attach/restart | Does not repair or rewrite the stored native profile; search proofs stay lazy and do not start at attach |
 | Background credential/reset notifications | Invalidate evidence and clear Client state with read-only status; no forced discovery on every token event; next Models open/use ensures metadata |
 | Eligible model/search request | May resolve/refresh credentials and run bounded capability proof; changes during proof must fail closed rather than reuse another account's proof |
 | Release install | Writes a named user profile; installed on disk is not loaded in the running Host |

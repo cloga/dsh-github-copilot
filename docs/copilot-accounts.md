@@ -273,7 +273,7 @@ available for retained compatibility fixtures. Account persistence acceptance
 uses real SettingsForms and the production route diagnostic, without an
 eligibility override.
 
-1. Capture the selector revision and verify managed-only route eligibility.
+1. Capture the selector revision and verify managed-route availability and complete route/activity evidence.
 2. Validate target identity, refresh authorization as needed and check account
    model metadata without publishing it as the active account.
 3. Hold an admission fence during commit. Existing account-pinned managed
@@ -310,9 +310,19 @@ A guessed idle timeout must not permit reauthorization/removal of its account.
 
 Core's canonical route still reads its canonical record. Do not intercept
 Core's store, mutate its prototypes or mirror selected grants into its record.
-The first multi-account delivery therefore requires a managed-only profile.
-Existing canonical configuration, running/selected legacy routes, or
-incomplete route evidence blocks switching with a named diagnostic.
+The reversible enhancement (#470) permits native and managed routes together.
+The native **GitHub Copilot** route remains bound to its canonical credential;
+**GitHub Copilot (multi-account)** (`github-copilot-preview`) uses the plugin
+selector or an explicit managed Session account. Native configuration,
+selection and activity no longer block a managed-account switch. Missing
+managed registration or incomplete route/activity evidence still blocks it
+with a named diagnostic. Account leases, authorization fences and CAS remain.
+
+Use the native Models/Chat interface to select the managed model for multi-account
+work. No store interception or canonical credential substitution is performed.
+Native quota and optional native hosted search retain their separately qualified
+canonical account; managed default or Session changes never supply their identity.
+No account identity is inferred for a native credential/endpoint override.
 
 Any migration uses the existing separately approved, explicit configuration
 workflow. Enabling accounts does not remove native profiles, rewrite stored
@@ -321,11 +331,33 @@ Sessions or silently migrate their route IDs.
 Sign-out deletes only the selected record. Inactive records remain intact.
 For a noncanonical selection, the selector remains unchanged after sign-out:
 the missing selected slot fails explicitly, never falls back to canonical.
-In a managed-only profile with complete route/Session evidence and no admitted
+With a managed route, complete route/Session evidence and no conflicting admitted
 activity, Models still permits an explicit CAS switch to a stored valid account
 or Add into a new inactive slot. The missing-slot view remains an error even
 when `switchable` is true for that recovery. Existing Sign in never recreates
 the missing slot with an unverified replacement identity; use Add then Switch.
+
+### Uninstall boundary
+
+Disposal removes only plugin-owned registrations. Native credentials, provider
+configuration, native model selection and history remain unchanged. The synthetic
+published-adapter regression exercises native calls before mounting, during A/B
+switching and after disposal with the same original credential. It is not live
+Desktop or supplier acceptance.
+
+Removing the plugin does not convert plugin-only model selections. Explicitly
+select a native model for affected Sessions/defaults before uninstalling.
+Likewise, a selected `web.searchProvider=github-copilot-hosted` remains stored
+after its backend is unregistered. Pinned Core
+[`38a6a5c` Web regression](https://github.com/deepseek-ai/deepseek-harness/blob/38a6a5c/packages/web/web/tests/web.spec.ts#L156-L159)
+returns `WEB_PROVIDER_CONFIGURED_MISSING` for a missing configured backend;
+it does not fall back automatically. Select another available native Web backend
+before removal. Native route preservation is not a promise that plugin search
+or additional-account features survive uninstall.
+
+Uninstall does not sign out or remove saved authorizations. Explicit sign-out or
+removal of the original canonical account remains a separate credential mutation,
+not an uninstall cleanup action.
 
 ## Presentation and quota
 
@@ -369,7 +401,7 @@ and [continuation contract](./session-continuation.md). When off, an account cha
 persistent-enable/keep-off/cancel consent. See the [approved experience and mock](./account-management-experience.md).
 
 Completed managed turns have a compact **Account** disclosure alongside native
-Usage/selection actions through the public assistant-actions slot. This is
+Usage actions through the public assistant-actions slot. This is
 request-account evidence, not billing attribution or a subagent account rollup.
 It freezes a verified cached identity at admission. Missing identity starts one
 nonforcing, bounded lookup for the exact admitted account without delaying model
@@ -446,7 +478,7 @@ settlement and mutation fences; a read deadline never unlocks a pending mutation
 - Races: A refresh versus B selection, admission versus switch, external record
   replacement, settings conflicts, disposal and late identity/quota responses.
 - Behavior: absent-selector compatibility, missing-selector fail-closed,
-  duplicate identity, same-account renewal, canonical route blocker, selected
+  duplicate identity, same-account renewal, missing managed-route blocker, selected
   model missing, revoked permissions and account-bound replay.
 - UI: Models global-default management, Session switching only inside Credits,
   global inheritance/explicit same-value override, frozen running turns,

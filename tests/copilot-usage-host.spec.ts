@@ -323,4 +323,125 @@ describe('Copilot usage Host lifecycle', () => {
       })
     } finally { await ctx.fiber.dispose(); accounts.dispose() }
   })
+  it('uses the canonical OAuth record for native usage, independently of the plugin account selector', async () => {
+    const ctx = new Context()
+    const accountId = '11111111-1111-4111-8111-111111111111'
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json(quota))
+    const reads: string[] = []
+    let profile: object = {}
+    ctx.provide('settings', { describe: () => [
+      { ns: 'github-copilot', revision: 1, value: { activeAccountId: accountId } },
+      { ns: 'llm-pi-ai', revision: 1, value: { providers: { 'github-copilot': profile } } },
+    ], mutate: vi.fn() })
+    ctx.provide('credentials', {
+      readRecord: async (key: string) => {
+        reads.push(key)
+        return { kind: 'grant', payload: { ...grant, refresh: `synthetic-${key}` } }
+      },
+      listRecords: async () => [], modifyRecord: vi.fn(), deleteRecord: vi.fn(),
+    })
+    const accounts = new CopilotAccountsHost(ctx)
+    ctx.provide('githubCopilotAccounts', { host: accounts })
+    const controller = new GitHubCopilotUsageController(ctx)
+    try {
+      expect(await controller.getNative()).toMatchObject({ state: 'ready', accountId: 'canonical' })
+      expect(reads.length).toBeGreaterThan(0)
+      expect(reads.every(key => key === 'llm-pi-ai/github-copilot')).toBe(true)
+      expect(fetcher.mock.calls[0]?.[1]?.headers).toMatchObject({
+        Authorization: 'token synthetic-llm-pi-ai/github-copilot',
+      })
+      profile = { headers: {} }
+      expect(await controller.getNative()).toMatchObject({ state: 'ready', accountId: 'canonical' })
+      expect(fetcher).toHaveBeenCalledTimes(1)
+    } finally { await ctx.fiber.dispose(); accounts.dispose() }
+  })
+  it('binds native identity to the canonical quota and rejects a credential change during lookup', async () => {
+    const ctx = new Context()
+    const pending = deferred<{ login: string; userId: number } | undefined>()
+    let token = 'first'
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => Response.json(quota))
+    ctx.provide('settings', { describe: () => [
+      { ns: 'llm-pi-ai', revision: 1, value: { providers: { 'github-copilot': {} } } },
+    ], mutate: vi.fn() })
+    ctx.provide('credentials', {
+      readRecord: async () => ({ kind: 'grant', payload: { ...grant, refresh: token } }),
+      listRecords: async () => [], modifyRecord: vi.fn(), deleteRecord: vi.fn(),
+    })
+    const accounts = new CopilotAccountsHost(ctx)
+    const identity = vi.spyOn(accounts, 'verifiedIdentityFor').mockReturnValueOnce(pending.promise)
+    ctx.provide('githubCopilotAccounts', { host: accounts })
+    const controller = new GitHubCopilotUsageController(ctx)
+    try {
+      const request = controller.ensureNativeIdentity()
+      await vi.waitFor(() => expect(identity).toHaveBeenCalledExactlyOnceWith('canonical', false))
+      token = 'second'
+      ctx.emit('credentials/record-updated', credentialKey('llm-pi-ai', 'github-copilot'))
+      pending.resolve({ login: 'old-user', userId: 1 })
+      expect(await request).not.toHaveProperty('identity')
+      identity.mockResolvedValueOnce({ login: 'new-user', userId: 2 })
+      expect(await controller.ensureNativeIdentity()).toMatchObject({ accountId: 'canonical',
+        identity: { login: 'new-user', userId: 2 } })
+    } finally { pending.resolve(undefined); await ctx.fiber.dispose(); accounts.dispose() }
+  })
+  it('keeps native quota available when identity is unavailable or unproven', async () => {
+    const ctx = new Context()
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json(quota))
+    let profile: object = {}
+    ctx.provide('settings', { describe: () => [
+      { ns: 'llm-pi-ai', revision: 1, value: { providers: { 'github-copilot': profile } } },
+    ], mutate: vi.fn() })
+    ctx.provide('credentials', { readRecord: async () => ({ kind: 'grant', payload: grant }),
+      listRecords: async () => [], modifyRecord: vi.fn(), deleteRecord: vi.fn() })
+    const controller = new GitHubCopilotUsageController(ctx)
+    try {
+      expect(await controller.ensureNativeIdentity()).toMatchObject({ state: 'ready', accountId: 'canonical' })
+      expect(await controller.ensureNativeIdentity()).not.toHaveProperty('identity')
+      profile = { baseURL: 'https://example.invalid' }
+      expect(await controller.ensureNativeIdentity()).toMatchObject({ diagnostic: 'COPILOT_USAGE_NATIVE_AUTH_UNPROVEN' })
+    } finally { await ctx.fiber.dispose() }
+  })
+  it('does not attribute native quota when the route has unverified credential or endpoint overrides', async () => {
+    const ctx = new Context()
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json(quota))
+    let profile: unknown = undefined
+    ctx.provide('settings', { describe: () => [
+      { ns: 'llm-pi-ai', revision: 1, value: { providers: { 'github-copilot': profile } } },
+    ], mutate: vi.fn() })
+    ctx.provide('credentials', {
+      readRecord: vi.fn(async () => ({ kind: 'grant', payload: grant })),
+      listRecords: async () => [], modifyRecord: vi.fn(), deleteRecord: vi.fn(),
+    })
+    const controller = new GitHubCopilotUsageController(ctx)
+    try {
+      for (const value of [undefined, null, 'invalid', { apiKeyEnv: 'COPILOT_GITHUB_TOKEN' },
+        { baseURL: 'https://example.invalid' }, { headers: null }, { headers: [] },
+        { headers: 'invalid' }, { headers: { Authorization: 'synthetic' } }]) {
+        profile = value
+        expect(await controller.getNative()).toMatchObject({ state: 'unavailable', diagnostic: 'COPILOT_USAGE_NATIVE_AUTH_UNPROVEN' })
+      }
+      expect(fetcher).not.toHaveBeenCalled()
+    } finally { await ctx.fiber.dispose() }
+  })
+  it('revokes an in-flight native quota result when a credential override is configured', async () => {
+    const ctx = new Context()
+    const pending = deferred<Response>()
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockReturnValue(pending.promise)
+    let profile: object = {}
+    ctx.provide('settings', { describe: () => [
+      { ns: 'llm-pi-ai', revision: 1, value: { providers: { 'github-copilot': profile } } },
+    ], mutate: vi.fn() })
+    ctx.provide('credentials', {
+      readRecord: async () => ({ kind: 'grant', payload: grant }),
+      listRecords: async () => [], modifyRecord: vi.fn(), deleteRecord: vi.fn(),
+    })
+    const controller = new GitHubCopilotUsageController(ctx)
+    try {
+      const request = controller.getNative()
+      await vi.waitFor(() => expect(fetcher).toHaveBeenCalledOnce())
+      profile = { apiKeyEnv: 'COPILOT_GITHUB_TOKEN' }
+      ctx.emit('settings/document-updated', 'llm-pi-ai' as SettingsNamespace, 2)
+      pending.resolve(Response.json(quota))
+      expect(await request).toMatchObject({ state: 'unavailable', diagnostic: 'COPILOT_USAGE_NATIVE_AUTH_UNPROVEN' })
+    } finally { pending.resolve(Response.json(quota)); await ctx.fiber.dispose() }
+  })
 })

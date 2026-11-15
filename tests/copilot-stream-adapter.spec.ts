@@ -60,7 +60,8 @@ async function run(mode: 'baseline' | 'late-output' | 'heartbeat-only' | 'stall'
   const profile = {
     provider: providerId, displayName: 'Synthetic liveness route', piProvider: provider,
     streamIdleTimeoutMs: mode === 'baseline' ? idleMs : idleMs * 2,
-    maxRequestImageBytes: 20_971_520, requestImagePixelBudget: 4_194_304, requestImageMaxBytes: 1_048_576,
+    maxRequestImageBytes: 20_971_520, maxRequestImages: 50, imageOffloadCountQuantum: 10,
+    requestImagePixelBudget: 4_194_304, requestImageMaxBytes: 1_048_576,
     retryPolicy: resolveRetryPolicy(undefined, 'fixture'),
     configuredMaxTokens: new Map<string, number>(), modelErrors: new Map<string, string>(),
   }

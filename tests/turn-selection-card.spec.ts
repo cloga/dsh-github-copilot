@@ -3,7 +3,7 @@ import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { TurnSelectionCard } from '../src/turn-selection-card.ts'
-import { AUTO_MODEL_ATTRIBUTION_KEY, installAutoModelPresentation } from '../src/auto-model-presentation.ts'
+import { AUTO_MODEL_ATTRIBUTION_KEY, installAutoModelPresentation, installAccountUsagePresentation } from '../src/auto-model-presentation.ts'
 import { TURN_MODEL_PROVENANCE_KEY } from '../src/turn-model-provenance.ts'
 import type { ComponentType } from 'react'
 import type { TurnSelection } from '../src/turn-selection.ts'
@@ -90,6 +90,37 @@ it('rereads same-turn account evidence at native completion after in-turn identi
   expect(readAccount.mock.calls).toEqual([['session-a', 7], ['session-a', 7]])
   await act(async () => root.render(createElement(component!, { ...props, unrelatedPicker: 'other-account' })))
   expect(readAccount).toHaveBeenCalledTimes(2)
+})
+it('preserves turn account details without reading or showing plugin Auto selection', async () => {
+  let component: ComponentType<Record<string, unknown>> | undefined
+  const get = vi.fn()
+  const readAccount = vi.fn(async () => ({ ok: true, value: {
+    state: 'recorded', accountId: 'canonical', source: 'global', identity: { login: 'synthetic-first', userId: 1 },
+  } }))
+  cleanups.push(installAccountUsagePresentation({ diagnostic: vi.fn(), remote: {
+    githubCopilotTurnSelection: { get },
+    githubCopilotSessionAccount: { turn: readAccount },
+  }, slots: {
+    spec: () => ({ kind: 'list', scope: 'session' }), inject: (_: string, setup: () => () => void) => setup(),
+    register: (_: unknown, value: ComponentType<Record<string, unknown>>) => { component = value; return () => {} },
+  } }))
+  const turn = { turn: 7, data: { source: () => ({ getSnapshot: () => undefined, subscribe: () => () => {} }) } }
+  const snapshot = { nodes: { values: () => [{ kind: 'turn-tail', location: { turn }, data: {
+    turn: 7, seq: 12, tokenUsage: { routes: [{ provider: 'github-copilot-preview', model: 'fixture' }] },
+    closing: { finalNode: { messageId: 'reply' } },
+  } }] } }
+  const container = document.createElement('div'); document.body.append(container)
+  const root = createRoot(container); cleanups.push(() => root.unmount())
+  await act(async () => root.render(createElement(component!, {
+    sessionId: 'session-a', messageId: 'reply', useChat: (select: (value: unknown) => unknown) => select(snapshot),
+  })))
+  expect(container.textContent).toContain('Account · @synthetic-first')
+  expect(container.textContent).not.toContain('Selection')
+  expect(get).not.toHaveBeenCalled()
+  expect(readAccount).toHaveBeenCalledExactlyOnceWith('session-a', 7)
+  await act(async () => container.querySelector('button')!.click())
+  expect(container.querySelector('[role=dialog]')?.textContent).toContain('Inherited the global default at turn admission')
+  expect(container.querySelector('[role=dialog]')?.textContent).not.toContain('Why this model')
 })
 it('distinguishes failed Account reads from unknown evidence and retries only the read', async () => {
   const container = document.createElement('div'); document.body.append(container)

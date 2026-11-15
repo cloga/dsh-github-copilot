@@ -147,6 +147,16 @@ async function searchResponses(
     throw new WebError('Responses API returned an invalid search result', 'WEB_PROVIDER_ERROR')
   }
 
+  return normalizeSearchResponse(body)
+}
+
+/** Shared normalization for the legacy bridge and the optional native backend. */
+export function normalizeSearchResponse(value: unknown): WebSearchResult {
+  if (value === null || typeof value !== 'object'
+    || 'output' in value && value.output !== undefined && !Array.isArray(value.output)) {
+    throw new WebError('Responses API returned an invalid search result', 'WEB_PROVIDER_ERROR')
+  }
+  const body = value as ResponsesResponse
   const content: string[] = []
   const sources = new Map<string, WebSearchSource>()
   for (const item of body.output ?? []) {

@@ -89,7 +89,7 @@ function expectSafeFailure(payload: unknown) {
   expect([
     new CopilotResponsesReplayError('unsupported').message,
     new CopilotResponsesReplayError('invalid-payload').message,
-  ]).toContain((failure as Error).message)
+  ].some(message => (failure as Error).message.startsWith(message))).toBe(true)
   expect(String(failure)).not.toContain('secret')
 }
 
@@ -430,6 +430,89 @@ describe('Copilot Responses wire replay normalization', () => {
       message: new CopilotResponsesReplayError('scope-mismatch').message,
     })
     expect(new CopilotResponsesReplayError('invalid-payload').message).toBe('COPILOT_RESPONSES_REPLAY_INVALID_PAYLOAD: Copilot Responses payload has an invalid replay structure.')
+  })
+
+  it('surfaces only allowlisted structure for locally rejected replay shapes', () => {
+    const cases = [
+      [{ type: 'reasoning', id: 'secret-id', status: 'completed', summary: ['secret-summary'] }, 'REASONING_WITHOUT_ENCRYPTED_CONTENT'],
+      [{ type: 'function_call', id: 'secret-id', status: 'in_progress', call_id: 'secret-call', name: 'secret-tool', arguments: 'secret-args' }, 'INCOMPLETE_ITEM'],
+      [{ type: 'item_reference', id: 'secret-reference' }, 'ITEM_REFERENCE_ONLY'],
+    ] as const
+    for (const [item, reason] of cases) {
+      let failure: unknown
+      try { normalizeCopilotResponsesPayload({ input: [{ role: 'user', content: 'safe' }, item] }) }
+      catch (error) { failure = error }
+      expect(failure).toBeInstanceOf(CopilotResponsesReplayError)
+      expect((failure as Error).message).toContain(`reason=${reason}; inputIndex=1`)
+      expect((failure as Error).message).toContain('itemType=')
+      expect((failure as Error).message).toContain('itemStatus=')
+      expect((failure as Error).message).toContain('hasId=true')
+      expect((failure as Error).message).toContain('hasEncryptedContent=')
+      expect((failure as Error).message).toContain('hasSummary=')
+      expect((failure as Error).message).toContain('hasContent=')
+      expect((failure as Error).message).toContain('hasCallId=')
+      expect((failure as Error).message).not.toMatch(/secret-(?:id|summary|call|tool|args|reference)/)
+    }
+
+    let previousResponseFailure: unknown
+    try { normalizeCopilotResponsesPayload({ input: [], previous_response_id: 'secret-response' }) }
+    catch (error) { previousResponseFailure = error }
+    expect((previousResponseFailure as Error).message).toContain('reason=PREVIOUS_RESPONSE_REFERENCE; inputIndex=unavailable')
+    expect((previousResponseFailure as Error).message).toContain('hasPreviousResponseId=true')
+    expect((previousResponseFailure as Error).message).not.toContain('secret-response')
+  })
+
+  it('does not expose hostile getters or unknown type, status, or fields in diagnostics', () => {
+    const hostile = {
+      type: 'future_secret_type',
+      status: 'secret-status',
+      id: 'secret-id',
+      summary: ['secret-summary'],
+      future_secret_field: 'secret-value',
+    }
+    let failure: unknown
+    try { normalizeCopilotResponsesPayload({ input: [hostile] }) } catch (error) { failure = error }
+    expect((failure as Error).message).toContain('itemType=unknown; itemStatus=unknown')
+    expect(String(failure)).not.toMatch(/future_secret|secret-(?:status|id|summary|value)/)
+
+    const changing = {
+      get type() { return 'reasoning' },
+      id: 'secret-getter-id',
+      get encrypted_content() { throw new Error('secret-getter-value') },
+    }
+    let getterFailure: unknown
+    try { normalizeCopilotResponsesPayload({ input: [changing] }) } catch (error) { getterFailure = error }
+    expect(String(getterFailure)).not.toMatch(/secret-getter/)
+  })
+
+  it('does not reread changing discriminator getters for diagnostics or trust array index overrides', () => {
+    let typeReads = 0
+    const item = {
+      get type() { return ++typeReads === 1 ? 'reasoning' : 'secret-changing-type' },
+      status: 'completed',
+      id: 'secret-id',
+      summary: ['secret-summary'],
+    }
+    const input = [{ role: 'user', content: 'secret-user' }, item]
+    const overriddenEntries = vi.fn(() => { throw new Error('secret-index') })
+    Object.defineProperty(input, 'entries', { value: overriddenEntries })
+    Object.defineProperty(input, Symbol.iterator, { value: overriddenEntries })
+    let failure: unknown
+    try { normalizeCopilotResponsesPayload({ input }) } catch (error) { failure = error }
+    expect((failure as Error).message).toContain('reason=REASONING_WITHOUT_ENCRYPTED_CONTENT; inputIndex=1')
+    expect((failure as Error).message).toContain('itemType=unknown; itemStatus=completed')
+    expect(String(failure)).not.toContain('secret')
+    expect(typeReads).toBe(2)
+    expect(overriddenEntries).not.toHaveBeenCalled()
+  })
+
+  it('keeps failed diagnostic property inspection invalid rather than inferring absent fields', () => {
+    const item = new Proxy({ type: 'item_reference', id: 'secret-id' }, {
+      getOwnPropertyDescriptor() { throw new Error('secret-descriptor') },
+    })
+    let failure: unknown
+    try { normalizeCopilotResponsesPayload({ input: [item] }) } catch (error) { failure = error }
+    expect((failure as Error).message).toBe(new CopilotResponsesReplayError('invalid-payload').message)
   })
 
   it('fails atomically without modifying an earlier eligible item', () => {

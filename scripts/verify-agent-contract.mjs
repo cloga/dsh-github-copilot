@@ -24,6 +24,28 @@ export async function verifyAgentContract(root = repositoryRoot) {
   'Auto iteration review must require prior evidence, explicit missing data, local-only sharing and follow-up')
   const implementation = contract.boundaries?.implementationScope
   require(implementation?.mode === 'plugin-only', 'plugin-only implementation policy is missing')
+  const productScope = contract.boundaries?.confirmedProductScope
+  require(productScope?.source === 'user-confirmed #455/#456 on 2026-11-14'
+    && productScope.product === 'lightweight-native-github-copilot-model-integration'
+    && productScope.desktopCandidate === '0.2.2-rc.3'
+    && productScope.desktopCandidateQualified === false
+    && JSON.stringify(productScope.retirePluginOwned) === JSON.stringify([
+      'auto', 'parent-model-follow', 'hosted-search-routing',
+    ])
+    && productScope.preserve.includes('native-copilot-oauth')
+    && productScope.preserve.includes('account-isolation')
+    && productScope.preserve.includes('account-advertised-model-capabilities')
+    && productScope.preserve.includes('copilot-account-quota')
+    && productScope.preserve.includes('stored-data-without-rewriting')
+    && productScope.routeTarget === 'native-github-copilot'
+    && productScope.legacyConversationContinuationRequired === false
+    && productScope.enhancementPolicy === 'preserve-useful-remove-only-demonstrably-redundant'
+    && productScope.nativeModelCapabilityCompatibility === 'best-effort-account-and-metadata-driven-with-exact-release-tests'
+    && productScope.subagentSelectionAndInvocationRequired === true
+    && productScope.parentChildPolicyOwner === 'dsh-native-only'
+    && productScope.hydrafusion === 'out-of-scope'
+    && productScope.supersedesConflictingLegacyProductRequirements === true,
+  'confirmed Copilot-only model integration scope must supersede conflicting legacy product requirements')
   const implementationKeys = ['mode', 'coreInspection', 'allowedIntegration', 'coreSourceChanges', 'coreArtifactPatching', 'coreRuntimeMonkeyPatching', 'corePatchDependency', 'coreCommitPrRelease', 'unsupportedCapability', 'scopeException']
   require(Object.keys(implementation).every(key => implementationKeys.includes(key)), 'plugin-only policy contains an unrecognized override')
   require(implementation.coreInspection === 'read-only', 'plugin-only Core inspection must remain read-only')
@@ -33,6 +55,16 @@ export async function verifyAgentContract(root = repositoryRoot) {
   }
   require(implementation.unsupportedCapability === 'report-limitation-and-plugin-local-alternative', 'plugin-only missing capabilities must not trigger Core patches')
   require(implementation.scopeException === 'separate-explicit-human-request-only', 'plugin-only scope must not expand from an inferred compatibility task')
+  const nativeSync = contract.tasks?.models
+  require(nativeSync?.nativeModelSyncBoundary?.includes('one explicit confirmation')
+    && nativeSync.nativeModelSyncBoundary.includes('native adapter-owned pi-ai catalog')
+    && nativeSync.nativeModelSyncBoundary.includes('CAS only llm-pi-ai.providers.github-copilot.models')
+    && nativeSync.nativeModelSyncBoundary.includes('read back user and effective values')
+    && nativeSync.nativeModelSyncBoundary.includes('No profile creation, automatic sync')
+    && nativeSync.read?.includes('src/native-model-sync.ts')
+    && nativeSync.tests?.includes('tests/native-model-sync.spec.ts')
+    && nativeSync.tests?.includes('tests/fixtures/native-model-sync-core.fixture.ts'),
+  'native model sync must retain explicit confirmation, adapter proof, one-path CAS, readback and bounded tests')
   require(!contract.boundaries?.approvalRequired?.includes('merge'), 'merge must not require a separate approval')
   require(!contract.boundaries?.approvalRequired?.includes('release'), 'release delivery must not require a second blanket release approval')
   for (const boundary of ['install into a user profile', 'sign-out', 'worktree checkout']) {
@@ -45,6 +77,23 @@ export async function verifyAgentContract(root = repositoryRoot) {
   require(JSON.stringify(release.requiredConditions) === JSON.stringify(['reviewed-merge', 'green-required-ci', 'fresh-annotated-tag', 'verified-release-assets']), 'release delivery prerequisites differ')
   require(release.localGateWhenRegistryBlocked === 'record-environment-blocker-and-require-complete-github-ci', 'blocked local gate must require full GitHub CI')
   const agentGuide = await readFile(resolve(root, 'AGENTS.md'), 'utf8')
+  const workspace = contract.boundaries?.workspaceIsolation
+  const workspaceRequirements = {
+    default: 'app-managed-worktree-when-authorized',
+    nonWorktree: 'inspect-and-preserve-shared-workspace',
+    temporaryArtifacts: 'session-owned-outside-checkout',
+    existingFiles: 'preserve-never-hide-or-delete-for-gates',
+    delivery: 'review-explicit-commit-and-respect-tool-policy',
+    escalation: 'once-for-genuine-blocker-or-risk',
+    enforcement: 'advisory-not-a-sandbox',
+  }
+  require(workspace && Object.keys(workspace).length === Object.keys(workspaceRequirements).length
+    && Object.entries(workspaceRequirements).every(([key, value]) => workspace[key] === value)
+    && agentGuide.includes('## Session isolation and temporary artifacts (#442)'),
+  'workspace isolation must preserve user files, authorized worktrees and delivery tool boundaries')
+  require(agentGuide.includes('### Confirmed product scope (#455, #456)')
+    && agentGuide.includes('When any later legacy detail in this guide conflicts with this confirmed scope'),
+  'the confirmed product scope must be authoritative over historical guide details')
   require(agentGuide.includes('local validation blocked') && agentGuide.includes('complete required GitHub CI matrix')
     && agentGuide.includes('Never weaken or skip CI'), 'blocked local gate guidance is missing')
   require(JSON.stringify(release.completionEvidence) === JSON.stringify(['published-release-url', 'tag-and-commit', 'asset-and-sha256', 'npm-version-and-integrity']), 'release delivery completion evidence differs')
@@ -148,8 +197,52 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && acceptance.cleanHeadRequired === true && acceptance.executionVerified === false
     && acceptance.independenceVerified === false && acceptance.automaticUpload === false,
   'acceptance evidence must retain clean-HEAD integrity and explicit unverified execution/independence')
+  require(JSON.stringify(acceptance.liveUi) === JSON.stringify({
+    schemaVersion: 2, ci: 'guarded-exact-head', source: 'report-consistency-only',
+    browserManualRequireLiveContract: true,
+    upgradeSource: 'exact-github-release-url-or-verified-cache',
+    appLifecycle: 'fresh-discovery-consented-launch-safe-skip-rediscovery-final',
+    disposition: 'separate-explicit-residual-risk-no-required-waiver',
+    automaticClosure: false,
+    maxNavigationMethods: 2, maxObservationMs: 120000,
+  }), 'live UI acceptance must retain bounded navigation, exact-head CI and unverified report semantics')
   await file(acceptance.policy)
   await file(acceptance.implementation)
+  const executionPolicy = JSON.parse(await readFile(resolve(root, 'agent-execution-policy.json'), 'utf8'))
+  require(executionPolicy.schemaVersion === 1 && executionPolicy.repository === 'cloga/dsh-github-copilot'
+    && executionPolicy.ownerTask === 'tooling' && executionPolicy.maxTaskScopes === 128
+    && JSON.stringify(executionPolicy.environments?.['local-auxiliary']?.operations) === JSON.stringify(['scripts-test'])
+    && JSON.stringify(executionPolicy.environments?.['github-actions-evidence']?.operations) === JSON.stringify(['ci-evidence'])
+    && executionPolicy.operations?.['dependency-install']?.kind === 'network'
+    && executionPolicy.operations['dependency-install'].maxFailures === 0
+    && executionPolicy.operations?.['scripts-test']?.environment === 'local-auxiliary'
+    && executionPolicy.operations['scripts-test'].maxFailures === 2
+    && JSON.stringify(executionPolicy.operations['scripts-test'].argv) === JSON.stringify([
+      'node', '--test', 'tests/scripts/agent.test.mjs', 'tests/scripts/acceptance.test.mjs',
+      'tests/scripts/environment-guardrails.test.mjs',
+    ])
+    && executionPolicy.operations?.['ci-evidence']?.environment === 'github-actions-evidence'
+    && executionPolicy.operations['ci-evidence'].maxFailures === 2
+    && executionPolicy.operations['ci-evidence'].maxApiCalls === 3
+    && executionPolicy.operations['ci-evidence'].requestTimeoutMs === 15000
+    && executionPolicy.operations['ci-evidence'].workflowPath === '.github/workflows/ci.yml'
+    && JSON.stringify(executionPolicy.operations['ci-evidence'].requiredJobs) === JSON.stringify([
+      'verify (ubuntu-latest)', 'verify (windows-latest)',
+      'Published adapter (ubuntu-latest)', 'Published adapter (windows-latest)', 'release-ready',
+    ])
+    && JSON.stringify(executionPolicy.operations['ci-evidence'].optionalJobs) === JSON.stringify([
+      { name: 'release', allowedConclusions: ['success', 'skipped'] },
+    ]), 'environment policy must retain explicit environments, refusal, bounded budgets and exact CI jobs')
+  await file('agent-execution-policy.json')
+  await file('docs/environment-evidence-guardrails.md')
+  require(contract.tasks.tooling.read.includes('agent-execution-policy.json')
+    && contract.tasks.tooling.read.includes('scripts/environment-guard.mjs')
+    && contract.tasks.tooling.read.includes('docs/environment-evidence-guardrails.md')
+    && contract.tasks.tooling.tests.includes('tests/scripts/environment-guardrails.test.mjs')
+    && contract.tasks.tooling.risk.includes('cannot prevent direct shell bypass')
+    && agentGuide.includes('cannot prevent direct shell bypass')
+    && agentGuide.includes('Do not retry local dependency restoration'),
+  'environment and CI guardrails must remain documented, bounded and registered')
   require(contract.tasks.tooling.read.includes(acceptance.policy)
     && contract.tasks.tooling.read.includes(acceptance.implementation)
     && template.includes('### Acceptance evidence'), 'acceptance evidence entrypoints are missing')
@@ -165,7 +258,12 @@ export async function verifyAgentContract(root = repositoryRoot) {
   }
   const ciWorkflow = await readFile(resolve(root, '.github/workflows/ci.yml'), 'utf8')
   const releaseWorkflow = await readFile(resolve(root, '.github/workflows/release.yml'), 'utf8')
-  require(ciWorkflow.includes('release-ready:') && ciWorkflow.includes('uses: ./.github/workflows/release.yml'), 'main CI must gate and call reusable release delivery')
+  require(ciWorkflow.includes('verify:') && ciWorkflow.includes('runs-on: ${{ matrix.os }}')
+    && ciWorkflow.includes('os: [ubuntu-latest, windows-latest]')
+    && ciWorkflow.includes('name: Published adapter (${{ matrix.os }})')
+    && ciWorkflow.includes('release-ready:')
+    && ciWorkflow.includes('uses: ./.github/workflows/release.yml'),
+  'CI evidence job names must match the required Windows/Linux matrix and published-adapter checks')
   require(releaseWorkflow.includes('workflow_call:') && releaseWorkflow.includes('scripts/release-policy.mjs --plan')
     && releaseWorkflow.includes('scripts/publish-release.mjs'), 'release workflow must plan and publish the exact main commit')
   require(releaseWorkflow.includes('scripts/publish-npm.mjs') && releaseWorkflow.includes('scripts/prepare-release-artifact.mjs')

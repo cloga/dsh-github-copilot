@@ -75,6 +75,38 @@ it.each(['source', 'strict'] as const)('saves high-cost preferences through actu
   } finally { await client.fiber.dispose(); await host.fiber.dispose() }
 })
 
+it.each(['source', 'strict'] as const)('binds native model sync through actual Client and %s Host gateways', async mode => {
+  const host = new Context(), client = new Context()
+  try {
+    const registry = new TypertRegistry(host)
+    if (mode === 'strict') registry.register({ package: remote.package, face: 'host', schemas: [],
+      model: { services: [], events: [], objects: [] }, invocations: remote.descriptors })
+    const connection = new HostConnectionService(host, [], {})
+    new TypertGatewayService(host, { websocketHeartbeatIntervalMs: 30000 })
+    const handler = fixtureFetchHandler(host, connection)
+    let rpcId = 0
+    client.provide('typert', { remotes: { register: () => () => {} }, contexts: { getClient: () => undefined } })
+    client.provide('connection', { rpc: { call: async (_path: string, method: string, payload: unknown) => {
+      const response = await handler.fetch(new Request(`http://fixture.invalid/api/${method}`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ type: 'client-request', rpcId: `native-sync-${++rpcId}`, method, payload }),
+      }))
+      return (await response.json()).result
+    }, open: vi.fn() }, registerGenerationSource: () => () => {}, start: () => ({ stop: () => {} }),
+    generation: { getSnapshot: () => undefined } })
+    Gateway.apply(client)
+    await client.remote.$mount(remote)
+    new GitHubCopilotAuthorizationController(host)
+    await expect(client.remote.githubCopilot.previewNativeModelSync()).resolves.toMatchObject({
+      ok: true, value: { state: 'error', code: 'NATIVE_MODEL_SYNC_ACCOUNT_UNAVAILABLE' },
+    })
+    await expect(client.remote.githubCopilot.applyNativeModelSync('00000000-0000-4000-8000-000000000001'))
+      .resolves.toMatchObject({ ok: true, value: { state: 'error', code: 'NATIVE_MODEL_SYNC_PLAN_EXPIRED' } })
+    if (mode === 'strict') await expect(client.remote.githubCopilot.applyNativeModelSync('invalid-plan'))
+      .resolves.toMatchObject({ ok: false, error: { code: 'gateway/input-invalid' } })
+  } finally { await client.fiber.dispose(); await host.fiber.dispose() }
+})
+
 it.each(['source', 'strict'] as const)('binds persistent Session continuation through actual Client and %s Host gateways', async mode => {
   const host = new Context(), client = new Context()
   const agent = { id: 'continuation-owner', session: { id: 'continuation-owner' } }
@@ -446,7 +478,7 @@ it('keeps explicit master selection reads independent of ambient Client agent sc
 
 it('mounts authorization, account, role and search-catalog Remotes on the exact target Client gateway', async () => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
-  expect(['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3'])
+  expect(['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3'])
     .toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
   const ctx = new Context()
   const registered: unknown[] = []
@@ -484,14 +516,17 @@ it('mounts authorization, account, role and search-catalog Remotes on the exact 
     expect(registered).toEqual([remote])
     expect(remote.descriptors.filter(item => item.namespace !== 'githubCopilotAccounts').map(item => item.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
-      'excludeModel', 'restoreModel', 'setModelExcluded', 'setModelHighCost', 'migrationStatus',
-      'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'requestedModels', 'allocationSummary', 'get', 'authorize', 'setEnabled',
+      'excludeModel', 'restoreModel', 'setModelExcluded', 'setModelHighCost',
+      'previewNativeModelSync', 'applyNativeModelSync', 'migrationStatus',
+      'view', 'save', 'create', 'providers', 'get', 'refresh', 'getNative', 'refreshNative',
+      'ensureNativeIdentity', 'refreshNativeIdentity', 'get', 'requestedModels', 'allocationSummary', 'get', 'authorize', 'setEnabled',
       'get', 'set', 'refreshIdentity', 'ensureIdentity', 'usage', 'refreshUsage', 'turn',
       'get', 'set', 'authorizeNext', 'defaults', 'setDefault',
       'get', 'clear', 'setEnabled', 'setAutoAllocationEnabled', 'setRequestEnabled', 'recordClient',
     ])
     for (const descriptor of remote.descriptors.filter(item => item.namespace === 'githubCopilot'
-      && item.method !== 'setModelExcluded' && item.method !== 'setModelHighCost')) {
+      && item.method !== 'setModelExcluded' && item.method !== 'setModelHighCost'
+      && item.method !== 'previewNativeModelSync' && item.method !== 'applyNativeModelSync')) {
       expect(descriptor.result.mode).toBe('strict')
       expect(descriptor.invocation).toEqual({ kind: 'direct' })
       if (descriptor.method === 'excludeModel' || descriptor.method === 'restoreModel') {
@@ -510,6 +545,27 @@ it('mounts authorization, account, role and search-catalog Remotes on the exact 
         { args: parameterized ? { modelId: 'gpt-5.4' } : {} }, expect.any(AbortSignal))
     }
     expect(rpc).toHaveBeenCalledTimes(10)
+    const syncPreview = {
+      state: 'ready', planId: '00000000-0000-4000-8000-000000000001', enabledCount: 1, syncableCount: 1,
+      outputTokenDefaults: [{ id: 'synthetic-model', maxTokens: 8192 }], addedIds: ['synthetic-model'],
+      removedIds: [], updatedIds: [], skipped: [],
+    }
+    const previewDescriptor = remote.descriptors.find(item => item.method === 'previewNativeModelSync')!
+    expect(previewDescriptor.result.create().parse(syncPreview)).toEqual(syncPreview)
+    expect(() => previewDescriptor.result.create().parse({ ...syncPreview, credential: 'synthetic-forbidden' })).toThrow()
+    rpc.mockResolvedValueOnce({ ok: true, value: syncPreview })
+    await expect(ctx.remote.githubCopilot.previewNativeModelSync()).resolves.toEqual({ ok: true, value: syncPreview })
+    expect(rpc).toHaveBeenLastCalledWith('/api', 'githubCopilot/previewNativeModelSync',
+      { args: {} }, expect.any(AbortSignal))
+    const syncResult = { state: 'ready', modelCount: 1 }
+    const applyDescriptor = remote.descriptors.find(item => item.method === 'applyNativeModelSync')!
+    expect(applyDescriptor.result.create().parse(syncResult)).toEqual(syncResult)
+    expect(applyDescriptor.parameters[0]?.codec.create().parse(syncPreview.planId)).toBe(syncPreview.planId)
+    expect(() => applyDescriptor.parameters[0]?.codec.create().parse('invalid-plan')).toThrow()
+    rpc.mockResolvedValueOnce({ ok: true, value: syncResult })
+    await expect(ctx.remote.githubCopilot.applyNativeModelSync(syncPreview.planId)).resolves.toEqual({ ok: true, value: syncResult })
+    expect(rpc).toHaveBeenLastCalledWith('/api', 'githubCopilot/applyNativeModelSync',
+      { args: { planId: syncPreview.planId } }, expect.any(AbortSignal))
     const catalogDescriptor = remote.descriptors.find(item => item.namespace === 'githubCopilotSearchRouting')!
     expect(catalogDescriptor).toMatchObject({
       id: 'dsh-github-copilot:githubCopilotSearchRouting.providers', service: 'githubCopilotSearchRouting',
@@ -521,8 +577,8 @@ it('mounts authorization, account, role and search-catalog Remotes on the exact 
       providers: [{ id: 'synthetic-registered-search', credential: 'synthetic-forbidden' }] })).toThrow()
     await expect(ctx.remote.githubCopilotSearchRouting.providers()).resolves.toEqual({ ok: true, value: catalog })
     expect(rpc).toHaveBeenLastCalledWith('/api', 'githubCopilotSearchRouting/providers', { args: {} }, expect.any(AbortSignal))
-    expect(rpc).toHaveBeenCalledTimes(11)
-    for (const method of ['get', 'refresh'] as const) {
+    expect(rpc).toHaveBeenCalledTimes(13)
+    for (const method of ['get', 'refresh', 'getNative', 'refreshNative', 'ensureNativeIdentity', 'refreshNativeIdentity'] as const) {
       await expect(ctx.remote.githubCopilotUsage[method]()).resolves.toEqual({ ok: true, value: usage })
       expect(rpc).toHaveBeenLastCalledWith('/api', `githubCopilotUsage/${method}`, { args: {} }, expect.any(AbortSignal))
     }

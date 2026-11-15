@@ -2,6 +2,74 @@ import { readResponseErrorJson } from './response-error-body.ts'
 import { requestBodyEvidence } from './request-body-evidence.ts'
 
 type ReplayFailure = 'scope-mismatch' | 'unsupported' | 'invalid-payload'
+type ReplayStructureReason = 'REASONING_WITHOUT_ENCRYPTED_CONTENT' | 'INCOMPLETE_ITEM'
+  | 'ITEM_REFERENCE_ONLY' | 'PREVIOUS_RESPONSE_REFERENCE'
+
+interface ReplayStructure {
+  readonly reason: ReplayStructureReason
+  readonly inputIndex?: number
+  readonly itemType?: string
+  readonly itemStatus?: string
+  readonly hasId: boolean
+  readonly hasType: boolean
+  readonly hasStatus: boolean
+  readonly hasRole: boolean
+  readonly hasEncryptedContent: boolean
+  readonly hasSummary: boolean
+  readonly hasContent: boolean
+  readonly hasCallId: boolean
+  readonly hasName: boolean
+  readonly hasArguments: boolean
+  readonly hasOutput: boolean
+  readonly hasPreviousResponseId: boolean
+}
+
+const safeItemTypes = new Set([
+  'message', 'reasoning', 'function_call', 'function_call_output', 'item_reference',
+])
+const safeItemStatuses = new Set(['completed', 'in_progress', 'incomplete', 'failed', 'cancelled'])
+
+function safeField(value: unknown, key: string): { present: boolean; value?: unknown } {
+  const descriptor = Object.getOwnPropertyDescriptor(value, key)
+  return descriptor === undefined ? { present: false }
+    : 'value' in descriptor ? { present: true, value: descriptor.value } : { present: true }
+}
+
+function replayStructure(reason: ReplayStructureReason, inputIndex?: number, item?: Record<string, unknown>,
+  hasPreviousResponseId = false): ReplayStructure {
+  const type = item === undefined ? undefined : safeField(item, 'type')
+  const status = item === undefined ? undefined : safeField(item, 'status')
+  const itemType = type?.present && typeof type.value === 'string' && safeItemTypes.has(type.value) ? type.value : 'unknown'
+  const itemStatus = status?.present && typeof status.value === 'string' && safeItemStatuses.has(status.value)
+    ? status.value : status?.present ? 'unknown' : 'absent'
+  return {
+    reason,
+    ...(inputIndex === undefined ? {} : { inputIndex }),
+    ...(item === undefined ? {} : { itemType, itemStatus }),
+    hasId: item === undefined ? false : safeField(item, 'id').present,
+    hasType: item === undefined ? false : safeField(item, 'type').present,
+    hasStatus: item === undefined ? false : safeField(item, 'status').present,
+    hasRole: item === undefined ? false : safeField(item, 'role').present,
+    hasEncryptedContent: item === undefined ? false : safeField(item, 'encrypted_content').present,
+    hasSummary: item === undefined ? false : safeField(item, 'summary').present,
+    hasContent: item === undefined ? false : safeField(item, 'content').present,
+    hasCallId: item === undefined ? false : safeField(item, 'call_id').present,
+    hasName: item === undefined ? false : safeField(item, 'name').present,
+    hasArguments: item === undefined ? false : safeField(item, 'arguments').present,
+    hasOutput: item === undefined ? false : safeField(item, 'output').present,
+    hasPreviousResponseId,
+  }
+}
+
+function formatReplayStructure(structure: ReplayStructure): string {
+  return `Replay structure: reason=${structure.reason}; inputIndex=${structure.inputIndex ?? 'unavailable'}; `
+    + `itemType=${structure.itemType ?? 'unavailable'}; itemStatus=${structure.itemStatus ?? 'unavailable'}; `
+    + `hasId=${structure.hasId}; hasType=${structure.hasType}; hasStatus=${structure.hasStatus}; `
+    + `hasRole=${structure.hasRole}; hasEncryptedContent=${structure.hasEncryptedContent}; `
+    + `hasSummary=${structure.hasSummary}; hasContent=${structure.hasContent}; hasCallId=${structure.hasCallId}; `
+    + `hasName=${structure.hasName}; hasArguments=${structure.hasArguments}; hasOutput=${structure.hasOutput}; `
+    + `hasPreviousResponseId=${structure.hasPreviousResponseId}.`
+}
 
 const replayDiagnostics: Record<ReplayFailure, string> = {
   'scope-mismatch': 'COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH: Copilot rejected history tied to another account or connection. Review Replay recovery options, or start a new conversation. Recovery requires consent; stored history is unchanged.',
@@ -18,9 +86,12 @@ interface ReplayDispatch {
 /** Fixed diagnostics and bounded counts only; never retain request or replay content. */
 export class CopilotResponsesReplayError extends Error {
   readonly dispatchEvidence?: string
-  constructor(reason: ReplayFailure = 'unsupported', dispatch?: ReplayDispatch) {
-    super(replayDiagnostics[reason])
+  readonly structureEvidence?: string
+  constructor(reason: ReplayFailure = 'unsupported', dispatch?: ReplayDispatch, structure?: ReplayStructure) {
+    const structureEvidence = structure === undefined ? undefined : formatReplayStructure(structure)
+    super(`${replayDiagnostics[reason]}${structureEvidence === undefined ? '' : ` ${structureEvidence}`}`)
     if (reason === 'scope-mismatch' && dispatch !== undefined) this.dispatchEvidence = replayDispatchEvidence(dispatch)
+    if (structureEvidence !== undefined) this.structureEvidence = structureEvidence
     this.name = 'CopilotResponsesReplayError'
   }
 }
@@ -73,15 +144,18 @@ function emptyReasoningShell(item: Record<string, unknown>): boolean {
     && Object.keys(item).every(key => ['type', 'id', 'status', 'summary', 'content', 'encrypted_content'].includes(key))
 }
 
-function normalizeItem(item: unknown): Record<string, unknown> | undefined {
+function normalizeItem(item: unknown, inputIndex: number): Record<string, unknown> | undefined {
   if (!isRecord(item)) throw new CopilotResponsesReplayError('invalid-payload')
-  if (item.type === 'item_reference') throw new CopilotResponsesReplayError()
+  const itemType = item.type
+  if (itemType === 'item_reference') {
+    throw new CopilotResponsesReplayError('unsupported', undefined, replayStructure('ITEM_REFERENCE_ONLY', inputIndex, item))
+  }
   // A completed, explicitly empty SDK reasoning signature carries no replay content.
   // Unknown fields, partial signatures and any opaque/text content remain fail-closed.
   if (emptyReasoningShell(item)) return undefined
 
   // These are ordinary instructions, not assistant output replay. Native validation owns them.
-  if ((item.type === 'message' || item.type === undefined)
+  if ((itemType === 'message' || itemType === undefined)
     && (item.role === 'user' || item.role === 'system' || item.role === 'developer')) return item
 
   // An undefined optional property is absent on the JSON wire. Do not invent a general
@@ -89,14 +163,21 @@ function normalizeItem(item: unknown): Record<string, unknown> | undefined {
   if (!Object.hasOwn(item, 'id') || item.id === undefined) return item
   if (!nonemptyString(item.id)) throw new CopilotResponsesReplayError('invalid-payload')
 
-  const complete = item.status === undefined || item.status === 'completed'
+  const itemStatus = item.status
+  const complete = itemStatus === undefined || itemStatus === 'completed'
   const selfContained = complete && (
-    (item.type === 'message' && item.role === 'assistant' && Array.isArray(item.content))
-    || (item.type === 'function_call' && nonemptyString(item.call_id)
+    (itemType === 'message' && item.role === 'assistant' && Array.isArray(item.content))
+    || (itemType === 'function_call' && nonemptyString(item.call_id)
       && nonemptyString(item.name) && typeof item.arguments === 'string')
-    || (item.type === 'reasoning' && nonemptyString(item.encrypted_content))
+    || (itemType === 'reasoning' && nonemptyString(item.encrypted_content))
   )
-  if (!selfContained) throw new CopilotResponsesReplayError()
+  if (!selfContained) {
+    const reason = itemStatus !== undefined && itemStatus !== 'completed'
+      ? 'INCOMPLETE_ITEM'
+      : itemType === 'reasoning' && !nonemptyString(item.encrypted_content)
+        ? 'REASONING_WITHOUT_ENCRYPTED_CONTENT' : 'INCOMPLETE_ITEM'
+    throw new CopilotResponsesReplayError('unsupported', undefined, replayStructure(reason, inputIndex, item))
+  }
 
   // Only this direct connection-scoped ID changes. Nested content, call pairing,
   // phase and opaque reasoning data retain their exact values and references.
@@ -111,16 +192,21 @@ export function normalizeCopilotResponsesPayload(payload: unknown): unknown {
     if (!isRecord(payload) || (typeof payload.input !== 'string' && !Array.isArray(payload.input))) {
       throw new CopilotResponsesReplayError('invalid-payload')
     }
-    if (payload.previous_response_id !== undefined && payload.previous_response_id !== null
-      && payload.previous_response_id !== '') {
-      throw new CopilotResponsesReplayError(typeof payload.previous_response_id === 'string' ? 'unsupported' : 'invalid-payload')
+    const previousResponseId = payload.previous_response_id
+    if (previousResponseId !== undefined && previousResponseId !== null && previousResponseId !== '') {
+      if (typeof previousResponseId === 'string') {
+        throw new CopilotResponsesReplayError('unsupported', undefined,
+          replayStructure('PREVIOUS_RESPONSE_REFERENCE', undefined, undefined, true))
+      }
+      throw new CopilotResponsesReplayError('invalid-payload')
     }
     if (typeof payload.input === 'string') return payload
 
     let changed = false
     const input: Record<string, unknown>[] = []
-    for (const item of payload.input) {
-      const normalized = normalizeItem(item)
+    for (let index = 0; index < payload.input.length; index++) {
+      const item = payload.input[index]
+      const normalized = normalizeItem(item, index)
       changed ||= normalized !== item
       if (normalized !== undefined) input.push(normalized)
     }
@@ -197,7 +283,7 @@ export class ResponsesRetryReplay {
               const original = prior[index]
               if (!isRecord(original) || !nonemptyString(item.id) || original.id !== item.id
                 || !['reasoning', 'message', 'function_call'].includes(String(original.type))
-                || normalizeItem(original) === original) throw error
+                || normalizeItem(original, index) === original) throw error
               if (item.type === 'item_reference') {
                 if (Object.keys(item).length !== 2) throw error
               } else {

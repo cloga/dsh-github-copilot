@@ -9,8 +9,11 @@ import { readTarball } from './verify-tarball.mjs'
 const NAME = 'dsh-github-copilot'
 const REGISTRY = 'https://registry.npmjs.org/'
 const REPOSITORY = `cloga/${NAME}`
+const READBACK_TIMEOUT_MS = 10 * 60_000
+const READBACK_INTERVAL_MS = 15_000
 const check = (ok, message) => { if (!ok) throw new Error(message) }
 const integrity = bytes => `sha512-${createHash('sha512').update(bytes).digest('base64')}`
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 export function distributionTag(version) {
   const parsed = parseVersion(version)
@@ -41,9 +44,13 @@ export function validatePublicPackage(pkg) {
 }
 
 /** Network and process operations are injected; no writes are retried after an uncertain result. */
-export async function publishNpm({ manifest, baseline, bytes, archive, readPackage, readVersion, readTaggedVersion, publish }) {
+export async function publishNpm({
+  manifest, baseline, bytes, archive, readPackage, readVersion, readTaggedVersion, publish, allowPublish,
+  now = () => performance.now(), wait = sleep, onPending = () => {},
+}) {
   validatePublicPackage(manifest)
   check(bytes instanceof Uint8Array && bytes.length > 0, 'Verified archive bytes are required')
+  check(typeof allowPublish === 'boolean', 'Explicit npm publication mode is required')
   const expected = integrity(bytes)
   const version = manifest.version
   const tag = distributionTag(version)
@@ -82,30 +89,55 @@ export async function publishNpm({ manifest, baseline, bytes, archive, readPacka
   }
   const existing = await readVersion()
   const verify = remote => check(remote?.name === NAME && remote.version === version && remote.dist?.integrity === expected,
-    'npm version integrity differs or is not yet observable; no overwrite or automatic retry')
+    'npm version identity or integrity differs; no overwrite or automatic retry')
   if (existing !== null) {
     verify(existing)
     check(current !== undefined && (differentCore || compareVersions(current, version) >= 0),
       'npm version exists but dist-tag is stranded; maintainer must review before repairing the tag')
     return { state: 'published', version, tag, integrity: expected, reconciled: true }
   }
+  check(allowPublish, 'Recovered release archive requires read-only npm reconciliation; missing version is not permission to publish')
   check(current === undefined || compareVersions(current, version) < 0
     || (differentCore && currentLine.status === 'published'),
     'Refusing to lower or overwrite a newer registry dist-tag')
   await publish(['publish', archive, '--tag', tag, '--access', 'public', '--registry', REGISTRY, '--ignore-scripts'])
-  verify(await readVersion())
-  const after = await readPackage()
-  const afterTag = after?.['dist-tags']?.[tag]
-  check(after?.name === NAME && typeof afterTag === 'string' && distributionTag(afterTag) === tag
-    && (afterTag === version || (qualified
-      ? lines.some(line => line.version === afterTag && line.core === manifest.engines.dsh)
-        && compareVersions(afterTag, version) >= 0
-      : compareVersions(afterTag, version) >= 0)), 'npm dist-tag was not verified after publication')
+  const deadline = now() + READBACK_TIMEOUT_MS
+  const readUntilVisible = async (label, read, visible) => {
+    let notified = false
+    while (true) {
+      check(now() < deadline, `npm ${label} readback deadline exceeded; no overwrite or automatic retry`)
+      const value = await read()
+      if (visible(value)) return
+      const remaining = deadline - now()
+      check(remaining > 0, `npm ${label} readback deadline exceeded; no overwrite or automatic retry`)
+      if (!notified) { onPending(label); notified = true }
+      await wait(Math.min(READBACK_INTERVAL_MS, remaining))
+    }
+  }
+  await readUntilVisible('version', readVersion, remote => {
+    if (remote === null) return false
+    verify(remote)
+    return true
+  })
+  await readUntilVisible('dist-tag', readPackage, after => {
+    if (after === null) return false
+    check(after?.name === NAME && after['dist-tags'] !== null && typeof after['dist-tags'] === 'object'
+      && !Array.isArray(after['dist-tags']), 'Invalid npm dist-tag metadata after publication')
+    const afterTag = after['dist-tags'][tag]
+    if (afterTag === undefined) return false
+    check(typeof afterTag === 'string', 'Invalid npm dist-tag metadata after publication')
+    if (afterTag === version) return true
+    if (afterTag === current) return false
+    check(distributionTag(afterTag) === tag, 'npm dist-tag points to another channel after publication')
+    check(!qualified || lines.some(line => line.version === afterTag && line.core === manifest.engines.dsh),
+      'npm dist-tag points to an unverified Core line after publication')
+    return compareVersions(afterTag, version) >= 0
+  })
   return { state: 'published', version, tag, integrity: expected, reconciled: false }
 }
 
 export function npmJson(args, { run = spawnSync } = {}) {
-  const result = run('npm', [...args, '--json', '--registry', REGISTRY, '--fetch-retries=0', '--fetch-timeout=30000'], {
+  const result = run('npm', [...args, '--json', '--registry', REGISTRY, '--prefer-online', '--fetch-retries=0', '--fetch-timeout=30000'], {
     encoding: 'utf8', shell: false, timeout: 60_000, maxBuffer: 4 * 1024 * 1024,
   })
   let data
@@ -123,7 +155,7 @@ export function npmJson(args, { run = spawnSync } = {}) {
 export function npmPackageTags({ run = spawnSync } = {}) {
   // npm view without a version defaults to latest, which need not exist for an alpha-only package.
   const result = run('npm', ['dist-tag', 'ls', NAME, '--json', '--registry', REGISTRY,
-    '--fetch-retries=0', '--fetch-timeout=30000'], {
+    '--prefer-online', '--fetch-retries=0', '--fetch-timeout=30000'], {
     encoding: 'utf8', shell: false, timeout: 60_000, maxBuffer: 1024 * 1024,
   })
   if (result.status !== 0) {
@@ -153,6 +185,8 @@ async function main() {
   check(process.env.ACTIONS_ID_TOKEN_REQUEST_URL && process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN,
     'Missing npm OIDC capability; configure the caller and child id-token permissions')
   check(!process.env.NODE_AUTH_TOKEN && !process.env.NPM_TOKEN, 'Automatic npm publishing must use OIDC, not persistent npm tokens')
+  const artifactSource = process.env.RELEASE_ARTIFACT_SOURCE
+  check(artifactSource === 'packed' || artifactSource === 'recovered', 'Verified release artifact source is required')
   const root = fileURLToPath(new URL('..', import.meta.url))
   const archive = resolve(root, 'artifacts', `${NAME}-${version}.tgz`)
   const bytes = await readFile(archive)
@@ -166,9 +200,11 @@ async function main() {
     'Archive SHA256SUMS differs')
   const result = await publishNpm({
     manifest, baseline, bytes, archive,
+    allowPublish: artifactSource === 'packed',
     readPackage: () => npmPackageTags(),
     readVersion: () => npmJson(['view', `${NAME}@${version}`]),
     readTaggedVersion: tagged => npmJson(['view', `${NAME}@${tagged}`]),
+    onPending: label => console.log(`npm ${label} is not yet visible; waiting for bounded read-only verification`),
     publish: args => {
       const published = spawnSync('npm', args, { encoding: 'utf8', shell: false, timeout: 180_000,
         maxBuffer: 4 * 1024 * 1024, env: { ...process.env, NPM_CONFIG_FETCH_RETRIES: '0' } })

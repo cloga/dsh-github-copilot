@@ -33,6 +33,10 @@ Core inspection is read-only. Isolated tests may use unchanged pinned Core artif
 
 Generated `lib/` output, archives, `.env`, tokens, local credentials, machine state and production screenshots with real authorization codes must not be committed. Use synthetic fixtures for screenshots and report staged UI honestly.
 
+The project disables pnpm's minimum package publication age. Newly published
+dependencies can therefore be installed immediately; lockfile integrity and
+the required CI and release checks still apply.
+
 ## Task acceptance pilot
 
 Define requirement IDs, expected behavior, verification methods and non-goals

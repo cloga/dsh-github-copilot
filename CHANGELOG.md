@@ -1,5 +1,71 @@
 # Changelog
 
+## 0.1.0-alpha.8.dsh.0.2.2.rc.3 (prepared)
+
+- Preview and explicitly confirm a one-time sync of enabled canonical-account models to an existing native Copilot provider (#466).
+- Preserve only models whose native protocol and account capability metadata can be safely represented; disclose skipped models, removals, updates, and per-request output defaults before replacing the native models setting.
+- Recheck account, adapter-owned catalog, preference and Settings evidence before the path-level write and verify both stored and effective readback. Live Desktop activation and provider calls are not established by synthetic tests.
+
+## 0.1.0-alpha.7.dsh.0.2.2.rc.3 (prepared)
+
+- Qualify native search and Auto reviewer compatibility using the adapter-owned pi-ai catalog even when the plugin resolves a separate copy (#461).
+- Leave unknown package exports, model protocols and changed route ownership unavailable rather than guessing or changing native settings.
+
+## 0.1.0-alpha.6.dsh.0.2.2.rc.3 (prepared)
+
+- Permit managed multi-account switching alongside independently configured native Copilot, retaining credential/turn isolation and the native interface (#470).
+- Label managed models `GitHub Copilot (multi-account)` and preserve native configuration, credentials and selected models on disposal.
+- Clarify that plugin-model and configured plugin-search selections require explicit replacements before uninstall; no automatic fallback or settings rewrite.
+
+## 0.1.0-alpha.5.dsh.0.2.2.rc.3 (prepared)
+
+- Show the native Credits account identity only after verifying the canonical OAuth grant and quota belong together; keep quota available when identity is unavailable.
+- Use scoped Node and system certificate trust for the existing GitHub identity lookup without weakening TLS verification.
+
+## 0.1.0-alpha.4.dsh.0.2.2.rc.3 (prepared)
+
+- Remove the hosted-search aside from the managed account-model summary and hide retired Auto descriptions when no historical diagnostic data exists. Historical Auto data remains available and is identified before JSON sharing, including its possible model IDs (#467).
+- Preserve existing settings, diagnostic evidence, quota and compatibility; no live profile, history or account is changed.
+- Target DSH 0.2.2-rc.3; publication and live Desktop activation remain separate from this source change.
+
+## 0.1.0-alpha.3.dsh.0.2.2.rc.3 (prepared)
+
+- Extend reviewer-only temperature omission to qualified DSH native `github-copilot` Responses calls, preserving ordinary Chat and native verdict/permission ownership (#460).
+- Add optional canonical-account Copilot hosted search through the existing native Web registry, with one bounded proof and one final query, cancellation and configuration/credential invalidation (#461).
+- Preserve native settings, selected backends, accounts and histories. No live installation, restart or supplier acceptance is implied.
+
+## 0.1.0-alpha.2.dsh.0.2.2.rc.3 (prepared)
+
+- Explain the native provider's canonical OAuth binding and the existing additional-account coexistence limit, while retaining the visible account panel outside the native Add draft (#458).
+- Bind native-route quota to the canonical OAuth record rather than the plugin-selected account, and show an explicit unavailable state when native credential or endpoint attribution cannot be proven.
+- Keep native quota and context-incident diagnostics available without optional managed-route Remotes, and stop automatically modifying native provider settings at startup or sign-in.
+- Exercise native Copilot subagent selection and synthetic concurrent requests with the plugin absent, enabled and disposed.
+- The native route still uses its own catalog; account-discovered models apply to `github-copilot-preview`. Copilot-hosted search, native Auto-review sampling compatibility and native per-Session multi-account routing remain incomplete.
+- Live OAuth, provider calls, billing attribution and Desktop activation remain unverified.
+
+## 0.1.0-alpha.1.dsh.0.2.2.rc.3 (prepared)
+
+- Begin narrowing the product to account-authorized Copilot models through DSH's published native adapter. Plugin-owned Auto and parent-follow routing and hosted-search composition are retired in the candidate; preserve account quota and review other enhancements before removing only demonstrably unnecessary functionality.
+- Hide inactive Auto and parent-follow settings and remove the obsolete Auto high-cost marking control without changing saved preferences; retain legacy settings and Remote for compatibility.
+- Preserve historical account, model and incomplete-Usage evidence separately from retired Auto selection UI; never reconstruct account history or replace native Usage.
+- Label retired Auto and parent-follow documentation as historical and omit the obsolete Auto UI mockup from the package.
+- Require account-metadata-driven native subagent model selection and actual child invocation, including supported Thinking and concurrent/account-bound request checks; synthetic exact-source fixtures passed on Windows and Linux, but do not establish live supplier or Desktop behavior.
+- Target DSH ownership of parent/child relationships, inheritance and scheduling; legacy dedicated-role orchestration still requires safe retirement.
+- Remove HydraFusion/Max from scope. No additional login, Core changes, model-name routing rules, silent provider substitution, publication, profile installation, or Desktop restart is included.
+- Target official DSH 0.2.2-rc.3. Required Windows/Linux CI, pnpm-lock alignment, publication, profile installation, and loaded-runtime compatibility remain unverified.
+
+## 0.1.0-alpha.5.dsh.0.2.1.rc.3 (prepared)
+
+- Replace the stale rc.2 Desktop lifecycle heading with version-neutral guidance. Recommend a full exit and restart only when the native plugin manager reports `restart-required`; do not repeatedly toggle an Off plugin when the manager reports only pending service dependencies.
+- Keep historical rc.2 Desktop observations distinct from current rc.3 synthetic Loader evidence, and synchronize the English/Chinese README and user-visible copy regressions (#453).
+- Prepare same-Core alpha.5 metadata only. The rc.3 release mapping remains pending; no tag, GitHub Release, npm publication, profile installation or Desktop restart is included.
+
+## 0.1.0-alpha.4.dsh.0.2.1.rc.3 (prepared)
+
+- Carry forward bounded Responses replay refusal diagnostics from retired draft #218 under #446: fixed reasons, zero-based input positions, allowlisted type/status and field-presence booleans through the existing native `INVALID_REQUEST` surface. No IDs, summaries, tool data, unknown values or encrypted bytes enter diagnostics.
+- Exercise current pinned pi-ai 1.1.0 synthetic two-turn summary-only rejection and terminal encryption backfill, preserving original history, exact opaque bytes and `call_id` pairing. Retain existing replay acceptance, account isolation, consent and cancellation ownership; no new retry, history deletion or model switch.
+- Prepare the next same-Core candidate metadata for required PR validation only. No tag, merge, publication, profile installation, restart or live model call is authorized.
+
 ## 0.1.0-alpha.3.dsh.0.2.1.rc.3 (prepared)
 
 - Explain projected-image admission failures through the standard native error path with bounded model, projected/allowed MIME, projected role/position and current build details (#426). Retain the existing fail-closed gate, explicit account restrictions and native projection ownership.

@@ -29,7 +29,7 @@ afterEach(() => {
 describe('tsdown client artifact', () => {
   async function loadGatewayArtifact(): Promise<Record<string, unknown>> {
     const require = createRequire(import.meta.url)
-    if (['0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3'].includes(require('@deepseek-ai/dsh-api-gateway/package.json').version)) {
+    if (['0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3'].includes(require('@deepseek-ai/dsh-api-gateway/package.json').version)) {
       return import('@deepseek-ai/dsh-api-gateway/client')
     }
     const code = readFileSync(resolve('node_modules/@deepseek-ai/dsh-api-gateway/lib/client.js'), 'utf8')
@@ -143,6 +143,16 @@ describe('tsdown client artifact', () => {
     }
     let current: Instance
     let memoIndex = 0, effectIndex = 0
+    const useEffect = (setup: React.EffectCallback, deps?: React.DependencyList) => {
+      const instance = current, index = effectIndex++, previous = instance.effects[index]
+      if (!previous || !deps || !previous.deps || deps.some((value, at) => !Object.is(value, previous.deps?.[at]))) {
+        instance.pending.push(() => {
+          previous?.cleanup?.()
+          const cleanup = setup()
+          instance.effects[index] = { deps, cleanup: typeof cleanup === 'function' ? cleanup : undefined }
+        })
+      }
+    }
     const hooks = {
       ...React,
       useState(initial?: unknown) {
@@ -162,16 +172,8 @@ describe('tsdown client artifact', () => {
         return hooks.useMemo(() => callback, deps)
       },
       useSyncExternalStore<T>(_subscribe: unknown, snapshot: () => T): T { return snapshot() },
-      useLayoutEffect(setup: React.EffectCallback, deps?: React.DependencyList) {
-        const instance = current, index = effectIndex++, previous = instance.effects[index]
-        if (!previous || !deps || !previous.deps || deps.some((value, at) => !Object.is(value, previous.deps?.[at]))) {
-          instance.pending.push(() => {
-            previous?.cleanup?.()
-            const cleanup = setup()
-            instance.effects[index] = { deps, cleanup: typeof cleanup === 'function' ? cleanup : undefined }
-          })
-        }
-      },
+      useEffect,
+      useLayoutEffect: useEffect,
     }
     const client = loadArtifact(hooks as typeof React)
     type Render = (props: Record<string, unknown>) => React.ReactElement
@@ -203,7 +205,7 @@ describe('tsdown client artifact', () => {
       slots: {
         spec: (name: string) => ({ kind: name === 'plugins.bundle.config' ? 'keyed' : 'list', scope: 'root' }),
         register(options: { name: string; id?: string; key?: string }, render: Render) {
-          const key = options.name === 'settings.models.footer' && options.id === 'github-copilot-search-routing'
+          const key = options.name === 'settings.models.footer' && options.id === 'github-copilot-options'
             ? `${options.name}:${options.id}` : options.name
           registrations.set(key, render)
           const dispose = vi.fn(() => { registrations.delete(key) })
@@ -255,8 +257,9 @@ describe('tsdown client artifact', () => {
       else { footer.render(footerElement); provider.render(providerElement) }
       const tree = provider.render(providerElement)
       expect(tree?.props['data-dsh-github-copilot-account-surface']).toBe('provider')
-      expect(tree?.props.children.type).toBe(fixture.client.exports.GitHubCopilotCompactAccount)
-      expect(tree?.props.children.props.embedded).toBe(true)
+      const connection = fixture.instance().render(tree!.props.children)
+      expect(connection?.type).toBe(fixture.client.exports.GitHubCopilotCompactAccount)
+      expect(connection?.props.embedded).toBe(true)
       expect(footer.render(footerElement)).toBeNull()
       expect(fixture.remote.status).toHaveBeenCalledOnce()
       expect(fixture.remote.start).not.toHaveBeenCalled()
@@ -264,18 +267,19 @@ describe('tsdown client artifact', () => {
     } finally { await fixture.dispose() }
   })
 
-  it('registers web-search routing in the built bundle detail page, leaving Models for account controls', async () => {
+  it('registers plugin settings without search routing in the built bundle detail page', async () => {
     const fixture = await surfaceFixture()
     try {
       expect(fixture.registrations.has('settings.models.footer')).toBe(true)
-      expect(fixture.registrations.has('settings.models.footer:github-copilot-search-routing')).toBe(false)
+      expect(fixture.registrations.has('settings.models.footer:github-copilot-options')).toBe(false)
       const element = fixture.registrations.get('plugins.bundle.config')!({ view: 'page' })
       expect(element.type).toBe(fixture.client.exports.CopilotPluginSettingsPage)
       const page = fixture.instance().render(element)
-      expect(page?.props.children[0].type).toBe(fixture.client.exports.ParentModelFollowCard)
-      expect(page?.props.children[1].type).toBe(fixture.client.exports.WebSearchRoutingCard)
+      expect(page?.props.children.props.ctx).toBe(fixture.ctx)
+      expect(fixture.client.exports.ParentModelFollowCard).toBeUndefined()
+      expect(element.props).not.toHaveProperty('routing')
       expect(fixture.registrations.get('plugins.bundle.config')!({ view: 'summary' })).toBeNull()
-      expect(element.props.settings).toBe(fixture.ctx.remote.settings)
+      expect(element.props).not.toHaveProperty('settings')
     } finally { await fixture.dispose() }
   })
 
@@ -289,7 +293,10 @@ describe('tsdown client artifact', () => {
       const draftWarning = renderProvider()
       expect(draftWarning.type).toBe('p')
       expect(draftWarning.props['data-dsh-github-copilot-native-add-warning']).toBe(true)
-      expect(draftWarning.props.children).toContain('another model group')
+      expect(draftWarning.props.children).toContain('canonical account')
+      expect(draftWarning.props.children).toContain('separately selected plugin account')
+      expect(draftWarning.props.children).toContain('GitHub Copilot (multi-account)')
+      expect(draftWarning.props.children).toContain('Both routes can coexist')
       footer.render(footerElement)
       const fallback = footer.render(footerElement)
       const account = fallback?.props.children.props.account
@@ -407,8 +414,10 @@ describe('tsdown client artifact', () => {
       && descriptor.namespace !== 'githubCopilotSessionContinuation'
       && descriptor.namespace !== 'githubCopilotDiagnostics').map(descriptor => descriptor.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
-      'excludeModel', 'restoreModel', 'setModelExcluded', 'setModelHighCost', 'migrationStatus',
-      'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'requestedModels', 'allocationSummary', 'get', 'authorize', 'setEnabled',
+      'excludeModel', 'restoreModel', 'setModelExcluded', 'setModelHighCost',
+      'previewNativeModelSync', 'applyNativeModelSync', 'migrationStatus',
+      'view', 'save', 'create', 'providers', 'get', 'refresh', 'getNative', 'refreshNative',
+      'ensureNativeIdentity', 'refreshNativeIdentity', 'get', 'requestedModels', 'allocationSummary', 'get', 'authorize', 'setEnabled',
     ])
     expect(contributions[0]?.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotAccounts').map(descriptor => descriptor.method).sort())
       .toEqual(['add', 'addForEnvironment', 'cancel', 'ensureIdentity', 'get', 'reauthorize',
@@ -446,6 +455,10 @@ describe('tsdown client artifact', () => {
         expect(descriptor.parameters).toHaveLength(2)
         expect(descriptor.parameters.every(parameter => parameter.codec.mode === 'strict')).toBe(true)
       }
+      else if (descriptor.method === 'applyNativeModelSync') {
+        expect(descriptor.parameters).toHaveLength(1)
+        expect(descriptor.parameters[0]?.codec.mode).toBe('strict')
+      }
       else expect(descriptor.parameters).toEqual([])
       expect(descriptor).toMatchObject({
         id: `dsh-github-copilot:githubCopilot.${descriptor.method}`,
@@ -456,6 +469,8 @@ describe('tsdown client artifact', () => {
         typeSymbol: descriptor.method === 'migrationStatus'
           ? 'dsh-github-copilot#GitHubCopilotMigrationStatus'
           : descriptor.method === 'setModelExcluded' || descriptor.method === 'setModelHighCost' ? 'dsh-github-copilot#GitHubCopilotModelPreferencesView'
+          : descriptor.method === 'previewNativeModelSync' ? 'dsh-github-copilot#GitHubCopilotNativeModelSyncPreview'
+            : descriptor.method === 'applyNativeModelSync' ? 'dsh-github-copilot#GitHubCopilotNativeModelSyncResult'
           : 'dsh-github-copilot#GitHubCopilotAuthorizationView',
       })
     }
@@ -498,7 +513,8 @@ describe('tsdown client artifact', () => {
     const usage = { state: 'ready', billing: 'credits', budget: 'individual',
       used: 3600, remaining: 16400, limit: 20000, percentUsed: 18, observedAt: 1 }
     const usageDescriptors = contributions[0]!.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotUsage')
-    expect(usageDescriptors.map(descriptor => descriptor.method)).toEqual(['get', 'refresh'])
+    expect(usageDescriptors.map(descriptor => descriptor.method)).toEqual(
+      ['get', 'refresh', 'getNative', 'refreshNative', 'ensureNativeIdentity', 'refreshNativeIdentity'])
     for (const descriptor of usageDescriptors) {
       if (descriptor.result.mode !== 'strict') throw new Error('expected independent strict usage codec')
       const codec = descriptor.result

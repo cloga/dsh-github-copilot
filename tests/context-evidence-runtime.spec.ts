@@ -34,11 +34,11 @@ describe('public native context integration', () => {
         message: createAssistantMessage({ source: route, content: [{ type: 'text', text: 'Synthetic reply' }] }),
         stream: [{ type: 'chunk', time: 0, chunk: { type: 'finish', reason: { kind: 'stop' } } }] }, { surfaceOp: 'append' })
       await ctx.plugin({ apply: installContextEvidence })
-      const state = ctx.sessionProjections.stateOf(session, COPILOT_CONTEXT_EVIDENCE)
-      expect(state?.compaction).toMatchObject({ state: 'completed', request: 'succeeded' })
-      expect(state?.sample).toBeNull()
-      expect(state?.invalid).toBe(false)
-      expect(state?.incident).toBeNull()
+      const state = ContextEvidenceSchema.parse(ctx.sessionProjections.stateOf(session, COPILOT_CONTEXT_EVIDENCE))
+      expect(state.compaction).toMatchObject({ state: 'completed', request: 'succeeded' })
+      expect(state.sample).toBeNull()
+      expect(state.invalid).toBe(false)
+      expect(state.incident).toBeNull()
     } finally { await ctx.fiber.dispose() }
   })
   it('registers a strict independent wire projection, cold-folds request routing and disposes reversibly', async () => {
@@ -58,7 +58,7 @@ describe('public native context integration', () => {
       session.append('request/header', {
         header: { config: { provider: 'other', model: 'other' } }, reason: 'change',
       })
-      expect(ctx.sessionProjections.stateOf(session, COPILOT_CONTEXT_EVIDENCE)?.route)
+      expect(ContextEvidenceSchema.parse(ctx.sessionProjections.stateOf(session, COPILOT_CONTEXT_EVIDENCE)).route)
         .toEqual({ provider: 'other', model: 'other' })
       expect(ctx.sessionProjections.checkpoint(session)[COPILOT_CONTEXT_EVIDENCE]?.ver).toBe(3)
       await fiber.dispose()

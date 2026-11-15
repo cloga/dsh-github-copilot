@@ -13,13 +13,21 @@ describe('Copilot quota strict Remote', () => {
     }
   })
   it('uses a separate no-argument namespace and shared strict codec on both supported gateways', () => {
-    expect(contribution.descriptors.map(value => value.method)).toEqual(['get', 'refresh'])
+    expect(contribution.descriptors.map(value => value.method)).toEqual(
+      ['get', 'refresh', 'getNative', 'refreshNative', 'ensureNativeIdentity', 'refreshNativeIdentity'])
     for (const descriptor of contribution.descriptors) {
       expect(descriptor).toMatchObject({ namespace: 'githubCopilotUsage', service: 'githubCopilotUsage', parameters: [] })
       expect(descriptor.result).toMatchObject({ mode: 'strict', schema: CopilotUsageViewSchema })
       expect(Reflect.get(descriptor.result, 'create')()).toBe(CopilotUsageViewSchema)
     }
     expect(CopilotUsageViewSchema.parse(ready)).toEqual(ready)
+  })
+  it('accepts a bounded native identity only with canonical quota evidence', () => {
+    const identity = { login: 'native-user', userId: 123 }
+    expect(CopilotUsageViewSchema.parse({ ...ready, accountId: 'canonical', identity })).toMatchObject({ identity })
+    expect(CopilotUsageViewSchema.safeParse({ ...ready, accountId: '11111111-1111-4111-8111-111111111111', identity }).success).toBe(false)
+    expect(CopilotUsageViewSchema.safeParse({ ...ready, identity }).success).toBe(false)
+    expect(CopilotUsageViewSchema.safeParse({ ...ready, accountId: 'canonical', identity: { ...identity, access: 'secret' } }).success).toBe(false)
   })
   it.each([
     { access: 'secret' }, { user: 'private-id' }, { diagnostic: 'raw server error' },

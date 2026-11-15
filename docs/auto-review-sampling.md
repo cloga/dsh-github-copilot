@@ -1,7 +1,30 @@
 # Native Auto reviewer sampling compatibility
 
-The plugin automatically omits `temperature` only from the official DSH
-exact `0.2.0-rc.2`, `0.2.1-alpha.4` or `0.2.1-alpha.5` Auto reviewer root's account-proven managed `openai-responses`
+## Canonical native route (DSH 0.2.2-rc.3)
+
+The same reviewer-only policy also covers `github-copilot` when the public
+Loader root, native adapter package callback, configurable-provider directory,
+settings revision and the adapter-owned public pi-ai 1.3.0 catalog prove a
+native Responses route. The adapter and plugin may resolve separate pi-ai copies;
+protocol facts come from the adapter's copy, not an assumed equivalent plugin
+catalog. Missing exports or incomplete metadata leave the enhancement
+unavailable with a diagnostic. It requires `purpose: 'auto-review'` and excludes
+loop-owned requests. Custom credential, endpoint and compatibility overrides
+remain native; unknown models are diagnosed, never assigned a guessed protocol.
+
+The auxiliary request is cloned without temperature and prepared through public
+`llm.prepareCall`. Identity and configuration are checked again after awaits,
+and the prepared generation is dispatched once. Preparation failures, cancellation
+and revocation never trigger a fallback or resend. The canonical fixture uses
+the actual native pi-ai adapter and reviewer/tool pipeline with synthetic HTTP
+responses for allow, deny, malformed verdict, HTTP error and cancellation.
+Disposing the enhancement reproduces the unsupported-temperature failure.
+These are synthetic acceptance requirements, not proof of live supplier access.
+
+## Managed-route compatibility
+
+The plugin automatically omits `temperature` only from a supported official DSH
+Auto reviewer root's account-proven managed `openai-responses`
 requests. No user opt-in is required. Concurrent ordinary Chat, even on the same
 Session/model, retains its requested sampling. No supplier capability is inferred
 from `supports.thinking`; the policy addresses the reported unsupported-temperature
@@ -26,6 +49,8 @@ At official commit `639ed015397290b3745d163aafe02ffee4aa3f84`:
 The plugin requires exact entry-root equality, the official package/version,
 matching manifest ownership in the Loader tree and plugin import contexts, and
 independently imported public `apply` equality with the caller's runtime callback.
+The loader's returned fiber can be a thenable wrapper; root ownership compares
+its public `ctx.fiber` with the caller's fiber, not the wrapper object.
 It rechecks root/liveness after asynchronous resolution. Names alone are not
 identity. Importing the public module does not apply/register another reviewer.
 
@@ -39,11 +64,12 @@ Plugin disposal revokes its listener and in-flight scoped dispatch.
 
 ## Scope and evidence limits
 
-Canonical Core-owned Copilot, other providers/protocols, aliases, descendants,
+Unqualified canonical Copilot, other providers/protocols, aliases, descendants,
 impostor callbacks and unresolved identity remain native. Unqualified reviewer
 identity reports bounded fixed-code Host diagnostics, not a broad omission
 fallback. Missing optional reviewer packages do not prevent ordinary startup.
-Future official versions need qualification; the exact rc.2 check is intentional.
+The `0.2.2-rc.3` candidate remains subject to its exact-source and
+published-artifact qualification; future versions also require qualification.
 
 The independent legacy `responsesOmitTemperature` setting remains default false.
 Explicit true still changes **all** managed Responses sampling; it is not needed

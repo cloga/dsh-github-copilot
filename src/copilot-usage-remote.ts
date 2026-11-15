@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { strictRemoteCodec } from './remote-codec.ts'
 import { COPILOT_USAGE_DIAGNOSTICS, COPILOT_USAGE_MAX_AMOUNT, COPILOT_USAGE_MAX_TIMESTAMP } from './copilot-usage-types.ts'
 import type { CopilotUsageView } from './copilot-usage-types.ts'
-import { COPILOT_ACCOUNT_ID_PATTERN } from './copilot-accounts-types.ts'
+import { COPILOT_ACCOUNT_ID_PATTERN, GITHUB_ACCOUNT_LOGIN_PATTERN } from './copilot-accounts-types.ts'
 export type { CopilotUsageView } from './copilot-usage-types.ts'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
@@ -11,6 +11,10 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     githubCopilotUsage: {
       get(): Promise<RemoteResult<CopilotUsageView>>
       refresh(): Promise<RemoteResult<CopilotUsageView>>
+      getNative(): Promise<RemoteResult<CopilotUsageView>>
+      refreshNative(): Promise<RemoteResult<CopilotUsageView>>
+      ensureNativeIdentity(): Promise<RemoteResult<CopilotUsageView>>
+      refreshNativeIdentity(): Promise<RemoteResult<CopilotUsageView>>
     }
   }
 }
@@ -19,6 +23,9 @@ const amount = z.number().finite().nonnegative().max(COPILOT_USAGE_MAX_AMOUNT)
 const timestamp = z.number().int().nonnegative().max(COPILOT_USAGE_MAX_TIMESTAMP)
 export const CopilotUsageViewSchema = z.object({
   accountId: z.string().max(36).regex(COPILOT_ACCOUNT_ID_PATTERN).optional(),
+  identity: z.object({ login: z.string().min(1).max(39).regex(GITHUB_ACCOUNT_LOGIN_PATTERN),
+    userId: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    host: z.literal('github.com').optional() }).strict().optional(),
   state: z.enum(['ready', 'stale', 'unavailable', 'signed-out']),
   billing: z.enum(['credits', 'requests', 'unknown']),
   budget: z.enum(['individual', 'pooled', 'unknown']),
@@ -29,6 +36,8 @@ export const CopilotUsageViewSchema = z.object({
 }).strict().superRefine((view, ctx) => {
   const invalid = () => ctx.addIssue({ code: 'custom', message: 'Invalid account quota snapshot' })
   const hasAmounts = [view.used, view.remaining, view.limit, view.percentUsed].some(value => value !== undefined)
+  if (view.identity !== undefined && (view.accountId !== 'canonical'
+    || view.state !== 'ready' && view.state !== 'stale')) invalid()
   if (view.state === 'unavailable' || view.state === 'signed-out') {
     if (hasAmounts || view.observedAt !== undefined || view.resetAt !== undefined || view.diagnostic === undefined) invalid()
     if (view.state === 'signed-out' && (view.billing !== 'unknown' || view.budget !== 'unknown')) invalid()
@@ -50,7 +59,7 @@ export const CopilotUsageViewSchema = z.object({
 
 const contribution: TypertRemoteContribution = {
   package: 'dsh-github-copilot',
-  descriptors: ['get', 'refresh'].map(method => ({
+  descriptors: ['get', 'refresh', 'getNative', 'refreshNative', 'ensureNativeIdentity', 'refreshNativeIdentity'].map(method => ({
     id: `dsh-github-copilot:githubCopilotUsage.${method}`,
     namespace: 'githubCopilotUsage', service: 'githubCopilotUsage', method,
     invocation: { kind: 'direct' }, parameters: [],

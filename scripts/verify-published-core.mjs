@@ -21,6 +21,14 @@ export const CANDIDATE_CORE_RELEASES = Object.freeze({
     schemastery: '3.18.5',
     zod: '4.4.3',
   }),
+  '0.2.2-rc.3': Object.freeze({
+    commit: '38a6a5c965aa99ab525161efb7cc5cf1fe62fced',
+    piAi: '1.3.0',
+    cordis: '4.1.0',
+    loader: '1.1.0',
+    schemastery: '3.19.0',
+    zod: '4.6.6',
+  }),
 })
 const sections = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']
 const rootFiles = ['tsconfig.json', 'tsconfig.tests.json', 'tsdown.config.ts', 'vitest.config.ts', 'cordis.patch.yml',
@@ -72,8 +80,8 @@ async function collectTree(root, path, paths) {
   } else if (info.isFile() && extensions.has(extname(path).toLowerCase())) paths.push(relative(root, path))
 }
 function fixtureManifest(original, release, piAi, candidate) {
-  if (original.name !== 'dsh-github-copilot' || original.dependencies?.['@earendil-works/pi-ai'] !== '1.1.0') {
-    throw new Error('fixture requires this plugin and its exact own pi-ai 1.1.0 dependency')
+  if (original.name !== 'dsh-github-copilot' || original.dependencies?.['@earendil-works/pi-ai'] !== piAi) {
+    throw new Error(`fixture requires this plugin and its exact own pi-ai ${piAi} dependency`)
   }
   const manifest = { ...original, private: true, scripts: {} }
   for (const section of sections) {
