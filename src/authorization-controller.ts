@@ -123,6 +123,7 @@ export interface GitHubCopilotNativeModelSyncPreview {
   readonly removedIds: readonly string[]
   readonly updatedIds: readonly string[]
   readonly skipped: readonly { readonly id: string; readonly code: NativeModelSyncSkipCode }[]
+  readonly nativeCatalogMissingIds?: readonly string[]
 }
 
 export interface GitHubCopilotNativeModelSyncResult {
@@ -167,11 +168,14 @@ function nativeSyncProfileProblem(
 
 function nativeSyncSupportsRouteCompatibility(
   profile: Record<string, unknown>, models: readonly NativeModelProfile[],
-  accountModels: readonly { readonly id: string; readonly api: string }[],
+  nativeModels: Iterable<NativeCopilotModel>,
 ): boolean {
   if (object(profile.compat)?.supportsStrictMode !== false) return true
+  if (typeof profile.api === 'string') {
+    return models.length > 0 && (profile.api === 'openai-responses' || profile.api === 'openai-completions')
+  }
   const ids = new Set(models.map(model => model.id))
-  return accountModels.some(model => ids.has(model.id)
+  return [...nativeModels].some(model => ids.has(model.id)
     && (model.api === 'openai-responses' || model.api === 'openai-completions'))
 }
 
@@ -765,8 +769,6 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
           excludedModelIds: new Set(preferences.excludedModelIds),
           currentModels,
           currentModelsUseCatalog: currentModels.length === 0,
-          ...(typeof profile.api === 'string' ? { routeApi: profile.api } : {}),
-          ...(typeof profile.reasoning === 'string' ? { routeReasoning: profile.reasoning } : {}),
           nativeCatalog: [...nativeCatalog.catalog.values()],
         })
       } catch { return empty('error', 'NATIVE_MODEL_SYNC_SETTINGS_INVALID') }
@@ -774,7 +776,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
         return { ...empty('blocked', 'NATIVE_MODEL_SYNC_NO_SYNCABLE_MODELS'),
           enabledCount: plan.enabledCount, skipped: plan.skipped }
       }
-      if (!nativeSyncSupportsRouteCompatibility(profile, plan.models, snapshot.models)) {
+      if (!nativeSyncSupportsRouteCompatibility(profile, plan.models, nativeCatalog.catalog.values())) {
         return empty('blocked', 'NATIVE_MODEL_SYNC_ROUTE_COMPAT_UNPROVEN')
       }
 
@@ -803,6 +805,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
         state: 'ready', planId, enabledCount: plan.enabledCount, syncableCount: plan.syncableCount,
         outputTokenDefaults: plan.outputTokenDefaults,
         addedIds: plan.addedIds, removedIds: plan.removedIds, updatedIds: plan.updatedIds, skipped: plan.skipped,
+        nativeCatalogMissingIds: plan.nativeCatalogMissingIds,
       }
     } finally { lease.release() }
   }
@@ -848,7 +851,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       if (route.current === undefined) return failed('NATIVE_MODEL_SYNC_PROFILE_MISSING')
       const profileProblem = nativeSyncProfileProblem(route.current, route.hasSecrets)
       if (profileProblem !== undefined) return failed(profileProblem)
-      if (!nativeSyncSupportsRouteCompatibility(route.current, plan.models, snapshot.models)) {
+      if (!nativeSyncSupportsRouteCompatibility(route.current, plan.models, plan.nativeCatalog.catalog.values())) {
         return failed('NATIVE_MODEL_SYNC_ROUTE_COMPAT_UNPROVEN')
       }
       if (route.routeRevision !== plan.routeRevision || route.markerRevision !== plan.markerRevision) {
@@ -908,7 +911,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
           || nativeSyncProfileProblem(saved.current, saved.hasSecrets) !== undefined
           || saved.current.api !== routeApi || saved.current.reasoning !== routeReasoning
           || !equalJson(saved.current.compat, routeCompatibility)
-          || !nativeSyncSupportsRouteCompatibility(saved.current, plan.models, snapshot.models)
+          || !nativeSyncSupportsRouteCompatibility(saved.current, plan.models, nativeCatalog.catalog.values())
           || !equalJson(saved.raw?.models, plan.models) || !effectiveNativeModelsMatch(saved.current.models, plan.models)
           || currentPreferences.state !== 'ready' || !currentPreferences.writable
           || currentPreferences.revision !== plan.preferencesRevision || !plan.proofCurrent()

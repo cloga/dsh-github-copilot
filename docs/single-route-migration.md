@@ -37,6 +37,20 @@ catalog sync. The optional native model sync is separately previewed and
 confirmed, writes only the existing native model-list path, and never creates a
 provider profile.
 
+Model sync submits all enabled account IDs as `{ id }` entries, without a
+second capability filter or a native-catalog intersection (#508). Missing
+native IDs are advisory only. Native configuration resolves definitions from
+its own catalog and existing route settings; it may reject an unresolved ID and
+therefore the entire write. The plugin does not force an API, suppress native
+validation or claim model-call compatibility from a matching name.
+
+Confirming sync replaces per-model customizations, including explicit output
+request defaults. The preview discloses updated and removed entries, and the
+saved list is checked against both user and effective Settings. Failures and
+uncertain outcomes remain errors, with no automatic retry. Successful ID-only
+lists remain usable by the native adapter after plugin unload; that persistence
+does not prove supplier capability or successful inference.
+
 The account controls cannot replace DSH's native provider **Edit/Delete**
 controls. Saving another native provider group remains a native DSH action; the
 plugin does not intercept it or claim to enforce a single group.

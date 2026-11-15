@@ -73,15 +73,15 @@ After the exact compatible release is available and verified, download its
 original asset and checksum in an empty directory:
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.18.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.18.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.18.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.19.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.19.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.19.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 For the `web` profile, install the same Release asset:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.18.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.18.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.19.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.19.dsh.0.2.2.rc.3.tgz
 ```
 
 Choose the intended profile explicitly. Then:
@@ -101,30 +101,36 @@ Account-discovered model metadata is available for an explicitly reviewed sync
 into the native `github-copilot` model list; discovery alone does not change the
 native catalog or model selection.
 
-To copy enabled models from the verified account used by the native provider into an existing
+To select enabled model IDs from the verified account used by the native provider in an existing
 native provider, open **Manage → Model preferences**, review the displayed
-additions, updates, removals, skipped models and per-request output defaults,
+additions, updates, removals and any IDs absent from the native catalog,
 then choose **Sync models**. Preparing the display uses the current verified
 account snapshot without forcing discovery; if it is unavailable, use
 **Refresh models**. This one-time snapshot replaces only
 `llm-pi-ai.providers.github-copilot.models` with Settings CAS and readback.
-The nonempty saved list replaces the native built-in catalog and remains after
-the plugin is unloaded or uninstalled. Copying model settings does not change
-the native adapter's request behavior or prove that supplier calls will
-succeed. Native requests retain DSH's provider-owned transport and semantics.
-Models with unproven or incompatible native catalog protocols, unknown or
-narrower server input caps, unknown context or vision support, or unknown or
-unsupported reasoning controls are skipped rather than guessed.
-New Completions and Anthropic models without a native catalog compatibility
-baseline are also skipped; catalog-backed models retain native compatibility.
-Image models are included only when the account explicitly supports all four
-native request formats: PNG, JPEG, WebP, and GIF. Custom native authentication,
+The submitted list contains all enabled account model IDs as `{ id }` references;
+it is not intersected with the installed native catalog. A successfully saved
+list remains after the plugin is unloaded or uninstalled. Capacities, protocols,
+image support and reasoning controls are resolved by the native adapter,
+not copied or certified from account metadata. Differences
+in account input limits, image formats or reasoning metadata no longer exclude
+a model from this submission. IDs absent from the native catalog are advisory,
+not skipped. The native settings validator may reject the entire update when
+it cannot resolve a model's protocol; the plugin does not guess a protocol or
+change the route API to force it through. A rejected write is not reported as
+successful; check the saved settings before trying again.
+**Sync replaces existing per-model customizations, including configured output
+request defaults, with native definitions.** Review updated and removed entries
+before confirming. Route-wide settings remain unchanged. This selects a model
+list; it does not prove supplier compatibility or enforce account-specific
+limits. Native requests retain DSH's transport, validation and error behavior.
+Custom native authentication,
 endpoints, headers, nonempty model overrides, or unproven route compatibility
 overrides block sync rather than changing those settings. An existing
 `compat.supportsStrictMode: false` is preserved when at least one synced
 Responses or Completions model supports that native override. An existing native default
-reasoning effort must also be supported by each synced model. Core uses each
-configured `maxTokens` as that model's per-request output default. The sync does
+reasoning effort is preserved for native resolution. ID-only entries do not add
+per-model `maxTokens` request defaults. The sync does
 not change credentials, select a model, alter history, or automatically follow
 later account changes.
 

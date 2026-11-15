@@ -65,6 +65,9 @@ describe('strict Remote factory compatibility', () => {
       const result = descriptor.result as ReturnType<typeof strictRemoteCodec>
       expect(descriptor.parameters).toEqual([])
       expect(result.create().parse(preview)).toEqual(preview)
+      expect(result.create().parse({ ...preview, nativeCatalogMissingIds: ['future-model'] }))
+        .toEqual({ ...preview, nativeCatalogMissingIds: ['future-model'] })
+      expect(() => result.create().parse({ ...preview, nativeCatalogMissingIds: Array(513).fill('future-model') })).toThrow()
       expect(() => result.create().parse({ ...preview, credentials: 'private' })).toThrow()
       expect(() => result.create().parse({ ...preview, skipped: [{ id: 'model', code: 'invented' }] })).toThrow()
     }

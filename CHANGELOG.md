@@ -5,6 +5,13 @@ release tags do not update this file after publication. Check the exact
 [GitHub Release](https://github.com/cloga/dsh-github-copilot/releases) and npm
 version separately rather than treating an old `prepared` label as current status.
 
+## 0.1.0-alpha.19.dsh.0.2.2.rc.3 (prepared)
+
+- Submit all enabled account model IDs directly instead of copying account capabilities or filtering against the native catalog (#508).
+- Stop excluding native entries because of narrower input limits, restricted image formats or account reasoning metadata. The native adapter keeps its definitions and request behavior; this is not a compatibility certification.
+- Sync submits only `{ id }` references, replacing existing per-model customizations and output defaults after the visible preview and explicit confirmation. IDs absent from the native catalog are advisory, not skipped; native validation may reject the entire update.
+- Preserve canonical-account verification, existing route settings, Settings CAS/readback, history and model selections. No automatic profile update or installation.
+
 ## 0.1.0-alpha.18.dsh.0.2.2.rc.3 (prepared)
 
 - Stop registering the separate `github-copilot-preview` model provider while retaining account metadata for explicitly confirmed native model sync (#500).

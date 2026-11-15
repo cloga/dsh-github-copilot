@@ -108,7 +108,9 @@ export async function verifyAgentContract(root = repositoryRoot) {
   require(implementation.unsupportedCapability === 'report-limitation-and-plugin-local-alternative', 'plugin-only missing capabilities must not trigger Core patches')
   require(implementation.scopeException === 'separate-explicit-human-request-only', 'plugin-only scope must not expand from an inferred compatibility task')
   const nativeSync = contract.tasks?.models
-  require(nativeSync?.nativeModelSyncBoundary?.includes('one explicit confirmation')
+  require(nativeSync?.nativeModelSyncBoundary?.includes('One explicit confirmation')
+    && nativeSync.nativeModelSyncBoundary.includes('ID-only account model submission, not capability qualification')
+    && nativeSync.nativeModelSyncBoundary.includes('Missing native IDs are advisory, not skipped')
     && nativeSync.nativeModelSyncBoundary.includes('non-forcing preview')
     && nativeSync.nativeModelSyncBoundary.includes('native adapter-owned pi-ai catalog')
     && nativeSync.nativeModelSyncBoundary.includes('preserve supportsStrictMode: false only when at least one synced Responses or Completions model supports it')
@@ -119,7 +121,7 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && nativeSync.read?.includes('src/native-model-sync.ts')
     && nativeSync.tests?.includes('tests/native-model-sync.spec.ts')
     && nativeSync.tests?.includes('tests/fixtures/native-model-sync-core.fixture.ts'),
-  'native model sync must retain explicit confirmation, adapter proof, one-path CAS, readback and bounded tests')
+  'native model sync must retain ID-only account submission, explicit confirmation, adapter proof, one-path CAS, readback and bounded tests')
   require(!contract.boundaries?.approvalRequired?.includes('merge'), 'merge must not require a separate approval')
   require(!contract.boundaries?.approvalRequired?.includes('release'), 'release delivery must not require a second blanket release approval')
   for (const boundary of ['install into a user profile', 'sign-out', 'worktree checkout']) {
