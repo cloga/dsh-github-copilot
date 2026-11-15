@@ -2,7 +2,6 @@ import { cpSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } 
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import '@earendil-works/pi-ai/api/openai-completions'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { Context } from '@deepseek-ai/cordis'
@@ -172,8 +171,7 @@ it('applies confirmed account switches to native credentials and retains the nat
       symlinkSync(dirname(dirname(packageRoot)), join(markerFixture, 'node_modules'), 'junction')
       const copy = join(markerFixture, 'llm')
       cpSync(packageRoot, copy, { recursive: true, errorOnExist: true, force: false })
-      const other: typeof import('@deepseek-ai/dsh-llm') =
-        await import(/* @vite-ignore */ pathToFileURL(join(copy, 'lib', 'index.js')).href)
+      const other: typeof import('@deepseek-ai/dsh-llm') = require(join(copy, 'lib', 'index.js'))
       const ownMarker = markAgentLoopRequest({ provider: 'github-copilot', model: model.id, messages: [] })
       expect(isAgentLoopRequest(ownMarker)).toBe(true)
       expect(other.isAgentLoopRequest(ownMarker)).toBe(false)
