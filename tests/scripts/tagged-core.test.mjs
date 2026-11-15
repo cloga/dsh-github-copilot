@@ -244,8 +244,7 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
         await writeFile(join(value.root, 'tests/fixtures/model-exclusions-core.fixture.ts'), 'export {}')
         await writeFile(join(value.root, 'tests/fixtures/turn-usage-core.fixture.ts'), 'export {}')
         await writeFile(join(value.root, 'tests/fixtures/copilot-accounts-persistence-core.fixture.ts'), 'export {}')
-        for (const name of ['copilot-accounts-host-core.fixture.ts', 'copilot-accounts-gateway-core.fixture.ts', 'copilot-accounts-request-core.fixture.ts',
-          'diagnostics-storage-core.fixture.ts', 'diagnostics-gateway-core.fixture.ts']) {
+        for (const name of ['copilot-accounts-host-core.fixture.ts', 'copilot-accounts-gateway-core.fixture.ts', 'copilot-accounts-request-core.fixture.ts']) {
           await writeFile(join(value.root, 'tests/fixtures', name), 'export {}')
         }
         for (const name of ['copilot-stream-liveness.spec.ts', 'copilot-stream-adapter.spec.ts']) {
@@ -260,7 +259,7 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
       if (release === '0.2.2-rc.3') {
         await writeFile(join(value.root, 'tests/native-web-composition.spec.ts'), 'export {}')
         await writeFile(join(value.root, 'tests/dual-model-host.spec.ts'), 'export {}')
-        await writeFile(join(value.root, 'tests/fixtures/diagnostics-native-core.fixture.ts'), 'export {}')
+        await writeFile(join(value.root, 'tests/loader-composition.spec.ts'), 'export {}')
         await writeFile(join(value.root, 'tests/fixtures/tool-schema-core.fixture.ts'), 'export {}')
         await writeFile(join(value.root, 'tests/fixtures/subagent-copilot-core.fixture.ts'), 'export {}')
         await writeFile(join(value.root, 'tests/fixtures/native-subagent-copilot-core.fixture.ts'), 'export {}')
@@ -310,11 +309,10 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
         ...modern ? ['tests/fixtures/alpha2-contracts-core.fixture.ts', 'tests/fixtures/compaction-pressure-core.fixture.ts', 'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts'] : [],
         ...current ? ['tests/fixtures/scoped-compaction-core.fixture.ts', 'tests/fixtures/model-exclusions-core.fixture.ts', 'tests/fixtures/turn-usage-core.fixture.ts', 'tests/fixtures/copilot-accounts-persistence-core.fixture.ts', 'tests/fixtures/copilot-accounts-host-core.fixture.ts', 'tests/fixtures/copilot-accounts-gateway-core.fixture.ts', 'tests/fixtures/copilot-accounts-request-core.fixture.ts', 'tests/copilot-stream-liveness.spec.ts', 'tests/copilot-stream-adapter.spec.ts'] : [],
         ...current ? ['tests/fixtures/auto-review-copilot-core.fixture.ts'] : [],
-        ...current ? ['tests/fixtures/diagnostics-storage-core.fixture.ts', 'tests/fixtures/diagnostics-gateway-core.fixture.ts'] : [],
         'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts',
         ...recent ? ['tests/fixtures/alpha4-contracts-core.fixture.ts', 'tests/fixtures/copilot-usage-selector-core.fixture.ts'] : [],
         ...release === '0.2.2-rc.3' ? ['tests/native-web-composition.spec.ts', 'tests/dual-model-host.spec.ts',
-          'tests/fixtures/diagnostics-native-core.fixture.ts',
+          'tests/loader-composition.spec.ts',
           'tests/fixtures/tool-schema-core.fixture.ts', 'tests/fixtures/subagent-copilot-core.fixture.ts',
           'tests/fixtures/native-subagent-copilot-core.fixture.ts', 'tests/fixtures/native-model-sync-core.fixture.ts'] : []])
     } finally { await rm(value.base, { recursive: true, force: true }) }

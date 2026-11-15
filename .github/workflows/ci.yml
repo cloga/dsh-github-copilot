@@ -198,7 +198,7 @@ jobs:
           pnpm exec tsdown
           node node_modules/vitest/vitest.mjs run --config vitest.config.ts
           node node_modules/vitest/vitest.mjs run tests/copilot-stream-liveness.spec.ts tests/copilot-stream-adapter.spec.ts tests/config.spec.ts tests/preview-provider.spec.ts tests/pi-provider-bridge.spec.ts tests/preview-route.spec.ts tests/account-model-auth.spec.ts tests/published-core.spec.ts tests/single-route.spec.ts tests/search-routing.spec.ts tests/routed-web.spec.ts tests/deepseek-search-fallback.spec.ts tests/context-usage.spec.ts tests/context-evidence.spec.ts tests/context-evidence-runtime.spec.ts tests/context-evidence-ui.spec.ts tests/background-compaction.spec.ts tests/manual-compaction-recovery.spec.ts tests/fixtures/auto-review-copilot-core.fixture.ts
-          node node_modules/vitest/vitest.mjs run --config vitest.diagnostics-published.config.ts
+          node node_modules/vitest/vitest.mjs run tests/loader-composition.spec.ts tests/client-search-inject.spec.ts tests/remote-codec.spec.ts
           node node_modules/vitest/vitest.mjs run --config vitest.candidate-published.config.ts
           node node_modules/vitest/vitest.mjs run --config vitest.auto-review-published.config.ts --reporter=default --reporter=json --outputFile reviewer-results.json
           node -e "const r=require('./reviewer-results.json'); const s=r.testResults.find(s=>s.name.endsWith('auto-review-copilot-core.fixture.ts')); if(!s||s.assertionResults.length!==34||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected all 34 native reviewer tests, none skipped'); console.log('Verified 34 executed published-artifact reviewer tests')"

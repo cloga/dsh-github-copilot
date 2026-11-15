@@ -11,7 +11,7 @@ import {
 import { GITHUB_COPILOT_CREDENTIAL_KEY } from '../src/authorization-controller.ts'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from '../src/copilot-identity.ts'
 import { applyRequestAuth } from '../src/copilot-request.ts'
-import type { CredentialChangeReason } from '../src/request-diagnostics.ts'
+import type { CredentialChangeReason } from '../src/copilot-auth.ts'
 
 interface GrantRecord {
   kind: 'grant'

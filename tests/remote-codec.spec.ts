@@ -4,6 +4,9 @@ import { strictRemoteCodec } from '../src/remote-codec.ts'
 import remote from '../src/remote.ts'
 
 describe('strict Remote factory compatibility', () => {
+  it('does not expose the retired local diagnostics namespace', () => {
+    expect(remote.descriptors.some(value => value.namespace === 'githubCopilotDiagnostics')).toBe(false)
+  })
   it('preserves one strict parser for alpha.2 factories and legacy gateways', () => {
     const schema = z.object({ value: z.string() }).strict()
     const codec = strictRemoteCodec('fixture#Value', schema)
@@ -28,7 +31,7 @@ describe('strict Remote factory compatibility', () => {
         checked++
       }
     }
-    expect(checked).toBe(116)
+    expect(checked).toBe(104)
   })
   it('keeps explicit replay recovery arguments and output strict', () => {
     const descriptors = remote.descriptors.filter(value => value.namespace === 'githubCopilotReplayRecovery')

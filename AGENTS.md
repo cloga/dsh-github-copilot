@@ -215,34 +215,12 @@ projection may diagnose concrete failed-zero or invalid-sample incidents; ordina
 request progress and absent fresh sampling stay quiet. Never filter shared native
 usage, replace Core's meter, infer current occupancy/percentages or rewrite history.
 See [quota boundaries](./docs/copilot-usage.md).
-12. Default-off local account/Checking/compaction diagnostics through public storage-domain and strict additive Remotes. Keep fixed-dimension Client/Host and logical/physical populations separate, with bounded handles/rows, 14-day retention, explicit loss/uncertainty and native commit evidence. Isolate the home-wide backend by public profile context, never account/Session identity; one writer per profile is required. No content, raw errors, identities/hashes, credential/history reads, ad-hoc files, Settings logs, upload, daily task or automatic repair. Aggregate and Auto controls remain independent. Separately consented `requestDiagnosticsEnabled` collects at most 128 content-free managed-adapter physical requests for 24 hours within the shared 2 MiB cap. Random stream groups/dispatch indices are not Session/turn identity or Core retry counts. Local body-write completion does not prove supplier receipt; abort attribution needs actual signal evidence, not EOF text. Never change transport/retries/Usage to obtain diagnostics. All controls use hidden volatile CAS leaves with exact readback; clear is a separately confirmed epoch fence. Missing/corrupt storage remains unavailable, never healthy empty data. Publication does not enable collection. See [local diagnostics](./docs/plugin-diagnostics.md).
-
-Auto aggregate assessment outcomes are fixed codes only; keep legacy missing reasons
-unrecorded and separate from new cohorts. Count decisions by selected/no-fit counts,
-not repeated candidate opportunities. Never change assessment policy, deadline or
-context safety merely to populate diagnostics; retain the shared storage/row bounds.
-
-Credential-change observations (#402) use the existing independent request
-consent: at most 128 fixed notification/commit rows and pending handles for 24
-hours within the shared 2 MiB cap. Derive reasons only from existing refresh
-checks, never new credential reads. No grant/record/identity/endpoint values or
-hashes; random change IDs join verdict phases only. Live-wire counts are not
-unique requests, retries or execution proof. Unknown source and missing legacy
-evidence stay unknown. Preserve #385 qualification/revocation; clear, pause,
-expiry and disposal fence later callbacks. Each diagnostic population, including
-Auto, is independently collapsed by default; opening it never enables collection.
-
-Native logical observations (#486) require a separate default-off
-`nativeDiagnosticsEnabled` CAS/readback consent. Observe only the public
-`llm/stream` waterfall and the plugin's native hosted-search operation, without
-changing chunks, transport, retries or Usage. Store fixed hourly counts, coarse
-duration buckets and terminal categories, never content, model/account/Session
-IDs or raw errors. Review purpose is not proof of reviewer identity; neither
-logical observation proves HTTP dispatch, supplier receipt, execution or
-billing. Clear/pause/disposal fence late and unconsumed streams. Native and
-account aggregates share the 14-day, 128-live and 2 MiB limits but remain
-separate in presentation and offline analysis. Older strict versions may reject
-new operation codes on rollback; never delete retained evidence to work around it.
+12. Local diagnostics is retired (#499): do not register its service, UI,
+Remotes, storage or collectors. Preserve existing data and the four hidden
+legacy settings without rewriting them; even true values do not enable
+collection. Older releases may collect again if loaded with those settings.
+Native Usage, context incident notices, immediate request errors and native
+refresh qualification remain independent. See [retirement details](./docs/plugin-diagnostics.md).
 
 ## Session-policy compaction replay consent (#349, #352)
 
@@ -377,7 +355,7 @@ Alpha.25 admits native `subagent/descriptor` v3, already v3 in the retained rc.1
 - `src/response-error-body.ts`, `src/request-body-timeout.ts`, `src/request-upload-evidence.ts`: bounded clone-only HTTP error evidence and safe managed upload-timeout guidance. Request-scoped public Node diagnostic events supply numeric local body-write/header/ALPN evidence only after an exact verified `408/user_request_timeout`; absent events, multiple native requests and work limits stay explicit. Always dispose subscriptions when Fetch settles, without changing its arguments, Response/errors, dispatcher, proxy or retry owner. Local body-write completion is not upload duration, kernel ACK, supplier receipt or execution; its absence does not prove incomplete upload. Native failure classification/retry metadata stay unchanged; final JSON bytes are not tokens or a payload limit. A separate explicit opt-in compression setting is default-off and never activated by a 408; never infer overflow, auto-compact, trim history, switch models or add retries from a 408.
 - `src/responses-request-compression.ts`: asynchronous `node:zlib` gzip at `Z_BEST_SPEED` only for exact account-proven official Copilot HTTPS `/responses` JSON POSTs through the existing public Fetch seam. `github-copilot.responsesRequestCompression` defaults false; enforce the 256 KiB minimum, 32 MiB compression-work bound and both 5%/4 KiB savings thresholds. Skips retain the original request with a fixed reason, and cancellation/account/deadline fences run before dispatch. No custom Fetch, other protocol, explicit `auto`/WebSocket, DNS/proxy/dispatcher changes, context-admission or replay changes, resend after an encoding rejection, or new retry. Gzip is wire encoding, not compaction or proof of supplier receipt.
 - Verified 408 error correlation (#276) adds only validated model/protocol, UTC header-observation time and strictly formatted `x-github-request-id` / `x-request-id` response IDs. Missing/malformed IDs stay unavailable; no other header values or new persisted population. IDs do not prove receipt/execution, and zero/unknown image composition cannot justify image-budget guidance.
-- `src/request-body-evidence.ts`, `src/request-body-composition.ts`: bounded numeric original-JSON spans for verified 408s and separately consented request observations. Keep replay validation/recovery at 16 MiB; only diagnostic composition may use the 32 MiB cooperative scanner with 64 Ki-character yields, a two-second monotonic deadline and four scan slots. Do not build a full payload object graph or decode image/replay values. Conversation/tool definitions/top-level system/residual partition total bytes; structural image and opaque replay spans are disjoint conversation subsets. Unknown/limited/cancelled evidence stays explicit. Opted-in large scans start after Fetch invocation without delaying ordinary native delivery; retained numeric rows may update after settlement only behind consent/clear/retention/eviction fences. Retain source strings only for bounded in-flight counting, never in storage/logs. Fetch-to-header time excludes analysis and is not upload duration. With gzip, report original JSON and prepared HTTP-body bytes separately; neither establishes delivered bytes. No automatic mitigation, timeout/retry changes or supplier-limit claim.
+- `src/request-body-evidence.ts`, `src/request-body-composition.ts`: bounded numeric original-JSON spans for verified 408 guidance only. Keep replay validation/recovery at 16 MiB; error composition may use the 32 MiB cooperative scanner with 64 Ki-character yields, a two-second monotonic deadline and four scan slots. Do not build a full payload object graph or decode image/replay values. Conversation/tool definitions/top-level system/residual partition total bytes; structural image and opaque replay spans are disjoint conversation subsets. Unknown/limited/cancelled evidence stays explicit. Retain source strings only for bounded in-flight counting, never in storage/logs. With gzip, report original JSON and prepared HTTP-body bytes separately; neither establishes delivered bytes. No automatic mitigation, timeout/retry changes or supplier-limit claim.
 - `src/copilot-stream-liveness.ts`: request-local HTTP/SSE byte-idle observation, paired with the public native adapter's bounded assistant-chunk deadline. Default five-minute byte idle and ten-minute semantic silence; no fake assistant output, private watchdog access, new retry or Core patch. Consumer think time is excluded; explicit WebSocket/auto stays native-only. `chatStreamLiveness: false` restores native-only timing. `chatMaxRequestImageBytes` retains Core's 20 MiB default; smaller explicit settings authorize only native image offload, not hidden history trimming or a guessed supplier limit. Synthetic heartbeat evidence is not production heartbeat proof.
 - `tests/`: unit and integration evidence; mirror the source area being changed.
 - `deployment-baseline.json`: declared machine-readable compatibility and capability evidence inventory.

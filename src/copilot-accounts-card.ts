@@ -8,8 +8,6 @@ import { copyAuthorizationCode } from './authorization-code-clipboard.ts'
 import { AccountDropdown } from './account-dropdown.ts'
 import { nativeCompactButtonStyle, nativeCaptionStyle, nativeHeadingStyle, nativeSettingsStyle, nativeSettingsCss,
   nativeInputStyle } from './native-settings-style.ts'
-import { createClientDiagnosticsScope } from './diagnostics-client.ts'
-import { diagnosticsReason, diagnosticsOutcome } from './diagnostics-types.ts'
 import { copilotLoginHost, copilotIdentityLabel } from './copilot-login-environment.ts'
 
 type AccountResult = { ok: true; value: CopilotAccountsView } | { ok: false; error: unknown }
@@ -278,8 +276,6 @@ function CopilotAccountControls(props: AccountControlsProps & (
   const changedCallback = useRef(props.onChanged)
   changedCallback.current = props.onChanged
   const identityRead = useRef<Promise<void>>()
-  const diagnostics = useRef(createClientDiagnosticsScope())
-  useEffect(() => () => diagnostics.current.close(), [props.remote])
   const refreshed = useRef(props.refreshKey)
   const text = props.locale?.toLowerCase().startsWith('zh') ? accountCopy.zh : accountCopy.en
   useEffect(() => {
@@ -288,29 +284,20 @@ function CopilotAccountControls(props: AccountControlsProps & (
       setConfirmation(undefined)
     }
   }, [props.expanded])
-  const run = useCallback(async (operation: () => Promise<AccountResult>, changed = false, invalidate = changed,
-    diagnosticOperation?: import('./diagnostics-types.ts').DiagnosticsOperation) => {
+  const run = useCallback(async (operation: () => Promise<AccountResult>, changed = false, invalidate = changed) => {
     const owner = lifetime.current
     if (!owner.active || owner.busy) return
     owner.busy = true
-    diagnostics.current.close()
     const generation = ++owner.generation
     const current = () => owner.active && owner.generation === generation
     setBusy(true); setFailed(false)
-    const observed = diagnosticOperation === undefined ? undefined : diagnostics.current.begin(diagnosticOperation)
     const finishChange = invalidate ? accountPresentationChanges.begin() : undefined
     try {
       const result = await operation()
-      observed?.stage('response-received')
-      if (!current()) { observed?.finish('interrupted', 'unknown'); return }
+      if (!current()) return
       const next = result.ok ? accountsViewFrom(result.value) : undefined
       setView(next)
       setFailed(next === undefined)
-      observed?.stage('decoded')
-      observed?.stage('client-settled')
-      const reason = next?.state === 'error' ? diagnosticsReason(new Error(next.diagnostic)) : 'none'
-      observed?.finish(next === undefined ? 'failed' : reason === 'none' ? 'success' : diagnosticsOutcome(reason),
-        next === undefined ? result.ok ? 'decode-invalid' : 'rpc-unavailable' : reason)
       if (next?.operation === undefined) {
         setAuthorizationIntent(undefined)
         setCancelRequested(false)
@@ -318,7 +305,6 @@ function CopilotAccountControls(props: AccountControlsProps & (
       if (next !== undefined && changed && next.operation === undefined) changedCallback.current?.()
       return next
     } catch {
-      observed?.finish('failed', 'rpc-unavailable')
       if (current()) {
         setView(undefined); setFailed(true); setAuthorizationIntent(undefined); setCancelRequested(false)
       }
@@ -334,19 +320,14 @@ function CopilotAccountControls(props: AccountControlsProps & (
     const current = () => owner.active && owner.generation === generation
     setIdentityChecking(true)
     const reading = Promise.resolve().then(async () => {
-      const observed = diagnostics.current.begin('identity-read')
       try {
-        if (!current()) { observed?.finish('interrupted', 'unknown'); return }
+        if (!current()) return
         const result = await read(() => managementRemote.ensureIdentity())
-        observed?.stage('response-received')
-        if (!current()) { observed?.finish('interrupted', 'unknown'); return }
+        if (!current()) return
         const next = result.ok ? accountsViewFrom(result.value) : undefined
-        if (next === undefined) { observed?.finish('failed', result.ok ? 'decode-invalid' : 'rpc-unavailable'); setFailed(true); return }
+        if (next === undefined) { setFailed(true); return }
         setView(next); setFailed(false)
-        observed?.stage('client-settled')
-        const reason = next.state === 'error' ? diagnosticsReason(new Error(next.diagnostic)) : 'none'
-        observed?.finish(reason === 'none' ? 'success' : diagnosticsOutcome(reason), reason)
-      } catch { observed?.finish('failed', 'rpc-unavailable'); if (current()) setFailed(true) }
+      } catch { if (current()) setFailed(true) }
     }).finally(() => {
       if (identityRead.current === reading) { identityRead.current = undefined; setIdentityChecking(false) }
     })
@@ -594,7 +575,7 @@ function CopilotAccountControls(props: AccountControlsProps & (
             setConfirmation(undefined)
             if (managementRemote !== undefined) void run(() => target.remove
               ? managementRemote.removeAccount(target.id, target.revision) : managementRemote.switchAccount(target.id, target.revision),
-              true, true, target.remove ? undefined : 'account-global-switch')
+              true, true)
           }, pending),
           control(text.cancel, () => setConfirmation(undefined), pending))),
       props.addOnly ? null : h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },

@@ -72,11 +72,8 @@ regressions exercise distinct contexts, isolated services, duplicate/missing/
 delayed notifications and failed/mismatched commits. This repairs qualification,
 not proof that a particular historical notification was a token refresh.
 
-Separately enabled request diagnostics may now record fixed qualification,
-notification and commit reasons plus bounded live-wire populations; see
-[credential-change decisions](./plugin-diagnostics.md#credential-change-decisions-402).
-Unknown notification source stays unknown. This observes the existing exception,
-not a broader permission to preserve requests or a reconstruction of past failures.
+Local diagnostics no longer records credential-change observations. Unknown
+notification source still fails the existing qualification and revokes work.
 
 Only a genuine native refresh through the plugin's public credential-store bridge
 may qualify: normalized account grant, model entitlements and official
