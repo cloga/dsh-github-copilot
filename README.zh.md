@@ -61,15 +61,15 @@ node scripts/select-core-release.mjs 0.2.2-rc.3
 精确兼容版本发布且通过验证后，在空目录下载原始制品并校验：
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.18.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.18.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.18.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.19.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.19.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.19.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 例如安装到 `web` profile：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.18.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.18.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.19.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.19.dsh.0.2.2.rc.3.tgz
 ```
 
 请明确选择目标 profile，然后：
@@ -86,22 +86,26 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 自动发现的账号模型元数据可用于显式审核后同步到原生 `github-copilot` 模型列表；
 仅发现元数据不会更改原生目录或模型选择。
 
-如需将原生 provider 所用的已验证账号的启用模型复制到已配置的原生 provider，请打开
-**Manage → Model preferences**，查看显示的新增、更新、移除、跳过项和每次请求的输出
-默认值，然后选择 **Sync models**。页面使用当前已验证的账号快照准备这些信息，不强制
+如需在已配置的原生 provider 中选择当前已验证账号的启用模型 ID，请打开
+**Manage → Model preferences**，查看显示的新增、更新、移除以及原生目录未收录的 ID，
+然后选择 **Sync models**。页面使用当前已验证的账号快照准备这些信息，不强制
 重新发现；如果快照不可用，请使用 **Refresh models**。此显式单次快照只通过
-Settings CAS 和回读替换 `llm-pi-ai.providers.github-copilot.models`。原生 profile
-中保存的非空列表会替代原生内置目录，卸载或停用插件后仍然保留。复制模型设置不会
-更改原生适配器的请求行为，也不能证明供应商调用成功。原生请求仍由 DSH provider
-拥有传输和请求语义。
-无法证明或与原生目录不兼容的协议、未知或更窄的服务端输入上限、未知上下文或图像支持，
-以及未知或不支持的推理控制会被跳过，不会猜测。缺少原生目录兼容性基线的新 Completions 和
-Anthropic 模型也会被跳过；已有目录模型保留原生兼容性。只有账号明确支持 PNG、JPEG、WebP、GIF 四种原生请求图像格式时，
-才会同步图像模型。原生 provider 存在自定义认证、端点、请求头、非空模型覆盖或无法验证的
+Settings CAS 和回读替换 `llm-pi-ai.providers.github-copilot.models`。
+提交的列表包含账号中所有启用模型的 `{ id }` 引用，不再与原生内置目录取交集。
+成功保存的列表在卸载或停用插件后仍然保留。容量、协议、图像能力和推理控制
+交由原生解析，不再复制或认证账号元数据中的能力。
+账号输入上限、图像格式或推理元数据的差异不再成为排除模型的条件。
+原生目录未收录的 ID 只做提示，不会跳过；如果原生无法解析某个模型的协议，
+原生设置校验可能拒绝整次更新。插件不会猜测协议或自动更改路线 API 来绕过拒绝。
+失败写入不会显示为成功，请检查已保存设置后再重试。
+**同步会用原生定义替换已有的模型自定义参数，包括单次请求输出默认值。**
+确认前请检查更新和移除项。路线级设置保持不变。这只是模型列表选择，不代表供应商
+兼容性已经验证，也不会强制执行账号特有的限制；传输、校验和错误处理仍由原生拥有。
+原生 provider 存在自定义认证、端点、请求头、非空模型覆盖或无法验证的
 路线兼容性覆盖时，同步会停止，不会修改这些设置。已有的 `compat.supportsStrictMode: false`
 会保留，但至少一个同步模型必须使用支持该设置的 Responses 或 Completions 协议。已有的
-原生默认推理级别也必须受模型支持。Core 会将配置的
-`maxTokens` 同时作为模型的单次请求输出默认值。同步不修改凭据、选择或历史，也不会自动
+原生默认推理级别会保留并交由原生解析。仅含 ID 的条目不添加模型级 `maxTokens`
+请求默认值。同步不修改凭据、选择或历史，也不会自动
 跟随后续账号变化。
 
 在原生 GitHub Copilot 账号面板的 **Manage → 账号管理 → 切换** 中选择账号，

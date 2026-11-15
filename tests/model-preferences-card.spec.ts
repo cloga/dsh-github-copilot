@@ -91,11 +91,11 @@ it('shows sync changes beside the model list and applies them with one explicit 
   const face = remote()
   face.prepareNativeModelSync.mockResolvedValue({ ok: true, value: {
     state: 'ready', planId: '12345678-1234-4234-8234-123456789012',
-    enabledCount: 3, syncableCount: 2, addedIds: ['first'], removedIds: ['old'],
-    outputTokenDefaults: [{ id: 'first', maxTokens: 8192 }, { id: 'second', maxTokens: 4096 }],
-    updatedIds: ['second'], skipped: [{ id: 'third', code: 'NATIVE_API_MISMATCH' }],
+    enabledCount: 3, syncableCount: 3, addedIds: ['first', 'third'], removedIds: ['old'],
+    outputTokenDefaults: [],
+    updatedIds: ['second'], skipped: [], nativeCatalogMissingIds: ['third'],
   } })
-  face.applyNativeModelSync.mockResolvedValue({ ok: true, value: { state: 'ready', modelCount: 2 } })
+  face.applyNativeModelSync.mockResolvedValue({ ok: true, value: { state: 'ready', modelCount: 3 } })
   const availableModels = { ...models, models: [...models.models, { id: 'third', name: 'Third', api: 'openai-responses' }] }
   await mount({ remote: face, models: availableModels, preferences })
 
@@ -107,26 +107,25 @@ it('shows sync changes beside the model list and applies them with one explicit 
   const sync = document.querySelector<HTMLButtonElement>('[data-dsh-github-copilot-native-model-sync-apply]')!
   expect(sync.textContent).toBe('Sync models')
   expect(sync.disabled).toBe(false)
-  expect(document.body.textContent).toContain('2 of 3 enabled models will be written')
+  expect(document.body.textContent).toContain('3 of 3 enabled model IDs will be submitted')
   expect(document.body.textContent).toContain('Models to add')
   expect(document.body.textContent).toContain('Models to update')
-  expect(document.body.textContent).toContain('NATIVE_API_MISMATCH')
-  expect(document.body.textContent).toContain('The native route uses a different protocol')
-  expect(document.body.textContent).toContain('native provider’s built-in catalog is replaced')
+  expect(document.body.textContent).toContain('IDs absent from the installed native catalog')
+  expect(document.body.textContent).toContain('These IDs are included, not skipped')
+  expect(document.body.textContent).toContain('Existing per-model settings, including output defaults, are replaced by ID-only entries')
   expect(document.body.textContent).toContain('remains after the plugin is unloaded or uninstalled')
   expect(document.body.textContent).toContain('Credentials, model selection, and conversation history do not change')
   expect(document.body.textContent).toContain('Excluded models are omitted from the next explicitly reviewed native model sync')
-  expect(document.body.textContent).toContain('Core also uses each configured maxTokens')
-  expect(document.body.textContent).toContain('Per-request output defaults (2)')
-  expect(document.body.textContent).toContain(`${new Intl.NumberFormat().format(8192)} max output tokens`)
-  expect(document.body.textContent).toContain(`${new Intl.NumberFormat().format(4096)} max output tokens`)
+  expect(document.body.textContent).toContain('account capabilities are not copied')
+  expect(document.body.textContent).toContain('not proof that every model or capability will work')
+  expect(document.body.textContent).not.toContain('Per-request output defaults')
   expect(document.body.textContent).toContain('old')
   const changes = document.querySelector('[aria-label="Model changes and output defaults"]')!.textContent!
-  expect(changes.indexOf('Native models that will be removed')).toBeLessThan(changes.indexOf('Per-request output defaults'))
+  expect(changes.indexOf('Native models that will be removed')).toBeLessThan(changes.indexOf('Models to add'))
 
   await click(sync)
   expect(face.applyNativeModelSync).toHaveBeenCalledExactlyOnceWith('12345678-1234-4234-8234-123456789012')
-  expect(document.body.textContent).toContain('Synced 2 models')
+  expect(document.body.textContent).toContain('Synced 3 models')
 })
 
 it('does not dispatch duplicate sync actions before React renders the busy state', async () => {

@@ -70,7 +70,7 @@ function nativeSyncMessage(code: string): string {
     case 'NATIVE_MODEL_SYNC_ROUTE_COMPAT_UNPROVEN':
       return 'Native route compatibility overrides cannot be verified for the new model list. Review them before syncing.'
     case 'NATIVE_MODEL_SYNC_NO_SYNCABLE_MODELS':
-      return 'No enabled account models can be represented by the native provider configuration.'
+      return 'No enabled account model IDs are available to submit.'
     case 'NATIVE_MODEL_SYNC_PLAN_EXPIRED':
     case 'NATIVE_MODEL_SYNC_PLAN_STALE':
       return 'The model list changed or expired. Review the refreshed changes before syncing again.'
@@ -78,7 +78,7 @@ function nativeSyncMessage(code: string): string {
       return 'Native settings changed elsewhere. Review the refreshed changes before syncing again.'
     case 'NATIVE_MODEL_SYNC_READBACK_FAILED':
     case 'NATIVE_MODEL_SYNC_SAVE_FAILED':
-      return 'Could not confirm the native settings update. Read the saved settings before trying again.'
+      return 'Could not confirm the native settings update. Native validation may reject unresolved model IDs. Read the saved settings before trying again.'
     default:
       return 'Native model sync is unavailable. No settings were changed.'
   }
@@ -368,7 +368,7 @@ export function GitHubCopilotModelPreferencesPanel(props: {
       paddingBlock: '12px', borderBlock: '1px solid color-mix(in srgb, currentColor 18%, transparent)' } },
       createElement('strong', null, 'Native provider model list'),
       createElement('p', { style: { ...nativeCaptionStyle, margin: 0 } },
-        'Sync enabled models from the verified account used by the native provider. The native provider’s built-in catalog is replaced by this saved list, which remains after the plugin is unloaded or uninstalled. Credentials, model selection, and conversation history do not change. Core also uses each configured maxTokens as its per-request output default.'),
+        'Submit all enabled model IDs from the verified account used by the native provider. Native settings resolve the model definitions; account capabilities are not copied. Existing per-model settings, including output defaults, are replaced by ID-only entries. This saved list remains after the plugin is unloaded or uninstalled. Credentials, model selection, and conversation history do not change. Native validation may reject the update; this is not proof that every model or capability will work.'),
       syncPreparing ? createElement('p', { role: 'status', style: { ...nativeCaptionStyle, margin: 0 } },
         'Checking the current model list…') : !availabilityKnown
         ? createElement('p', { role: 'status', style: { ...nativeCaptionStyle, margin: 0 } },
@@ -376,16 +376,21 @@ export function GitHubCopilotModelPreferencesPanel(props: {
       syncPreview === undefined ? null : createElement('div', { role: 'region', 'aria-label': 'Native model sync changes',
         'data-dsh-github-copilot-native-model-sync-preview-result': true, style: { display: 'grid', gap: '6px' } },
       createElement('p', { style: { ...nativeCaptionStyle, margin: 0 } },
-        `${syncPreview.syncableCount} of ${syncPreview.enabledCount} enabled models will be written; `
+        `${syncPreview.syncableCount} of ${syncPreview.enabledCount} enabled model IDs will be submitted; `
         + `${syncPreview.addedIds.length} added, ${syncPreview.updatedIds.length} updated, `
         + `${syncPreview.removedIds.length} removed from the native list, ${syncPreview.skipped.length} skipped.`),
       createElement('div', { role: 'region', 'aria-label': 'Model changes and output defaults', tabIndex: 0,
         style: { maxHeight: '240px', overflowY: 'auto', ...nativeCaptionStyle } },
+      !syncPreview.nativeCatalogMissingIds?.length ? null : createElement('div', null,
+        createElement('strong', null, 'IDs absent from the installed native catalog'),
+        createElement('p', null, 'These IDs are included, not skipped. Native settings may reject the entire update if their protocol cannot be resolved.'),
+        createElement('ul', null, ...syncPreview.nativeCatalogMissingIds.map(id =>
+          createElement('li', { key: id }, createElement('code', null, id))))),
       syncPreview.removedIds.length === 0 ? null : createElement('div', null,
         createElement('strong', null, 'Native models that will be removed'),
         createElement('ul', null, ...syncPreview.removedIds.map(id => createElement('li', { key: id }, createElement('code', null, id))))),
       syncPreview.skipped.length === 0 ? null : createElement('div', null,
-        createElement('strong', null, 'Models skipped by native compatibility checks'),
+        createElement('strong', null, 'Models unavailable for this native list'),
         createElement('ul', null, ...syncPreview.skipped.map(item => createElement('li', { key: item.id },
           createElement('code', null, item.id), ` — ${nativeSyncSkipMessage(item.code)} (${item.code})`)))),
       syncPreview.addedIds.length === 0 ? null : createElement('div', null,

@@ -7,6 +7,7 @@ import ConfigEditor from '@deepseek-ai/dsh-config-editor'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import Settings from '@deepseek-ai/dsh-settings'
+import { getSupportedThinkingLevels } from '@earendil-works/pi-ai'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { expect, it, vi } from 'vitest'
 import { Config } from '../../src/config.ts'
@@ -36,7 +37,13 @@ vi.mock('../../src/native-copilot-access.ts', async (importOriginal) => {
 })
 
 const provider = 'github-copilot'
-const synced = 'synthetic-native-sync'
+const nativeModel = getBuiltinModels(provider).find(model => model.api === 'openai-responses' && model.reasoning)
+if (nativeModel === undefined) throw new Error('fixture requires a native Responses catalog entry')
+const synced = nativeModel.id
+const previousModel = getBuiltinModels(provider).find(model => model.api === 'openai-responses' && model.id !== synced)
+if (previousModel === undefined) throw new Error('fixture requires a second native Responses entry')
+const previous = previousModel.id
+const future = 'not-in-native-catalog'
 const excluded = 'synthetic-excluded'
 
 function model(id: string): AccountModelDescriptor {
@@ -75,8 +82,8 @@ it('syncs a confirmed snapshot through real native Settings and model resolution
       { id: 'github-copilot', name: 'cordis:selector', config: { excludedModelIds: [excluded] } },
       { id: 'llm', name: 'cordis:llm' },
       { id: 'llm-pi-ai', name: 'cordis:native-provider', config: {
-        providers: { [provider]: { api: 'openai-responses', compat: { supportsStrictMode: false },
-          models: [{ id: 'old-native-model' }] } },
+        providers: { [provider]: { compat: { supportsStrictMode: false },
+          models: [{ id: previous }] } },
       } },
     ] }]))
     await writeFile(join(dir, 'cordis.yml'), '[]\n')
@@ -84,7 +91,7 @@ it('syncs a confirmed snapshot through real native Settings and model resolution
       name: 'synthetic', startedBundles: ['synthetic-bundle'], dir, patchPath: join(dir, 'cordis.patch.yml'),
       installAnchor: join(home, 'package.json'), cwd: home, home, overlays: [], telemetryDisabledEnv: undefined,
     }
-    const accountModels = [model(synced), model(excluded), { ...model('bounded-input'), maxInputTokens: 64_000 }]
+    const accountModels = [{ ...model(synced), maxInputTokens: 64_000 }, model(excluded), model(future)]
     const view: GitHubCopilotPreviewView = {
       provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, configured: true, available: true, correctionActive: true,
       state: 'ready', models: accountModels, rejected: [], warnings: [], discoveredAt: 123,
@@ -117,26 +124,46 @@ it('syncs a confirmed snapshot through real native Settings and model resolution
     }
     let { ctx, host } = await start()
     const controller = new GitHubCopilotAuthorizationController(ctx)
-    const preview = await controller.prepareNativeModelSync()
+    let preview = await controller.prepareNativeModelSync()
     expect(preview).toMatchObject({
-      state: 'ready', enabledCount: 2, syncableCount: 1,
-      addedIds: [synced], removedIds: ['old-native-model'],
-      skipped: [{ id: 'bounded-input', code: 'NATIVE_INPUT_LIMIT_UNSUPPORTED' }],
+      state: 'ready', enabledCount: 2, syncableCount: 2,
+      addedIds: [synced, future], removedIds: [previous],
+      outputTokenDefaults: [],
+      skipped: [], nativeCatalogMissingIds: [future],
     })
-    expect((await ctx.llm.listModels(provider)).map(entry => entry.id)).toEqual(['old-native-model'])
+    expect((await ctx.llm.listModels(provider)).map(entry => entry.id)).toEqual([previous])
     if (preview.planId === undefined) throw new Error('fixture preview lacks a plan')
-    expect(await controller.applyNativeModelSync(preview.planId)).toEqual({ state: 'ready', modelCount: 1 })
+    const before = structuredClone(ctx.settings.describe().find(row => row.ns === 'llm-pi-ai')!.user)
+    expect(await controller.applyNativeModelSync(preview.planId)).toEqual({
+      state: 'error', code: 'NATIVE_MODEL_SYNC_SAVE_FAILED', modelCount: 0,
+    })
+    expect(ctx.settings.describe().find(row => row.ns === 'llm-pi-ai')?.user).toEqual(before)
+    expect((await ctx.llm.listModels(provider)).map(entry => entry.id)).toEqual([previous])
+    await ctx.settings.mutate('llm-pi-ai', [{
+      op: 'set', path: ['providers', provider, 'api'], value: 'openai-responses',
+    }], ctx.settings.describe().find(row => row.ns === 'llm-pi-ai')!.revision)
+    preview = await controller.prepareNativeModelSync()
+    if (preview.planId === undefined) throw new Error('fixture refreshed preview lacks a plan')
+    expect(await controller.applyNativeModelSync(preview.planId)).toEqual({ state: 'ready', modelCount: 2 })
     const settings = ctx.settings.describe().find(row => row.ns === 'llm-pi-ai')!
     expect(settings.value).toMatchObject({ providers: { [provider]: { compat: { supportsStrictMode: false } } } })
-    await vi.waitFor(async () => expect((await ctx.llm.listModels(provider)).map(entry => entry.id)).toEqual([synced]))
+    await vi.waitFor(async () => expect((await ctx.llm.listModels(provider)).map(entry => entry.id)).toEqual([synced, future]))
     expect(await ctx.llm.resolveModelInfo(provider, synced)).toMatchObject({
-      id: synced, context: { contextWindow: 128_000 }, defaultMaxTokens: 8_192,
-      reasoning: { efforts: expect.arrayContaining([expect.objectContaining({ id: 'low' }), expect.objectContaining({ id: 'high' })]) },
+      id: synced, context: { contextWindow: nativeModel.contextWindow },
+      inputModalities: nativeModel.input,
     })
+    expect(await ctx.llm.resolveModelInfo(provider, synced)).not.toHaveProperty('defaultMaxTokens')
+    expect((await ctx.llm.resolveModelInfo(provider, synced)).reasoning?.efforts.map(effort => effort.id))
+      .toEqual(getSupportedThinkingLevels(nativeModel))
+    expect(settings.user).toMatchObject({ providers: { [provider]: { models: [{ id: synced }, { id: future }] } } })
     host.dispose()
     await ctx.fiber.dispose()
     ;({ ctx, host } = await start())
-    expect((await ctx.llm.listModels(provider)).map(entry => entry.id)).toEqual([synced])
+    expect((await ctx.llm.listModels(provider)).map(entry => entry.id)).toEqual([synced, future])
+    expect(await ctx.llm.resolveModelInfo(provider, synced)).toMatchObject({
+      id: synced, context: { contextWindow: nativeModel.contextWindow },
+    })
+    expect(await ctx.llm.resolveModelInfo(provider, synced)).not.toHaveProperty('defaultMaxTokens')
     expect(ctx.settings.describe().find(row => row.ns === 'llm-pi-ai')?.value).toMatchObject({
       providers: { [provider]: { compat: { supportsStrictMode: false } } },
     })
