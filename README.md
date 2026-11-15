@@ -154,6 +154,11 @@ The native route's quota and optional identity display use only the canonical OA
 provider names a credential, endpoint or nonempty headers override, or its configuration
 cannot be verified, quota is shown as unavailable rather than attributed to a
 different account. This is not proof of request-level billing attribution.
+Completed-turn Account evidence is also captured for the native provider, but
+only after an actual native stream chunk for that admitted request. It reflects
+the profile-wide account bound to the canonical credential, not a Session
+override, billing attribution or subagent rollup. Evidence is Host-memory-only;
+older turns and turns missing after a restart or eviction remain unknown.
 Native context-incident diagnostics remain available without the optional
 managed continuation service; they do not replace DSH's context meter.
 

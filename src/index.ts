@@ -163,12 +163,15 @@ function activate(ctx: Context, config: LiveInlineConfig): void {
     const nativeRequest = selectedProvider === GITHUB_COPILOT_PROVIDER_ID
     if (!managedRequest && !nativeRequest) return next()
     if (nativeRequest && accountTurns.has(agent.session.id)) {
-      accountTurns.get(agent.session.id)?.binding.assertCurrent()
+      const binding = accountTurns.get(agent.session.id)?.binding
+      binding?.assertCurrent()
+      if (binding) sessionAccounts.admitNative(agent, turn, signal, binding.accountId)
       return next()
     }
     if (managedRequest) sessionAccounts.admit(agent, turn, signal)
     const lease = managedRequest ? acquireAccount(signal)
       : ctx.get('githubCopilotAccounts')?.host.acquire(signal, false)
+    if (nativeRequest && lease) sessionAccounts.admitNative(agent, turn, signal, lease.binding.accountId)
     let retained = false
     try {
       const result = await next()
@@ -182,6 +185,20 @@ function activate(ctx: Context, config: LiveInlineConfig): void {
       return result
     } finally { if (!retained) lease?.release() }
   }, { prepend: true })
+  ctx.on('llm/stream', (options, next) => {
+    const stream = next()
+    if (options.provider !== GITHUB_COPILOT_PROVIDER_ID || options.signal === undefined || options.purpose !== undefined) return stream
+    return (async function* () {
+      let recorded = false
+      for await (const chunk of stream) {
+        if (!recorded) {
+          recorded = true
+          sessionAccounts.recordRequest(options.signal)
+        }
+        yield chunk
+      }
+    })()
+  })
   ctx.effect(() => () => { for (const lease of accountTurns.values()) lease.release(); accountTurns.clear(); sessionAccounts.dispose() })
   ctx.plugin(previewPlugin, { accountModelSettings: () => current(), chatRequestSettings: () => current(), requestBudgetSettings: () => {
     const selected = current()

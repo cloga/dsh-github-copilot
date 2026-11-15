@@ -39,6 +39,15 @@ export class SessionAccountsHost {
       return lease.binding
     } catch (error) { lease.release(); throw error }
   }
+  admitNative(agent: SessionOwner, turn: number, signal: AbortSignal, accountId: string): void {
+    const binding = this.bindingForAccount(accountId)
+    const existing = this.turns.current(agent.session)
+    if (existing && (existing.accountId !== binding.accountId || existing.source !== 'global')) {
+      throw new Error('COPILOT_NATIVE_ACCOUNT_TURN_CONFLICT')
+    }
+    this.turns.admit(agent.session, turn, signal, { accountId: binding.accountId, source: 'global' })
+    if (!existing) this.captureIdentity(signal, binding.accountId)
+  }
   end(session: object, turn: number): void {
     if (this.turns.current(session)?.turn !== turn) return
     this.leases.get(session)?.release()
