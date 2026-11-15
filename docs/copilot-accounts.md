@@ -106,17 +106,19 @@ continue to invalidate on every notification, not reuse old credentials.
 
 ### Selector switching and account-bound turns (#344)
 
-A global switch changes only the selector. Explicit record-bound request leases
-may be acquired during its preflight and CAS so already admitted turns can
-prepare and dispatch their next native step with their frozen account. A new
-turn still captures its account once at admission; it does not adopt a later
-selector. Unbound/global leases remain blocked during switching, and all
-requests remain blocked during credential authorization/removal/sign-out.
-Pinned records cannot be reauthorized or removed until their leases end.
-Cancellation, route eligibility, credential validity and account-model checks
-remain independent. This is not automatic retry or permission to redirect an
-existing turn. Deferred native fixtures exercise all three supported protocols
-while the selector operation is still pending, not just after it settles.
+A confirmed profile-global switch updates the selector and applies its grant
+to the native canonical credential slot. Native Agent-turn leases block the
+switch until those turns settle; direct provider calls outside observable Agent
+turn lifecycle cannot be fenced by the plugin. Explicit account-bound managed
+turn leases may continue during switch preflight and CAS with their frozen
+account. A new turn still captures its account once at admission and does not
+adopt a later selector. All requests remain blocked during credential
+authorization/removal/sign-out. Pinned records cannot be reauthorized or
+removed until their leases end. Cancellation, route eligibility, credential
+validity and account-model checks remain independent. This is not an automatic
+retry or permission to redirect an existing turn. Deferred native fixtures
+exercise supported protocols while the selector operation is pending, not
+just after it settles.
 
 ### Global switch responsiveness (#342)
 
@@ -199,15 +201,18 @@ This feature does not introduce another CLI runtime to obtain quota.
 The user explicitly approved this limited extension of the previous
 single-record policy:
 
-- Official canonical credentials remain under their existing owner.
+- The native provider retains OAuth refresh and request ownership. Only a
+  user-confirmed profile-global switch may apply the selected normalized grant
+  to the canonical record through DSH's public serialized credential API.
 - The plugin may own additional `github-copilot/account-<opaque-id>` records,
   obtained by official OAuth writing directly into the target record.
 - All records use the existing DSH credentials service and documented grant
   normalization. No credentials enter Settings, Client, Remotes, logs or docs.
 - Official pi-ai remains the OAuth and refresh implementation owner. The plugin
   owns only account addressing, selection, lifecycle and safe presentation.
-- This does not authorize Core changes, credential cloning, ambient credential
-  discovery, copied upstream catalogs or a second general transport adapter.
+- Apart from that explicit switch, this does not authorize credential copying,
+  Core changes, ambient credential discovery, copied upstream catalogs or a
+  second general transport adapter.
 
 ## Account binding and persistence
 
@@ -273,15 +278,15 @@ available for retained compatibility fixtures. Account persistence acceptance
 uses real SettingsForms and the production route diagnostic, without an
 eligibility override.
 
-1. Capture the selector revision and verify managed-route availability and complete route/activity evidence.
+1. Capture the selector revision and verify the configured native route and complete route/activity evidence.
 2. Validate target identity, refresh authorization as needed and check account
    model metadata without publishing it as the active account.
-3. Hold an admission fence during commit. Existing account-pinned managed
-   turns may continue; unbound legacy preparation remains conservatively fenced.
-4. CAS the selector, read back committed settings and confirm target evidence.
-5. Update the default directory and UI without revoking another account's
-   running turn/proofs or writing model/history/default selection. Credential
-   replacement revokes only the matching account runtime and search/quota proof.
+3. Hold an admission fence against native Agent turns, authorization and other
+   account mutations. Existing account-pinned managed turns may continue.
+4. Preserve a different canonical grant before replacing it, then write the
+   target grant through DSH's serialized credential API and CAS the selector.
+5. Read back both canonical credentials and Settings; report uncertainty if
+   either commit cannot be proven. Model/history/default selection is unchanged.
 
 `COPILOT_ACCOUNTS_BUSY` is transient: each account status read reevaluates
 current managed Agent activity, operation leases and authorization. A rejected
@@ -308,42 +313,59 @@ A guessed idle timeout must not permit reauthorization/removal of its account.
 
 ## Route compatibility
 
-Core's canonical route still reads its canonical record. Do not intercept
-Core's store, mutate its prototypes or mirror selected grants into its record.
-The reversible enhancement (#470) permits native and managed routes together.
-The native **GitHub Copilot** route remains bound to its canonical credential;
-**GitHub Copilot (multi-account)** (`github-copilot-preview`) uses the plugin
-selector or an explicit managed Session account. Native configuration,
-selection and activity no longer block a managed-account switch. Missing
-managed registration or incomplete route/activity evidence still blocks it
-with a named diagnostic. Account leases, authorization fences and CAS remain.
+The user-approved native switch (#474) applies the selected saved grant to
+DSH's existing canonical `llm-pi-ai/github-copilot` record through the public
+credentials service. The native provider continues to own OAuth refresh and
+request transport; the plugin does not intercept its store, patch Core or
+register another provider for switching. Switching is profile-wide and affects
+future native requests. Observable native Agent turns keep their admitted
+credentials and block a switch until they settle; direct provider calls outside
+that lifecycle cannot be fenced by the plugin. Before replacing a different
+canonical grant, preserve it as a plugin-owned saved account unless the
+previously selected account already owns that exact grant. If the bounded
+account limit prevents preservation, refuse the switch. Later switches refresh
+the previously active saved record from canonical before replacing the
+canonical grant.
 
-Use the native Models/Chat interface to select the managed model for multi-account
-work. No store interception or canonical credential substitution is performed.
-Native quota and optional native hosted search retain their separately qualified
-canonical account; managed default or Session changes never supply their identity.
-No account identity is inferred for a native credential/endpoint override.
+The switch is fenced against native Chat turns, authorization, other account
+mutations, and Settings revision changes. Credential writes use the DSH
+serialized `modifyRecord` path with exact grant readback. A failed Settings
+commit rolls back only if the canonical record still equals the grant written
+by that attempt; otherwise retain the recoverable records and report an
+uncertain commit. A selector/canonical mismatch after upgrade or an external
+native sign-in is shown explicitly and requires a user-selected recovery; no
+automatic credential or Settings migration occurs.
+
+The existing `github-copilot-preview` route and Session account overrides are
+separate plugin-owned behavior; they are not the mechanism for native account
+switching. Native quota and optional native hosted search continue to use only
+the canonical credential, which after a confirmed switch contains the selected
+account's grant. No account identity is inferred for a native
+credential/endpoint override.
 
 Any migration uses the existing separately approved, explicit configuration
 workflow. Enabling accounts does not remove native profiles, rewrite stored
 Sessions or silently migrate their route IDs.
 
-Sign-out deletes only the selected record. Inactive records remain intact.
-For a noncanonical selection, the selector remains unchanged after sign-out:
-the missing selected slot fails explicitly, never falls back to canonical.
-With a managed route, complete route/Session evidence and no conflicting admitted
-activity, Models still permits an explicit CAS switch to a stored valid account
-or Add into a new inactive slot. The missing-slot view remains an error even
-when `switchable` is true for that recovery. Existing Sign in never recreates
-the missing slot with an unverified replacement identity; use Add then Switch.
+Native sign-out deletes only the canonical credential record; it does not
+delete the selected plugin-owned account slot or change the selector. If the
+selector is noncanonical, the view reports a canonical/selector mismatch and
+requires explicit reapplication before native requests use that saved account.
+With a configured native route and no conflicting admitted activity, Models
+permits an explicit switch to a stored valid account or Add into an inactive
+slot. A missing selected slot remains an error even when `switchable` is true
+for recovery. Existing Sign in never recreates a missing plugin slot with an
+unverified replacement identity; use Add then Switch.
 
 ### Uninstall boundary
 
-Disposal removes only plugin-owned registrations. Native credentials, provider
-configuration, native model selection and history remain unchanged. The synthetic
-published-adapter regression exercises native calls before mounting, during A/B
-switching and after disposal with the same original credential. It is not live
-Desktop or supplier acceptance.
+Disposal removes only plugin-owned registrations. The last explicitly applied
+grant remains in the native canonical credential record, so bare native Copilot
+continues using that account after uninstall. Provider configuration, native
+model selection and history remain unchanged. The synthetic published-adapter
+regression exercises native calls before mounting, across a confirmed A/B
+credential switch and after disposal. It is not live Desktop or supplier
+acceptance.
 
 Removing the plugin does not convert plugin-only model selections. Explicitly
 select a native model for affected Sessions/defaults before uninstalling.

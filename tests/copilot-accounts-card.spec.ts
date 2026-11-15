@@ -630,6 +630,18 @@ describe('Models account management', () => {
     expect(api.switchAccount).not.toHaveBeenCalled()
     expect(api.add).not.toHaveBeenCalled()
   })
+  it('requires confirmation before applying the selected account to mismatched native credentials', async () => {
+    const accountId = view().accounts[1]!.id
+    const api = remote(view({ state: 'error', activeAccountId: accountId, switchable: true,
+      diagnostic: 'COPILOT_ACCOUNTS_NATIVE_CREDENTIAL_MISMATCH' }))
+    await mount(api)
+    expect(text()).toContain('The native credential does not match the selected account.')
+    await click('Apply selected account to native')
+    expect(api.switchAccount).not.toHaveBeenCalled()
+    expect(text()).toContain('Use @demo-b for subsequent native GitHub Copilot requests')
+    await click('Confirm switch')
+    expect(api.switchAccount).toHaveBeenCalledExactlyOnceWith(accountId, 2)
+  })
   it('clears identity on failed reads instead of showing stale identity as current', async () => {
     const api = remote()
     await mount(api)

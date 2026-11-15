@@ -264,6 +264,59 @@ describe('independent Copilot account ownership', () => {
     expect(f.settings.mutate).toHaveBeenCalledWith('github-copilot',
       [{ op: 'set', path: ['activeAccountId'], value: B }], 1)
   })
+  it('switches the native credential slot and preserves both accounts for later switches', async () => {
+    const f = fixture()
+    const originalCanonical = f.records.get(GITHUB_COPILOT_CREDENTIAL_KEY)!
+    f.fetch.mockImplementation(async (_url, init) => {
+      const canonical = new Headers(init?.headers).get('Authorization')?.includes('synthetic-access-canonical')
+      return Response.json({ login: canonical ? 'alice' : 'bob', id: canonical ? 1 : 2 })
+    })
+
+    expect(await f.host.switchAccount(B, 1)).toMatchObject({ state: 'ready', activeAccountId: B })
+    expect(f.records.get(GITHUB_COPILOT_CREDENTIAL_KEY)?.payload.refresh).toBe(`synthetic-${B}`)
+    const backupKey = [...f.records.keys()].find(recordKey =>
+      recordKey.startsWith('github-copilot/account-') && recordKey !== key(A) && recordKey !== key(B))
+    expect(backupKey).toBeDefined()
+    expect(f.records.get(backupKey!)?.payload).toEqual(originalCanonical.payload)
+
+    const backupId = backupKey!.slice('github-copilot/account-'.length)
+    expect(await f.host.switchAccount(backupId, 2)).toMatchObject({ state: 'ready', activeAccountId: backupId })
+    expect(f.records.get(GITHUB_COPILOT_CREDENTIAL_KEY)?.payload).toEqual(originalCanonical.payload)
+    expect(f.records.get(key(B))?.payload.refresh).toBe(`synthetic-${B}`)
+    f.host.dispose()
+  })
+  it('lets the user explicitly reconcile a selected account with externally changed native credentials', async () => {
+    const f = fixture(B)
+    f.fetch.mockImplementation(async (_url, init) => {
+      const canonical = new Headers(init?.headers).get('Authorization')?.includes('synthetic-access-canonical')
+      return Response.json({ login: canonical ? 'alice' : 'bob', id: canonical ? 1 : 2 })
+    })
+    expect(await f.host.get()).toMatchObject({
+      state: 'error', activeAccountId: B, switchable: true, diagnostic: 'COPILOT_ACCOUNTS_NATIVE_CREDENTIAL_MISMATCH',
+    })
+
+    expect(await f.host.switchAccount(B, 1)).toMatchObject({ state: 'ready', activeAccountId: B })
+    expect(f.records.get(GITHUB_COPILOT_CREDENTIAL_KEY)?.payload.refresh).toBe(`synthetic-${B}`)
+    expect([...f.records.keys()].filter(recordKey =>
+      recordKey.startsWith('github-copilot/account-') && recordKey !== key(A) && recordKey !== key(B))).toHaveLength(1)
+  })
+  it('rolls back the canonical grant and its temporary backup when selector CAS fails unchanged', async () => {
+    const f = fixture()
+    const originalCanonical = f.records.get(GITHUB_COPILOT_CREDENTIAL_KEY)!
+    f.fetch.mockImplementation(async (_url, init) => {
+      const canonical = new Headers(init?.headers).get('Authorization')?.includes('synthetic-access-canonical')
+      return Response.json({ login: canonical ? 'alice' : 'bob', id: canonical ? 1 : 2 })
+    })
+    f.settings.mutate.mockRejectedValueOnce(new Error('synthetic unchanged CAS rejection'))
+
+    expect(await f.host.switchAccount(B, 1)).toMatchObject({
+      state: 'error', activeAccountId: 'canonical', diagnostic: 'COPILOT_ACCOUNTS_CONFLICT',
+    })
+    expect(f.records.get(GITHUB_COPILOT_CREDENTIAL_KEY)).toEqual(originalCanonical)
+    expect([...f.records.keys()].filter(recordKey =>
+      recordKey.startsWith('github-copilot/account-') && recordKey !== key(A) && recordKey !== key(B))).toHaveLength(0)
+    f.host.dispose()
+  })
   it('keeps failed preparation and stale CAS from changing the active account', async () => {
     const f = fixture(A)
     f.validateModels.mockRejectedValueOnce(new Error('private provider details'))
@@ -281,8 +334,9 @@ describe('independent Copilot account ownership', () => {
     expect(await f.host.switchAccount(B, 1)).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_BUSY' })
     finish()
     await signingOut
-    expect(f.credentials.deleteRecord).toHaveBeenCalledWith(key(A))
-    expect(f.records.has(GITHUB_COPILOT_CREDENTIAL_KEY)).toBe(true)
+    expect(f.credentials.deleteRecord).toHaveBeenCalledWith(GITHUB_COPILOT_CREDENTIAL_KEY)
+    expect(f.records.has(key(A))).toBe(true)
+    expect(f.records.has(GITHUB_COPILOT_CREDENTIAL_KEY)).toBe(false)
     const lease = f.host.acquire()
     lease.release()
   })
@@ -329,10 +383,10 @@ describe('independent Copilot account ownership', () => {
       ...managed ? [{ id: 'github-copilot-preview' }] : [], ...native ? [{ id: 'github-copilot' }] : [],
     ] })
     const host = new CopilotAccountsHost(f.ctx)
-    expect(await host.switchAccount(B, 1)).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_BUSY', switchable: false })
-    expect(await host.get()).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_BUSY', switchable: false })
+    expect(await host.switchAccount(B, 1)).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_ROUTE_BLOCKED', switchable: false })
+    expect(await host.get()).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_ROUTE_BLOCKED', switchable: false })
     running = false
-    expect(await host.get()).toMatchObject({ state: 'ready', switchable: true })
+    expect(await host.get()).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_ROUTE_BLOCKED', switchable: false })
     native = true
     expect(await host.get()).toMatchObject({ state: 'ready', switchable: true })
     managed = false
@@ -347,6 +401,7 @@ describe('independent Copilot account ownership', () => {
   it('keeps selected-missing requests fail-closed while exposing explicit recovery', async () => {
     const f = fixture(A)
     await f.host.signOutActive()
+    f.records.delete(key(A))
     const view = await f.host.get()
     expect(view).toMatchObject({ state: 'error', activeAccountId: A, switchable: true,
       diagnostic: 'COPILOT_ACCOUNTS_SELECTED_MISSING' })

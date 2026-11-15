@@ -80,7 +80,7 @@ const grant = (id: string) => ({ kind: 'grant' as const, payload: {
   type: 'oauth', refresh: `synthetic-${id}`, access: `synthetic-access-${id}`, expires: 0,
 } })
 
-it('persists independent native credentials and SettingsForms CAS across profile restart without cross-account OAuth writes', async () => {
+it('persists independent accounts and SettingsForms CAS across restart with native sign-out recovery', async () => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
   const home = await mkdtemp(join(tmpdir(), 'copilot-accounts-persistence-'))
   const dir = join(home, 'profiles', 'synthetic')
@@ -105,6 +105,7 @@ it('persists independent native credentials and SettingsForms CAS across profile
       patchPath: join(dir, 'cordis.patch.yml'), installAnchor: join(home, 'package.json'),
       cwd: home, home, overlays: [], telemetryDisabledEnv: undefined }
     const start = async (nativeConfigured = false) => {
+      let nativeRegistered = nativeConfigured
       const ctx = await boot('synthetic', join(dir, 'cordis.yml'), readProfilePatches('synthetic', profile), scope => {
         scope.provide('profileContext', profile)
         scope.provide('appReady', { onReady: (listener: () => void) => { listener(); return () => {} } })
@@ -118,12 +119,14 @@ it('persists independent native credentials and SettingsForms CAS across profile
       ctx.provide('agents', { list: () => [] })
       ctx.provide('sessionProjections', { stateOf: () => undefined })
       ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'github-copilot-preview', model: 'synthetic' }) })
-      ctx.provide('llm', { listProviders: () => [{ id: 'github-copilot-preview' }] })
+      ctx.provide('llm', { listProviders: () => [
+        { id: 'github-copilot-preview' }, ...nativeRegistered ? [{ id: 'github-copilot' }] : [],
+      ] })
       expect(Reflect.get(ctx.settings, 'get')).toBeUndefined()
       expect(migrationStatus(ctx)).toMatchObject({
         capabilities: { settingsCas: true },
         complete: { routes: true, sessions: true, defaultSelection: true },
-        routes: { nativeConfigured, nativeRegistered: false, managedRegistered: true },
+        routes: { nativeConfigured, nativeRegistered, managedRegistered: true },
       })
       const host = new CopilotAccountsHost(ctx, {
         validateModels: async () => {},
@@ -144,13 +147,14 @@ it('persists independent native credentials and SettingsForms CAS across profile
       const continuation = installSessionContinuation(ctx)
       ctx.effect(() => () => continuation.dispose())
       await continuation.ready
-      return { ctx, host, sessionAccounts }
+      return { ctx, host, sessionAccounts, registerNative: () => { nativeRegistered = true } }
     }
-    let { ctx, host } = await start()
+    let { ctx, host, registerNative } = await start()
     const providerRevision = () => ctx.settings.describe().find(row => row.ns === 'llm-pi-ai')!.revision
     await ctx.settings.mutate('llm-pi-ai', [
       { op: 'set', path: ['providers', 'github-copilot'], value: {} },
     ], providerRevision())
+    registerNative()
     expect(await host.get()).toMatchObject({ switchable: true })
     const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => { throw new Error('unexpected fixture request') })
     try {
@@ -288,6 +292,8 @@ it('persists independent native credentials and SettingsForms CAS across profile
     expect(await ctx.credentials.readRecord(key(B))).toEqual(beforeB)
     expect(await ctx.credentials.readRecord(added.key)).toMatchObject({ payload: { refresh: 'synthetic-new-user' } })
     await host.signOutActive()
+    expect(await ctx.credentials.readRecord(key(A))).toEqual(beforeA)
+    await ctx.credentials.deleteRecord(key(A))
     const missing = await host.get()
     expect(missing).toMatchObject({ state: 'error', activeAccountId: A, switchable: true,
       diagnostic: 'COPILOT_ACCOUNTS_SELECTED_MISSING' })

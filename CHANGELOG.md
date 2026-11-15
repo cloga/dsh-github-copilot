@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-alpha.8.dsh.0.2.2.rc.3 (prepared)
+
+- Make confirmed multi-account switching update DSH's native `github-copilot` credential slot instead of relying on a separate provider route (#474).
+- Preserve the replaced native grant, fence observable in-progress native Agent turns, and retain the last applied grant after plugin disposal.
+- Keep account/selector mismatch explicit after external native sign-in and require a user-confirmed recovery; do not rewrite model selections, provider settings or history.
+- Add synthetic regressions for native credential switching, rollback, recovery and bare native use after plugin disposal. No live profile installation or Desktop restart.
+
 ## 0.1.0-alpha.7.dsh.0.2.2.rc.3 (prepared)
 
 - Qualify native search and Auto reviewer compatibility using the adapter-owned pi-ai catalog even when the plugin resolves a separate copy (#461).
