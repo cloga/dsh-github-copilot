@@ -47,6 +47,7 @@ function nativeProof(f: ReturnType<typeof fixture>, matches: Promise<boolean>) {
   vi.mocked(captureNativeCopilot).mockResolvedValue({
     namespace: 'llm-pi-ai',
     models: new Map([['native-model', { id: 'native-model', api: 'openai-responses' }]]),
+    accountModelIds: new Set(['native-model']),
     assertCurrent: () => {},
   })
   f.readRecord.mockResolvedValue({ kind: 'grant', payload: {
@@ -62,10 +63,38 @@ describe('Session account Host admission and CAS', () => {
     f.owner.admitNative(agent, 1, signal, A, 'native-model')
     expect(f.owner.turns.evidence(agent.session, 1)).toBeUndefined()
     f.owner.recordNativeRequest(signal, 'other-session', 'native-model')
+    f.owner.recordNativeRequest(signal, 'a', 'other-model')
     await vi.waitFor(() => expect(f.host.ensureIdentityFor).toHaveBeenCalledOnce())
     expect(f.owner.turns.evidence(agent.session, 1)).toBeUndefined()
     f.owner.recordNativeRequest(signal, 'a', 'native-model')
     await vi.waitFor(() => expect(f.owner.turns.evidence(agent.session, 1)).toMatchObject({ accountId: A, source: 'global' }))
+    f.owner.dispose(); f.host.dispose()
+  })
+  it('records an explicitly configured native model without treating it as protocol-qualified', async () => {
+    const f = fixture(), agent = { session: { id: 'a' } }, signal = new AbortController().signal
+    nativeProof(f, Promise.resolve(true))
+    vi.mocked(captureNativeCopilot).mockResolvedValue({
+      namespace: 'llm-pi-ai', models: new Map(), accountModelIds: new Set(['native-model']), assertCurrent: () => {},
+    })
+    f.owner.admitNative(agent, 1, signal, A, 'native-model')
+    f.owner.recordNativeRequest(signal, 'a', 'native-model')
+    await vi.waitFor(() => expect(f.owner.turns.evidence(agent.session, 1)).toMatchObject({ accountId: A, source: 'global' }))
+    f.owner.dispose(); f.host.dispose()
+  })
+  it('leaves native evidence unknown when the configured model ID cannot be proven', async () => {
+    const f = fixture(), agent = { session: { id: 'a' } }, signal = new AbortController().signal
+    nativeProof(f, Promise.resolve(true))
+    vi.mocked(captureNativeCopilot).mockResolvedValue({
+      namespace: 'llm-pi-ai',
+      models: new Map([['native-model', { id: 'native-model', api: 'openai-responses' }]]),
+      accountModelIds: undefined,
+      assertCurrent: () => {},
+    })
+    const warn = vi.spyOn(f.ctx.logger, 'warn')
+    f.owner.admitNative(agent, 1, signal, A, 'native-model')
+    f.owner.recordNativeRequest(signal, 'a', 'native-model')
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledWith('[github-copilot] %s', 'COPILOT_NATIVE_ACCOUNT_EVIDENCE_UNPROVEN'))
+    expect(f.owner.turns.evidence(agent.session, 1)).toBeUndefined()
     f.owner.dispose(); f.host.dispose()
   })
   it('keeps native evidence separate from managed account admission and identity', async () => {
@@ -140,6 +169,7 @@ describe('Session account Host admission and CAS', () => {
     vi.mocked(captureNativeCopilot).mockResolvedValue({
       namespace: 'llm-pi-ai',
       models: new Map([['native-model', { id: 'native-model', api: 'openai-responses' }]]),
+      accountModelIds: new Set(['native-model']),
       assertCurrent,
     })
     f.owner.admitNative(agent, 1, signal, A, 'native-model')

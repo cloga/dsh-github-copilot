@@ -427,7 +427,11 @@ overrides. Native evidence additionally requires the public native adapter and
 configuration proof, a canonical OAuth grant, and a match with the selected
 account. A credential change before qualification and delivery, an unproven
 route, or an account mismatch leaves the evidence unknown. Qualification does
-not delay the model stream. Account execution evidence is created only after an
+not delay the model stream. Account-only model membership includes explicitly
+configured native IDs even when the native catalog lacks their protocol; an
+empty configured list uses the proven native catalog. This does not qualify
+those IDs for reviewer or search protocols or prove model capability.
+Account execution evidence is created only after an
 ordinary AgentLoop chunk for the same Session and signal, not selection,
 discovery, preparation or auxiliary calls; it is not proof of supplier execution.
 Native evidence does not change managed Session-account admission. Late lookups

@@ -22,6 +22,7 @@ vi.mock('../src/native-copilot-access.ts', async (importOriginal) => {
   return { ...original, captureNativeCopilot: vi.fn(async () => ({
     namespace: 'llm-pi-ai',
     models: new Map(getBuiltinModels('github-copilot').map(({ id, api }) => [id, { id, api }])),
+    accountModelIds: new Set(getBuiltinModels('github-copilot').map(({ id }) => id)),
     assertCurrent: () => {},
   })) }
 })

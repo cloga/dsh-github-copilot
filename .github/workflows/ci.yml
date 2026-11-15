@@ -111,7 +111,7 @@ jobs:
         shell: bash
         run: |
           node node_modules/vitest/vitest.mjs run --config "$RUNNER_TEMP/copilot-tagged-core/vitest.config.mts" --reporter=default --reporter=json --outputFile "$RUNNER_TEMP/copilot-tagged-reviewer-results.json"
-          node -e "const r=require(process.argv[1]); const s=r.testResults.find(s=>s.name.endsWith('auto-review-copilot-core.fixture.ts')); if(!s||s.assertionResults.length!==34||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected all 34 native reviewer tests, none skipped'); console.log('Verified 34 executed tagged-source reviewer tests')" "$RUNNER_TEMP/copilot-tagged-reviewer-results.json"
+          node -e "const r=require(process.argv[1]); const s=r.testResults.find(s=>s.name.endsWith('auto-review-copilot-core.fixture.ts')); if(!s||s.assertionResults.length!==37||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected all 37 native reviewer/account tests, none skipped'); console.log('Verified 37 executed tagged-source reviewer/account tests')" "$RUNNER_TEMP/copilot-tagged-reviewer-results.json"
           node -e "const r=require(process.argv[1]); for (const [name,count] of [['subagent-copilot-core.fixture.ts',1],['native-subagent-copilot-core.fixture.ts',3],['native-model-sync-core.fixture.ts',1]]) { const s=r.testResults.find(s=>s.name.endsWith('/'+name)||s.name.endsWith('\\\\'+name)); if(!s||s.assertionResults.length!==count||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected '+count+' '+name+' tests to execute without skips'); } console.log('Verified Copilot subagent and native model sync fixtures')" "$RUNNER_TEMP/copilot-tagged-reviewer-results.json"
       - run: pnpm verify
       - run: mkdir artifacts
@@ -198,7 +198,7 @@ jobs:
           node node_modules/vitest/vitest.mjs run tests/loader-composition.spec.ts tests/client-search-inject.spec.ts tests/remote-codec.spec.ts
           node node_modules/vitest/vitest.mjs run --config vitest.candidate-published.config.ts
           node node_modules/vitest/vitest.mjs run --config vitest.auto-review-published.config.ts --reporter=default --reporter=json --outputFile reviewer-results.json
-          node -e "const r=require('./reviewer-results.json'); const s=r.testResults.find(s=>s.name.endsWith('auto-review-copilot-core.fixture.ts')); if(!s||s.assertionResults.length!==34||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected all 34 native reviewer tests, none skipped'); console.log('Verified 34 executed published-artifact reviewer tests')"
+          node -e "const r=require('./reviewer-results.json'); const s=r.testResults.find(s=>s.name.endsWith('auto-review-copilot-core.fixture.ts')); if(!s||s.assertionResults.length!==37||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected all 37 native reviewer/account tests, none skipped'); console.log('Verified 37 executed published-artifact reviewer/account tests')"
           node node_modules/vitest/vitest.mjs run tests/native-account-coexistence.spec.ts --reporter=default --reporter=json --outputFile account-marker-results.json
           node -e "const r=require('./account-marker-results.json'); const s=r.testResults.find(s=>s.name.endsWith('native-account-coexistence.spec.ts')); if(!s||s.assertionResults.length!==1||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected the published native account marker test to execute without skips'); console.log('Verified native account evidence across published LLM marker instances')"
 

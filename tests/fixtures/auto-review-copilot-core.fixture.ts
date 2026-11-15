@@ -13,11 +13,13 @@ import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import { PluginPackages, type RuntimeResolution } from '@deepseek-ai/dsh-app-boot'
+import Authorization from '@deepseek-ai/dsh-authorization'
 import * as AutoReview from '@deepseek-ai/dsh-experimental-auto-review'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
-import LlmRuntime, { createMessage, createUserMessage, LlmAdapter, ToolCallId,
+import LlmRuntime, { createMessage, createUserMessage, LlmAdapter, markAgentLoopRequest, ToolCallId,
   type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import PermissionPresetService, { AUTO_PRESET } from '@deepseek-ai/dsh-permission-presets'
+import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import Projections from '@deepseek-ai/dsh-session-projection'
 import Settings from '@deepseek-ai/dsh-settings'
@@ -85,7 +87,8 @@ type ScopeCase = 'native' | 'impostor' | 'descendant' | 'alias' | 'missing-resol
   | 'other-protocol' | 'canonical' | 'other-provider' | 'bound-account'
   | 'retained-facade' | 'late-identity' | 'other-listener' | 'dispose-before-dispatch'
   | 'production' | 'production-disposed'
-  | 'canonical-native' | 'canonical-native-disabled'
+  | 'canonical-native' | 'canonical-native-disabled' | 'canonical-native-turn-account'
+  | 'canonical-native-custom-turn-account' | 'canonical-native-reference-turn-account'
 
 function sourceResolution(): RuntimeResolution | undefined {
   if (process.env.DSH_CORE_EVIDENCE !== 'tagged-source-runtime') return undefined
@@ -133,10 +136,16 @@ function reviewerResponse(outcome: Outcome, completions = false): Response {
 }
 
 async function run(outcome: Outcome, automatic = false, thinking?: boolean, scope: ScopeCase = 'native') {
+  const legacyCustomNative = scope === 'canonical-native-custom-turn-account'
+  const customNative = legacyCustomNative || scope === 'canonical-native-reference-turn-account'
   const canonicalNative = scope === 'canonical-native' || scope === 'canonical-native-disabled'
-  const MODEL = canonicalNative
+    || scope === 'canonical-native-turn-account' || customNative
+  const MODEL = customNative ? 'synthetic-configured-copilot-model' : canonicalNative
     ? getBuiltinModels('github-copilot').find(model => model.api === 'openai-responses')!.id
     : 'synthetic-model'
+  if (customNative && getBuiltinModels('github-copilot').some(model => model.id === MODEL)) {
+    throw new Error('fixture custom model must not occur in the native catalog')
+  }
   const ctx = new Context()
   contexts.push(ctx)
   const provider = scope === 'canonical' || canonicalNative ? 'github-copilot' : scope === 'other-provider' ? 'fixture-other' : PREVIEW
@@ -199,6 +208,7 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
   ])
   ctx.provide('credentials', {
     readRecord: async (key: string) => { expect(records.has(key)).toBe(true); return records.get(key) },
+    describeRecord: async (key: string) => ({ configured: records.has(key), writable: true }),
     listRecords: async () => [...records.keys()].map(key => ({ key, kind: 'grant' })),
     modifyRecord: async () => { throw new Error('fixture token must not refresh') },
     deleteRecord: async () => { throw new Error('fixture credential must not be deleted') },
@@ -263,7 +273,7 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
       })()
     })
   }
-  await ctx.plugin(previewPlugin, { registerLegacyProvider: true,
+  const preview = await ctx.plugin(previewPlugin, { registerLegacyProvider: true,
     chatRequestSettings: () => ({ responsesOmitTemperature: !automatic }) })
   await ctx.get('githubCopilotPreview')!.refresh()
   await ctx.plugin(SessionStore)
@@ -302,9 +312,13 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
       await ctx.loader.create({ id: 'llm-pi-ai', name: '@deepseek-ai/dsh-llm-pi-ai', config: {
         providers: { 'github-copilot': {
           compat: { supportsStrictMode: strictMode },
+          ...customNative ? { api: 'openai-responses' } : {},
           ...useOverrides
             ? { modelOverrides: { [MODEL]: { compat: { supportsStrictMode: strictMode } } } }
-            : { models: [{ id: MODEL }] },
+            : { models: [{ id: MODEL, ...legacyCustomNative ? {
+              name: 'Synthetic configured model', contextWindow: 64_000, maxTokens: 8_192,
+              input: ['text'], reasoningEfforts: false,
+            } : {} }] },
         } },
       } })
       await ctx.loader.await()
@@ -321,9 +335,12 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
       normalizedNativeSettings = structuredClone(normalizedNativeSettings)
       const reasons: string[] = []
       expect(await captureNativeCopilot(ctx, code => reasons.push(code)), reasons.join(',')).toBeDefined()
-      if (scope === 'canonical-native' && outcome === 'allow') {
+      if (scope === 'canonical-native' && outcome === 'allow'
+        || scope === 'canonical-native-turn-account' || customNative) {
         // #480 reads the plugin namespace before choosing its automatic model.
         await ctx.loader.create({ id: 'github-copilot', name: 'fixture-copilot-search-settings', config: {} })
+      }
+      if (scope === 'canonical-native' && outcome === 'allow') {
         await ctx.loader.create({ id: 'web', name: '@deepseek-ai/dsh-web',
           config: { searchProvider: 'github-copilot-hosted' } })
         await ctx.loader.await()
@@ -436,10 +453,73 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
     expect(ctx.settings.describe({ redactSecrets: true }).find(row => row.ns === 'llm-pi-ai')?.value)
       .toEqual(normalizedNativeSettings)
   }
-  return { result, executions, wireCalls, wireBodies, searchBodies, wireTokens, readScopes }
+  return { result, executions, wireCalls, wireBodies, searchBodies, wireTokens, readScopes,
+    ctx, agent, model: MODEL, preview }
 }
 
 describe('native Auto reviewer Copilot compatibility', () => {
+  it.each([
+    'canonical-native-turn-account',
+    'canonical-native-custom-turn-account',
+    'canonical-native-reference-turn-account',
+  ] as const)('records %s through real Loader qualification and synthetic stream delivery', async scope => {
+    const { ctx, agent, model, preview, wireTokens } = await run('allow', true, undefined, scope)
+    if (scope !== 'canonical-native-turn-account') {
+      expect((await captureNativeCopilot(ctx))?.models.has(model)).toBe(false)
+    }
+    await preview.dispose()
+    const register = () => ctx.effect(() => () => {})
+    ctx.provide('typert', {
+      resources: { register }, lookups: { configure: register, register },
+      contexts: { configureHost: register, registerHost: register },
+    })
+    const selection = { provider: 'github-copilot', model }
+    ctx.provide('agentDefaultModel', { currentSelection: () => selection })
+    await ctx.plugin(Authorization)
+    const plugin = await ctx.plugin(GitHubCopilotPlugin, {
+      enabled: true, providers: [], includeSources: true, stripServerTools: true,
+      idleTimeoutMs: 300_000, probe: false, probeTimeoutMs: 30_000,
+    })
+    await vi.waitFor(() => expect(ctx.get('githubCopilotSessionAccounts')).toBeDefined())
+    const owner = ctx.get('githubCopilotSessionAccounts')!
+    const controller = new AbortController()
+    let disposed = false
+    try {
+      await Reflect.apply(ctx.waterfall, ctx, [scopeTarget(agent, agent), 'agent/pre-step',
+        { agent, turn: 1, step: 1, messages: [], signal: controller.signal, modelSelection: selection },
+        async () => ({ kind: 'enter', messages: [] })])
+      await ctx.waterfall(scopeTarget(agent, agent), 'agent/request',
+        { agent, turn: 1, step: 1, signal: controller.signal }, async () => selection)
+      expect(owner.turns.evidence(agent.session, 1)).toBeUndefined()
+      const dispatch = async (marked: boolean, purpose?: 'auto-review') => {
+        const call = await ctx.llm.prepareCall(selection)
+        const options = { ...call.config, temperature: 0.37, messages: [],
+          sessionId: agent.session.id, signal: controller.signal, ...purpose === undefined ? {} : { purpose } }
+        let chunks = 0
+        for await (const _chunk of call.stream(marked ? markAgentLoopRequest(options) : options)) chunks++
+        expect(chunks).toBeGreaterThan(0)
+      }
+      const previousWireCalls = wireTokens.length
+      await dispatch(false)
+      await dispatch(true, 'auto-review')
+      expect(owner.turns.evidence(agent.session, 1)).toBeUndefined()
+      await dispatch(true)
+      expect(wireTokens.slice(previousWireCalls)).toEqual([
+        'Bearer synthetic-access', 'Bearer synthetic-access', 'Bearer synthetic-access',
+      ])
+      await vi.waitFor(() => expect(owner.turns.evidence(agent.session, 1))
+        .toMatchObject({ accountId: 'canonical', source: 'global' }))
+      ctx.emit('session/event', agent.session, { type: 'turn/end', data: { turn: 1 } } as never)
+      controller.abort()
+      expect(owner.turns.evidence(agent.session, 1)).toMatchObject({ accountId: 'canonical', source: 'global' })
+      await plugin.dispose()
+      disposed = true
+      expect(owner.turns.evidence(agent.session, 1)).toBeUndefined()
+    } finally {
+      controller.abort()
+      if (!disposed) await plugin.dispose()
+    }
+  })
   it.each(['allow', 'deny', 'malformed', 'http-error', 'cancel'] as const)(
     'uses the actual canonical adapter without changing the native %s boundary', async outcome => {
       const result = await run(outcome, true, undefined, 'canonical-native')

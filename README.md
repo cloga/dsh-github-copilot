@@ -189,6 +189,9 @@ only after an actual native stream chunk for that admitted request. It reflects
 the profile-wide account bound to the canonical credential, not a Session
 override, billing attribution or subagent rollup. A mismatched account,
 unproven native route or credential change before delivery leaves it unknown.
+Explicitly configured native model IDs can qualify for account evidence even
+when absent from the bundled catalog; this does not establish model support or
+qualify them for search or reviewer protocol compatibility.
 Evidence is Host-memory-only;
 older turns and turns missing after a restart or eviction remain unknown.
 Native context-incident diagnostics remain available without the optional
