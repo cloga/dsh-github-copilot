@@ -1,9 +1,10 @@
 import { Context } from '@deepseek-ai/cordis'
 import { credentialKey } from '@deepseek-ai/dsh-credentials'
+import { Config as NativeConfig } from '@deepseek-ai/dsh-llm-pi-ai'
 import { WebRuntime } from '@deepseek-ai/dsh-web'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { captureNativeCopilot } from '../src/native-copilot-access.ts'
+import { captureNativeCopilot, nativeCopilotModels } from '../src/native-copilot-access.ts'
 import { createNativeCopilotSearch } from '../src/native-copilot-search.ts'
 import { DiagnosticsController } from '../src/diagnostics-host.ts'
 
@@ -32,8 +33,12 @@ function setup() {
   ctx.provide('settings', {
     get: (ns: string) => ns === 'web' ? webSettings : ns === 'github-copilot' ? copilotSettings : undefined,
   })
-  vi.mocked(captureNativeCopilot).mockResolvedValue({ namespace: 'llm-pi-ai',
-    models: new Map(candidates.map(candidate => [candidate.id, candidate])), assertCurrent })
+  const nativeProfile = NativeConfig({ providers: { 'github-copilot': {
+    compat: { supportsStrictMode: false }, models: candidates.map(candidate => ({ id: candidate.id })),
+  } } }).providers.get()['github-copilot']!
+  const models = nativeCopilotModels(nativeProfile, getBuiltinModels('github-copilot'))
+  vi.mocked(captureNativeCopilot).mockResolvedValue(models === undefined ? undefined
+    : { namespace: 'llm-pi-ai', models, assertCurrent })
   const readRecord = vi.fn(async (record: string) => {
     expect(record).toBe(key)
     return { kind: 'grant', payload: { type: 'oauth', refresh: 'synthetic-refresh',
@@ -62,7 +67,8 @@ function setup() {
     ] })
   })
   vi.stubGlobal('fetch', fetch)
-  return { ctx, provider: createNativeCopilotSearch(ctx), readRecord, fetch, requests, assertCurrent, webSettings, copilotSettings }
+  return { ctx, provider: createNativeCopilotSearch(ctx), readRecord, fetch, requests,
+    assertCurrent, webSettings, copilotSettings, nativeProfile }
 }
 
 describe('optional native Copilot hosted search', () => {
@@ -86,7 +92,12 @@ describe('optional native Copilot hosted search', () => {
     const fixture = setup()
     expect(fixture.fetch).not.toHaveBeenCalled()
     expect(fixture.readRecord).not.toHaveBeenCalled()
+    const before = structuredClone(fixture.nativeProfile)
+    expect(fixture.nativeProfile.compat).toEqual({
+      chatTemplateKwargs: {}, chatTemplateArgs: {}, supportsStrictMode: false,
+    })
     expect(await fixture.provider.ready?.('github-copilot')).toBe(true)
+    expect(fixture.nativeProfile).toEqual(before)
     expect(fixture.fetch).not.toHaveBeenCalled()
   })
 
@@ -97,6 +108,18 @@ describe('optional native Copilot hosted search', () => {
     expect(JSON.stringify(fixture.requests[0])).not.toContain('unique user query')
     expect(JSON.stringify(fixture.requests[1])).toContain('unique user query')
     expect(result).toMatchObject({ content: 'A sourced answer.', sources: [{ url: 'https://example.com' }] })
+    for (const body of fixture.requests) expect(body).not.toHaveProperty('temperature')
+  })
+
+  it('does not turn a native completions override into a Responses search candidate', async () => {
+    const fixture = setup()
+    const models = nativeCopilotModels({ ...fixture.nativeProfile, api: 'openai-completions' }, getBuiltinModels('github-copilot'))
+    expect(models?.get(model.id)?.api).toBe('openai-completions')
+    vi.mocked(captureNativeCopilot).mockResolvedValue({ namespace: 'llm-pi-ai', models: models!, assertCurrent: fixture.assertCurrent })
+    await expect(fixture.provider.search({ query: 'must not send' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    expect(fixture.requests).toHaveLength(0)
+    expect(fixture.fetch).toHaveBeenCalledTimes(1)
+    expect(String(fixture.fetch.mock.calls[0]?.[0])).toMatch(/\/models$/u)
   })
   it('records only the independently enabled logical search result without retaining the query', async () => {
     const fixture = setup()
