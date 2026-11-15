@@ -1,11 +1,18 @@
 # Changelog
 
-## 0.1.0-alpha.10.dsh.0.2.2.rc.3 (prepared)
+## 0.1.0-alpha.11.dsh.0.2.2.rc.3 (prepared)
+
+- Show native model-list changes and output defaults automatically from current verified account metadata; one **Sync models** action explicitly confirms the write (#479).
+- Preserve an existing disabled native strict-mode override when the synced list contains a supporting Responses or Completions model; unproven overrides remain blocked.
+- Recheck account, catalog, preference and plan-expiry evidence immediately before writing; keep revision and readback fences.
+- Preparation does not force discovery, and sync, profile installation and Desktop restart remain explicit.
+
+## 0.1.0-alpha.10.dsh.0.2.2.rc.3 (published)
 
 - Allow an explicit native Copilot hosted-search model in plugin settings, with account and native catalog filtering (#478).
 - Preserve automatic selection by default, require the existing search capability proof, and fail without switching if a chosen model is unavailable.
 
-## 0.1.0-alpha.9.dsh.0.2.2.rc.3 (prepared)
+## 0.1.0-alpha.9.dsh.0.2.2.rc.3 (published)
 
 - Apply confirmed account switches to DSH's existing native `github-copilot` credential, preserving the replaced grant and protecting observable in-progress native Agent turns.
 - Allow #466 native model sync for a saved-account selection only when its normalized grant matches the native canonical credential; mismatches and unavailable credentials remain blocked.

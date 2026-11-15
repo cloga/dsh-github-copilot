@@ -321,6 +321,8 @@ test('contract validation preserves the explicitly confirmed native model sync b
     for (const mutate of [
       contract => { delete contract.tasks.models.nativeModelSyncBoundary },
       contract => { contract.tasks.models.nativeModelSyncBoundary = 'Automatically replace every provider.' },
+      contract => { contract.tasks.models.nativeModelSyncBoundary = contract.tasks.models.nativeModelSyncBoundary.replace('non-forcing preview', 'preview') },
+      contract => { contract.tasks.models.nativeModelSyncBoundary = contract.tasks.models.nativeModelSyncBoundary.replace('preserve supportsStrictMode: false only when at least one synced Responses or Completions model supports it', 'permit all overrides') },
       contract => { contract.tasks.models.tests = contract.tasks.models.tests.filter(value => !value.includes('native-model-sync')) },
     ]) {
       const contract = structuredClone(original)

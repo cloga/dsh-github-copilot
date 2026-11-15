@@ -417,7 +417,7 @@ describe('tsdown client artifact', () => {
       && descriptor.namespace !== 'githubCopilotDiagnostics').map(descriptor => descriptor.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
       'excludeModel', 'restoreModel', 'setModelExcluded', 'setModelHighCost',
-      'previewNativeModelSync', 'applyNativeModelSync', 'migrationStatus',
+      'prepareNativeModelSync', 'previewNativeModelSync', 'applyNativeModelSync', 'migrationStatus',
       'view', 'save', 'create', 'providers', 'models', 'get', 'refresh', 'getNative', 'refreshNative',
       'ensureNativeIdentity', 'refreshNativeIdentity', 'get', 'requestedModels', 'allocationSummary', 'get', 'authorize', 'setEnabled',
     ])
@@ -471,7 +471,8 @@ describe('tsdown client artifact', () => {
         typeSymbol: descriptor.method === 'migrationStatus'
           ? 'dsh-github-copilot#GitHubCopilotMigrationStatus'
           : descriptor.method === 'setModelExcluded' || descriptor.method === 'setModelHighCost' ? 'dsh-github-copilot#GitHubCopilotModelPreferencesView'
-          : descriptor.method === 'previewNativeModelSync' ? 'dsh-github-copilot#GitHubCopilotNativeModelSyncPreview'
+          : descriptor.method === 'previewNativeModelSync' || descriptor.method === 'prepareNativeModelSync'
+            ? 'dsh-github-copilot#GitHubCopilotNativeModelSyncPreview'
             : descriptor.method === 'applyNativeModelSync' ? 'dsh-github-copilot#GitHubCopilotNativeModelSyncResult'
           : 'dsh-github-copilot#GitHubCopilotAuthorizationView',
       })

@@ -37,6 +37,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
       restoreModel(modelId: string): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       setModelExcluded(modelId: string, excluded: boolean): Promise<RemoteResult<GitHubCopilotModelPreferencesView>>
       setModelHighCost(modelId: string, highCost: boolean): Promise<RemoteResult<GitHubCopilotModelPreferencesView>>
+      prepareNativeModelSync(): Promise<RemoteResult<GitHubCopilotNativeModelSyncPreview>>
       previewNativeModelSync(): Promise<RemoteResult<GitHubCopilotNativeModelSyncPreview>>
       applyNativeModelSync(planId: string): Promise<RemoteResult<GitHubCopilotNativeModelSyncResult>>
       start(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
@@ -240,6 +241,12 @@ const contribution: TypertRemoteContribution = {
           codec: strictRemoteCodec('dsh-github-copilot#GitHubCopilotModelHighCost', z.boolean()) },
       ],
       result: strictRemoteCodec('dsh-github-copilot#GitHubCopilotModelPreferencesView', GitHubCopilotModelPreferencesViewSchema),
+    },
+    {
+      id: 'dsh-github-copilot:githubCopilot.prepareNativeModelSync',
+      service: 'githubCopilotAuthorization', namespace: 'githubCopilot', method: 'prepareNativeModelSync',
+      invocation: direct, parameters: [],
+      result: strictRemoteCodec('dsh-github-copilot#GitHubCopilotNativeModelSyncPreview', GitHubCopilotNativeModelSyncPreviewSchema),
     },
     {
       id: 'dsh-github-copilot:githubCopilot.previewNativeModelSync',

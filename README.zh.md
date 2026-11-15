@@ -55,15 +55,15 @@ node scripts/select-core-release.mjs 0.2.2-rc.3
 精确兼容版本发布且通过验证后，在空目录下载原始制品并校验：
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.10.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.10.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.10.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.11.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.11.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.11.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 例如安装到 `web` profile：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.10.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.10.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.11.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.11.dsh.0.2.2.rc.3.tgz
 ```
 
 请明确选择目标 profile，然后：
@@ -77,17 +77,20 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 插件自动发现的账号模型及能力适用于 `github-copilot-preview` 路线；DSH 原生
 `github-copilot` 路线使用自己的内置或用户配置目录，两条路线不会自动共享模型发现结果。
 
-如需将当前 canonical 账号的已启用模型复制到已配置的原生 provider，请选择
-**Manage → Model preferences → Preview enabled models**，检查新增、更新、移除、
-跳过项和每次请求的输出默认值，然后选择 **Apply sync**。此显式单次快照只通过
+如需将原生 provider 所用的已验证账号的启用模型复制到已配置的原生 provider，请打开
+**Manage → Model preferences**，查看显示的新增、更新、移除、跳过项和每次请求的输出
+默认值，然后选择 **Sync models**。页面使用当前已验证的账号快照准备这些信息，不强制
+重新发现；如果快照不可用，请使用 **Refresh models**。此显式单次快照只通过
 Settings CAS 和回读替换 `llm-pi-ai.providers.github-copilot.models`。原生 profile
 中保存的非空列表会替代原生内置目录，卸载或停用插件后仍然保留。复制模型设置不会将
 托管路线的图像准入检查或工具 schema 过滤迁移到原生请求，也不能证明供应商调用成功。
 无法证明或与原生目录不兼容的协议、未知或更窄的服务端输入上限、未知上下文或图像支持，
 以及未知或不支持的推理控制会被跳过，不会猜测。缺少原生目录兼容性基线的新 Completions 和
 Anthropic 模型也会被跳过；已有目录模型保留原生兼容性。只有账号明确支持 PNG、JPEG、WebP、GIF 四种原生请求图像格式时，
-才会同步图像模型。原生 provider 存在自定义认证、端点、请求头、非空模型覆盖或路线兼容性覆盖时，
-同步会停止，不会修改这些设置；已有的原生默认推理级别也必须受模型支持。Core 会将配置的
+才会同步图像模型。原生 provider 存在自定义认证、端点、请求头、非空模型覆盖或无法验证的
+路线兼容性覆盖时，同步会停止，不会修改这些设置。已有的 `compat.supportsStrictMode: false`
+会保留，但至少一个同步模型必须使用支持该设置的 Responses 或 Completions 协议。已有的
+原生默认推理级别也必须受模型支持。Core 会将配置的
 `maxTokens` 同时作为模型的单次请求输出默认值。同步不修改凭据、选择或历史，也不会自动
 跟随后续账号变化。
 
