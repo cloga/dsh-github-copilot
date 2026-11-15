@@ -368,7 +368,7 @@ export function GitHubCopilotModelPreferencesPanel(props: {
       paddingBlock: '12px', borderBlock: '1px solid color-mix(in srgb, currentColor 18%, transparent)' } },
       createElement('strong', null, 'Native provider model list'),
       createElement('p', { style: { ...nativeCaptionStyle, margin: 0 } },
-        'Sync enabled models from the verified account used by the native provider. The native provider’s built-in catalog is replaced by this saved list, which remains after the plugin is unloaded or uninstalled. Credentials, model selection, and conversation history do not change; managed image admission checks and tool-schema filtering do not transfer.'),
+        'Sync enabled models from the verified account used by the native provider. The native provider’s built-in catalog is replaced by this saved list, which remains after the plugin is unloaded or uninstalled. Credentials, model selection, and conversation history do not change; managed permission-field filtering does not transfer to native requests. Core also uses each configured maxTokens as its per-request output default.'),
       syncPreparing ? createElement('p', { role: 'status', style: { ...nativeCaptionStyle, margin: 0 } },
         'Checking the current model list…') : !availabilityKnown
         ? createElement('p', { role: 'status', style: { ...nativeCaptionStyle, margin: 0 } },
