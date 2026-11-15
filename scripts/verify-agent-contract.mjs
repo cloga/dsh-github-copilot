@@ -310,6 +310,17 @@ export async function verifyAgentContract(root = repositoryRoot) {
   }), 'live UI acceptance must retain bounded navigation, exact-head CI and unverified report semantics')
   await file(acceptance.policy)
   await file(acceptance.implementation)
+  require(JSON.stringify(contract.localDelivery) === JSON.stringify({
+    mode: 'reported-state-only',
+    policy: 'docs/agent-acceptance.md',
+    implementation: 'scripts/local-delivery.mjs',
+    command: ['node', 'scripts/agent.mjs', 'local-delivery', '--state', 'STATE_FILE'],
+    executesActions: false,
+    writesState: false,
+    authorizationVerified: false,
+    acceptanceVerified: false,
+  }), 'local delivery must remain a read-only reported-state aid, not authorization or acceptance')
+  await file(contract.localDelivery.implementation)
   const executionPolicy = JSON.parse(await readFile(resolve(root, 'agent-execution-policy.json'), 'utf8'))
   require(executionPolicy.schemaVersion === 1 && executionPolicy.repository === 'cloga/dsh-github-copilot'
     && executionPolicy.ownerTask === 'tooling' && executionPolicy.maxTaskScopes === 128
@@ -338,6 +349,7 @@ export async function verifyAgentContract(root = repositoryRoot) {
   await file('agent-execution-policy.json')
   await file('docs/environment-evidence-guardrails.md')
   require(contract.tasks.tooling.read.includes('agent-execution-policy.json')
+    && contract.tasks.tooling.read.includes('scripts/local-delivery.mjs')
     && contract.tasks.tooling.read.includes('scripts/autonomy-evaluation.mjs')
     && contract.tasks.tooling.read.includes('docs/agent-autonomy-evaluation.md')
     && contract.tasks.tooling.read.includes('scripts/environment-guard.mjs')

@@ -24,6 +24,16 @@
       "maxObservationMs": 120000
     }
   },
+  "localDelivery": {
+    "mode": "reported-state-only",
+    "policy": "docs/agent-acceptance.md",
+    "implementation": "scripts/local-delivery.mjs",
+    "command": ["node", "scripts/agent.mjs", "local-delivery", "--state", "STATE_FILE"],
+    "executesActions": false,
+    "writesState": false,
+    "authorizationVerified": false,
+    "acceptanceVerified": false
+  },
   "boundaries": {
       "credentialOwner": "DSH credentials and pi-ai OAuth remain the owners. Only an explicit confirmed native account switch writes the selected normalized grant to the canonical record through the public serialized credential API, preserving a replaced canonical grant first. No credential interception, Core changes or second wire/catalog. Additional account records are directly authorized through official OAuth. Disposal removes plugin registrations but leaves the last applied canonical grant for bare native Copilot. Only an exact qualifying native refresh may retain already-dispatched HTTP streams; unknown/external/Core-only notifications revoke. Never request, log or export grants.",
     "transportOwner": "DSH llm-pi-ai; no second general Copilot adapter",
@@ -253,7 +263,7 @@
         "rerunOnBodyEdit": true,
         "semanticReview": "agent-or-human-required"
       },
-      "read": ["agent-contract.json", "agent-execution-policy.json", "scripts/agent.mjs", "scripts/environment-guard.mjs", "scripts/acceptance.mjs", "scripts/autonomy-evaluation.mjs", "scripts/verify-documentation-impact.mjs", "docs/agent-acceptance.md", "docs/agent-autonomy-evaluation.md", "docs/environment-evidence-guardrails.md", "tests/scripts/agent.test.mjs", "tests/scripts/acceptance.test.mjs", "tests/scripts/environment-guardrails.test.mjs", "tests/scripts/autonomy-evaluation.test.mjs", "scripts/verify-agent-contract.mjs", "scripts/verify-package.mjs", ".github/PULL_REQUEST_TEMPLATE.md", ".github/workflows/ci.yml"],
+      "read": ["agent-contract.json", "agent-execution-policy.json", "scripts/agent.mjs", "scripts/environment-guard.mjs", "scripts/acceptance.mjs", "scripts/local-delivery.mjs", "scripts/autonomy-evaluation.mjs", "scripts/verify-documentation-impact.mjs", "docs/agent-acceptance.md", "docs/agent-autonomy-evaluation.md", "docs/environment-evidence-guardrails.md", "tests/scripts/agent.test.mjs", "tests/scripts/acceptance.test.mjs", "tests/scripts/environment-guardrails.test.mjs", "tests/scripts/autonomy-evaluation.test.mjs", "scripts/verify-agent-contract.mjs", "scripts/verify-package.mjs", ".github/PULL_REQUEST_TEMPLATE.md", ".github/workflows/ci.yml"],
       "tests": ["tests/scripts/agent.test.mjs", "tests/scripts/environment-guardrails.test.mjs", "tests/scripts/autonomy-evaluation.test.mjs"],
       "risk": "The entry point cannot prevent direct shell bypass; only routed operations are enforced. Local dependency-network work is rejected before execution and never auto-retried or redirected. Budgets persist per task/operation in the Git worktree metadata and do not reset on success or continuation. CI evidence must come from authenticated gh Actions API results for the configured repository, exact clean HEAD, exact CI workflow, and every required verification job; skipped release is optional, not a substitute for required work. Documentation impact checks enforce a reviewable declaration and changed files, not semantic relevance or accuracy; agent or human semantic review remains required. This adds no human-only approval gate; preserve actual GitHub review requirements and explicit authorization boundaries. Synthetic autonomy traces validate the analyzer only, never actual agent execution, independence or policy enforcement. Preserve completed, failed, blocked and not-run outcomes; absent elapsed time, cost and intervention evidence stays unknown. Local reports, self-declared JSON, idle sessions, and CI-green do not prove business/field acceptance or roadmap completion."
     },
