@@ -4,8 +4,10 @@
  */
 import '@earendil-works/pi-ai/api/openai-responses'
 import '@earendil-works/pi-ai/api/openai-completions'
+import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
@@ -18,6 +20,7 @@ import LlmRuntime, { createMessage, createUserMessage, LlmAdapter, ToolCallId,
 import PermissionPresetService, { AUTO_PRESET } from '@deepseek-ai/dsh-permission-presets'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import Projections from '@deepseek-ai/dsh-session-projection'
+import Settings from '@deepseek-ai/dsh-settings'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import Tools, { defineTool } from '@deepseek-ai/dsh-tools'
@@ -26,6 +29,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import previewPlugin from '../../src/preview-route.ts'
 import { installAutoReviewSampling } from '../../src/auto-review-sampling.ts'
 import { captureNativeCopilot } from '../../src/native-copilot-access.ts'
+import { createNativeCopilotSearch } from '../../src/native-copilot-search.ts'
 import { CopilotAccountsHost } from '../../src/copilot-accounts-host.ts'
 import { SessionAccountsHost } from '../../src/session-accounts-host.ts'
 import * as GitHubCopilotPlugin from '../../src/index.ts'
@@ -42,6 +46,13 @@ class ReviewerFixtureLoader extends Loader {
     if (name === '@deepseek-ai/dsh-llm-pi-ai') {
       return process.env.DSH_CORE_EVIDENCE === 'published-artifact-runtime'
         ? super.import(name, () => []) : import('@deepseek-ai/dsh-llm-pi-ai')
+    }
+    if (name === '@deepseek-ai/dsh-web') {
+      return process.env.DSH_CORE_EVIDENCE === 'published-artifact-runtime'
+        ? super.import(name, () => []) : import('@deepseek-ai/dsh-web')
+    }
+    if (name === 'fixture-copilot-search-settings') {
+      return { Config: GitHubCopilotPlugin.Config, apply() {} }
     }
     if (name !== '@deepseek-ai/dsh-experimental-auto-review' && name !== 'fixture-reviewer-alias') {
       throw new Error('unexpected fixture import')
@@ -133,7 +144,11 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
   const second = '11111111-1111-4111-8111-111111111111'
   const controller = new AbortController()
   const wireBodies: Record<string, unknown>[] = []
+  const searchBodies: Record<string, unknown>[] = []
   const wireTokens: (string | null)[] = []
+  const strictMode = outcome === 'deny'
+  const useOverrides = outcome === 'deny' || outcome === 'http-error'
+  let normalizedNativeSettings: unknown
   const readScopes: { reviewer: boolean, entry: boolean, root: boolean, service: string }[] = []
   let stopSampling: (() => void) | undefined
   let wireCalls = 0
@@ -151,9 +166,17 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
         },
       }] })
     }
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    if (Array.isArray(body.tools) && body.tools.some(tool => tool.type === 'web_search')) {
+      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer synthetic-access')
+      searchBodies.push(body)
+      return Response.json({ output: [
+        { type: 'web_search_call', status: 'completed', action: { sources: [{ type: 'url', url: 'https://example.com' }] } },
+        { type: 'message', content: [{ type: 'output_text', text: 'Synthetic sourced answer.' }] },
+      ] })
+    }
     wireCalls += 1
     wireTokens.push(new Headers(init?.headers).get('authorization'))
-    const body = JSON.parse(String(init?.body)) as Record<string, unknown>
     wireBodies.push(body)
     if (canonicalNative && body.temperature === 0) {
       return Response.json({ message: "Unsupported parameter: 'temperature'", code: 'invalid_request_body' }, { status: 400 })
@@ -183,11 +206,6 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(AgentRegistry)
   ctx.provide('workingDirectory', { ensure: async () => process.cwd() })
-  if (canonicalNative) ctx.provide('settings', {
-    configure: () => () => {},
-    describe: () => [{ ns: 'llm-pi-ai', revision: 1, value: { providers: { 'github-copilot': {} } } }],
-    mutate: async () => { throw new Error('native enhancement must not write settings') },
-  })
   if (scope === 'bound-account') {
     ctx.provide('settings', {
       configure: () => () => {},
@@ -271,11 +289,61 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
     if (scope !== 'missing-resolution') await ctx.plugin(PluginPackages, { resolution: sourceResolution() })
     await ctx.plugin(ReviewerFixtureLoader, { scope })
     if (canonicalNative) {
-      await ctx.loader.create({ id: 'llm-pi-ai', name: '@deepseek-ai/dsh-llm-pi-ai',
-        config: { providers: { 'github-copilot': {} } } })
+      // Real Settings reads the Loader fiber's Config-normalized effective value.
+      // The editor supplies read-only fixture layers only; no profile is persisted.
+      ctx.provide('profileContext', { home: join(tmpdir(), `copilot-review-settings-${randomUUID()}`) })
+      ctx.provide('configEditor', {
+        configuration: () => [...ctx.loader.entries()].filter(entry => ['llm-pi-ai', 'web', 'github-copilot'].includes(entry.options.id))
+          .map(entry => ({ entry, inherited: entry.options.config ?? {}, override: {} })),
+        edit: async () => { throw new Error('native enhancement must not write settings') },
+      })
+      await ctx.plugin(Settings)
+      await ctx.loader.create({ id: 'llm-pi-ai', name: '@deepseek-ai/dsh-llm-pi-ai', config: {
+        providers: { 'github-copilot': {
+          compat: { supportsStrictMode: strictMode },
+          ...useOverrides
+            ? { modelOverrides: { [MODEL]: { compat: { supportsStrictMode: strictMode } } } }
+            : { models: [{ id: MODEL }] },
+        } },
+      } })
       await ctx.loader.await()
+      const directory = ctx.llm.listConfigurableProviders().find(row => row.provider === 'github-copilot')
+      expect(directory).toBeDefined()
+      expect(directory?.error).toBeUndefined()
+      normalizedNativeSettings = ctx.settings.describe({ redactSecrets: true }).find(row => row.ns === 'llm-pi-ai')?.value
+      const defaults = { chatTemplateKwargs: {}, chatTemplateArgs: {} }
+      expect(normalizedNativeSettings).toMatchObject({ providers: { 'github-copilot': {
+        compat: { ...defaults, supportsStrictMode: strictMode },
+        models: useOverrides ? [] : [{ id: MODEL, compat: defaults }],
+        modelOverrides: useOverrides ? { [MODEL]: { compat: { ...defaults, supportsStrictMode: strictMode } } } : {},
+      } } })
+      normalizedNativeSettings = structuredClone(normalizedNativeSettings)
       const reasons: string[] = []
       expect(await captureNativeCopilot(ctx, code => reasons.push(code)), reasons.join(',')).toBeDefined()
+      if (scope === 'canonical-native' && outcome === 'allow') {
+        // #480 reads the plugin namespace before choosing its automatic model.
+        await ctx.loader.create({ id: 'github-copilot', name: 'fixture-copilot-search-settings', config: {} })
+        await ctx.loader.create({ id: 'web', name: '@deepseek-ai/dsh-web',
+          config: { searchProvider: 'github-copilot-hosted' } })
+        await ctx.loader.await()
+        expect(ctx.settings.describe({ redactSecrets: true }).find(row => row.ns === 'github-copilot')?.value)
+          .toMatchObject({ nativeSearchModel: '' })
+        const searchProvider = createNativeCopilotSearch(ctx)
+        await expect(searchProvider.models()).resolves.toEqual({ models: [{ id: MODEL }] })
+        expect(searchBodies).toHaveLength(0)
+        const stopSearch = ctx.web.registerSearchProvider(searchProvider)
+        ctx.effect(() => stopSearch)
+        const beforeReady = vi.mocked(fetch).mock.calls.length
+        expect(await ctx.web.searchReady('github-copilot')).toBe(true)
+        expect(vi.mocked(fetch).mock.calls).toHaveLength(beforeReady)
+        await expect(ctx.web.search({ query: 'normalized native search' })).resolves.toMatchObject({
+          content: 'Synthetic sourced answer.', sources: [{ url: 'https://example.com' }],
+        })
+        expect(searchBodies).toHaveLength(2)
+        expect(JSON.stringify(searchBodies[0])).not.toContain('normalized native search')
+        expect(JSON.stringify(searchBodies[1])).toContain('normalized native search')
+        for (const body of searchBodies) expect(body).not.toHaveProperty('temperature')
+      }
     }
     const production = scope === 'production' || scope === 'production-disposed'
       ? await ctx.plugin(GitHubCopilotPlugin, { enabled: true, providers: [], probe: false })
@@ -363,7 +431,11 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
   const batch = await pending
   if (batch.results.length !== 1) throw new Error('expected one reviewer tool result')
   const result = batch.results[0]!.result
-  return { result, executions, wireCalls, wireBodies, wireTokens, readScopes }
+  if (canonicalNative) {
+    expect(ctx.settings.describe({ redactSecrets: true }).find(row => row.ns === 'llm-pi-ai')?.value)
+      .toEqual(normalizedNativeSettings)
+  }
+  return { result, executions, wireCalls, wireBodies, searchBodies, wireTokens, readScopes }
 }
 
 describe('native Auto reviewer Copilot compatibility', () => {
