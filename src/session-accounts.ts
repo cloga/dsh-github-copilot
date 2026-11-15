@@ -35,7 +35,7 @@ export class SessionAccountTurns {
   private readonly active = new Map<object, Admission>()
   private readonly signals = new WeakMap<AbortSignal, { agent: object; admission: Admission }>()
   private readonly identities = new WeakMap<Admission, CopilotAccountIdentity>()
-  private readonly history = new Map<object, Map<number, TurnAccountEvidence>>()
+  constructor(private readonly history = new Map<object, Map<number, TurnAccountEvidence>>()) {}
   admit(agent: object, turn: number, signal: AbortSignal, selection: SessionAccountSelection): Admission {
     if (!Number.isSafeInteger(turn) || turn < 0 || signal.aborted) throw new Error('COPILOT_SESSION_ACCOUNT_TURN_INVALID')
     const previous = this.active.get(agent)
@@ -100,7 +100,8 @@ export class SessionAccountTurns {
     this.identities.set(entry.admission, captured)
     const turns = this.history.get(entry.agent)
     const evidence = turns?.get(entry.admission.turn)
-    if (turns && evidence && !evidence.identity) {
+    if (turns && evidence && evidence.accountId === entry.admission.accountId
+      && evidence.source === entry.admission.source && !evidence.identity) {
       turns.set(entry.admission.turn, Object.freeze({ ...evidence, identity: captured }))
     }
   }

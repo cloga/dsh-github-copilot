@@ -5,6 +5,12 @@ release tags do not update this file after publication. Check the exact
 [GitHub Release](https://github.com/cloga/dsh-github-copilot/releases) and npm
 version separately rather than treating an old `prepared` label as current status.
 
+## 0.1.0-alpha.16.dsh.0.2.2.rc.3 (prepared)
+
+- Record native Copilot turn-account evidence only after an ordinary native stream chunk is yielded for the admitted account (#488).
+- Exclude auxiliary calls and require native route and canonical-account proof; mismatches and credential changes leave evidence unknown.
+- Retain bounded, Host-memory-only history; never infer older turns from current settings.
+
 ## 0.1.0-alpha.15.dsh.0.2.2.rc.3 (prepared)
 
 - Include an optional, bounded offline multi-turn autonomy trace evaluator and synthetic examples (#494).
