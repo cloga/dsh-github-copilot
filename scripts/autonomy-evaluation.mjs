@@ -15,6 +15,8 @@ const BLOCKERS = new Set([
 const PROGRESS = new Set(['independent-safe-work', 'requirement-verified', 'new-evidence'])
 const EVIDENCE_CHANGES = new Set(['user-scope-changed', 'tool-state-changed', 'requirement-changed'])
 
+class TraceValidationError extends Error {}
+
 function record(value, keys) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     && Object.keys(value).every(key => keys.includes(key))
@@ -22,7 +24,7 @@ function record(value, keys) {
 }
 
 function invalid() {
-  throw new Error('Invalid autonomy evaluation trace.')
+  throw new TraceValidationError('Invalid autonomy evaluation trace.')
 }
 
 function validateEvent(event) {
@@ -265,8 +267,11 @@ async function main(args) {
   try {
     console.log(JSON.stringify(await evaluateAutonomyFile(args[0]), null, 2))
     return 0
-  } catch {
-    console.log(JSON.stringify({ schemaVersion: 1, ok: false, code: 'AUTONOMY_EVALUATION_INVALID_TRACE' }))
+  } catch (error) {
+    const code = error instanceof TraceValidationError
+      ? 'AUTONOMY_EVALUATION_INVALID_TRACE'
+      : 'AUTONOMY_EVALUATION_READ_FAILED'
+    console.log(JSON.stringify({ schemaVersion: 1, ok: false, code }))
     return 1
   }
 }

@@ -135,6 +135,14 @@ test('reads only bounded trace files and returns no input text on invalid CLI in
     })
     assert.doesNotMatch(child.stdout, /sensitive fixture text/)
     assert.equal(child.stderr, '')
+    const missing = spawnSync(process.execPath, ['scripts/autonomy-evaluation.mjs', join(root, 'missing.json')], {
+      cwd: repositoryRoot, encoding: 'utf8',
+    })
+    assert.equal(missing.status, 1)
+    assert.deepEqual(JSON.parse(missing.stdout), {
+      schemaVersion: 1, ok: false, code: 'AUTONOMY_EVALUATION_READ_FAILED',
+    })
+    assert.equal(missing.stderr, '')
   } finally {
     await rm(root, { recursive: true, force: true })
   }

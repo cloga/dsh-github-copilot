@@ -20,6 +20,8 @@ node scripts/autonomy-evaluation.mjs PATH_TO_TRACE.json
 The evaluator reads one JSON file (maximum 1 MiB) and prints fixed-code results
 to stdout. It reads no session database, transcript, credentials, profile,
 network endpoint, or application state. It writes no report or telemetry.
+Invalid trace data and file-read errors produce different fixed diagnostic
+codes; raw error messages and paths are never printed.
 
 Schema version 1 allows 1–128 cases, up to 512 ordered events per case, and
 16,384 events total. Every case has a short pseudonymous `caseId`, an
