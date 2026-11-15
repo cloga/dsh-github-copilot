@@ -30,6 +30,18 @@ describe('session search settings', () => {
     expect(readInlineConfig(live).requestDiagnosticsEnabled).toBe(true)
     expect(() => Config({ ...base, requestDiagnosticsEnabled: 'true' } as unknown as InlineConfig)).toThrow()
   })
+  it('keeps native diagnostics separately default-off and reads the hidden live leaf', () => {
+    expect(readInlineConfig(Config({ ...base, diagnosticsEnabled: true,
+      requestDiagnosticsEnabled: true })).nativeDiagnosticsEnabled).toBe(false)
+    expect(Config.dict?.nativeDiagnosticsEnabled?.meta.hidden).toBe(true)
+    expect(Config.dict?.nativeDiagnosticsEnabled?.meta.volatile).toBe(true)
+    let enabled = false
+    const live = { ...base, nativeDiagnosticsEnabled: { get: () => enabled } }
+    expect(readInlineConfig(live).nativeDiagnosticsEnabled).toBe(false)
+    enabled = true
+    expect(readInlineConfig(live).nativeDiagnosticsEnabled).toBe(true)
+    expect(() => Config({ ...base, nativeDiagnosticsEnabled: 'true' } as unknown as InlineConfig)).toThrow()
+  })
   it('keeps managed Responses request compression default-off and boolean-only', () => {
     expect(readInlineConfig(Config(base)).responsesRequestCompression).toBe(false)
     expect(readInlineConfig(Config({ ...base, responsesRequestCompression: true })).responsesRequestCompression).toBe(true)
@@ -65,7 +77,7 @@ describe('session search settings', () => {
 
   it('projects exclusions, routing, both search model settings and the ownership journal as live fields', () => {
     expect(Object.entries(Config.dict ?? {}).filter(([, schema]) => schema.meta.volatile).map(([key]) => key))
-      .toEqual(['diagnosticsEnabled', 'autoAllocationDiagnosticsEnabled', 'requestDiagnosticsEnabled', 'excludedModelIds', 'highCostModelIds', 'activeAccountId', 'sessionAccounts', 'sessionContinuation', 'continuationDefaultHistory', 'followParentModel', 'autoSemanticAssessmentTimeoutMs', 'autoSemanticAssessmentModel', 'parentModelFollow', 'searchModel', 'nativeSearchModel', 'searchRouting', 'temporaryRouteBackup'])
+      .toEqual(['diagnosticsEnabled', 'autoAllocationDiagnosticsEnabled', 'requestDiagnosticsEnabled', 'nativeDiagnosticsEnabled', 'excludedModelIds', 'highCostModelIds', 'activeAccountId', 'sessionAccounts', 'sessionContinuation', 'continuationDefaultHistory', 'followParentModel', 'autoSemanticAssessmentTimeoutMs', 'autoSemanticAssessmentModel', 'parentModelFollow', 'searchModel', 'nativeSearchModel', 'searchRouting', 'temporaryRouteBackup'])
     expect(Config.dict?.nativeSearchModel?.meta.hidden).toBe(true)
     expect(readInlineConfig(Config(base)).nativeSearchModel).toBe('')
     const parsed = Config({ ...base, searchModel: 'saved-model', nativeSearchModel: 'native-model', temporaryRouteBackup: 'saved-journal' })

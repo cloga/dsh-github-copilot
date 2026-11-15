@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-alpha.12.dsh.0.2.2.rc.3 (prepared)
+
+- Add independently enabled, content-free native Copilot logical stream and hosted-search aggregates (#486).
+- Keep native observations separate from managed physical-request diagnostics; they do not prove HTTP dispatch, supplier receipt or execution.
+- Preserve request, retry, Usage and settings ownership; old strict versions may not read retained new operation codes on rollback.
+
 ## 0.1.0-alpha.11.dsh.0.2.2.rc.3 (prepared)
 
 - Show native model-list changes and output defaults automatically from current verified account metadata; one **Sync models** action explicitly confirms the write (#479).
