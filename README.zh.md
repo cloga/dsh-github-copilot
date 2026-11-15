@@ -81,6 +81,8 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 **Manage → Model preferences → Preview enabled models**，检查新增、更新、移除、
 跳过项和每次请求的输出默认值，然后选择 **Apply sync**。此显式单次快照只通过
 Settings CAS 和回读替换 `llm-pi-ai.providers.github-copilot.models`。原生 profile
+中保存的非空列表会替代原生内置目录，卸载或停用插件后仍然保留。复制模型设置不会将
+托管路线的图像准入检查或工具 schema 过滤迁移到原生请求，也不能证明供应商调用成功。
 无法证明或与原生目录不兼容的协议、未知或更窄的服务端输入上限、未知上下文或图像支持，
 以及未知或不支持的推理控制会被跳过，不会猜测。缺少原生目录兼容性基线的新 Completions 和
 Anthropic 模型也会被跳过；已有目录模型保留原生兼容性。只有账号明确支持 PNG、JPEG、WebP、GIF 四种原生请求图像格式时，

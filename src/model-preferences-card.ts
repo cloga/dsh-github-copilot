@@ -306,6 +306,8 @@ export function GitHubCopilotModelPreferencesPanel(props: {
       syncPreview === undefined ? null : createElement('div', { role: 'region', 'aria-label': 'Native model sync preview',
         'data-dsh-github-copilot-native-model-sync-preview-result': true, style: { display: 'grid', gap: '6px' } },
       createElement('p', { style: { ...nativeCaptionStyle, margin: 0 } },
+        'Applying replaces the native provider’s built-in catalog with this saved list, which remains after the plugin is unloaded or uninstalled. The managed route’s image admission checks and tool-schema filtering do not transfer to the native route.'),
+      createElement('p', { style: { ...nativeCaptionStyle, margin: 0 } },
         `${syncPreview.syncableCount} of ${syncPreview.enabledCount} enabled models will be written; `
         + `${syncPreview.addedIds.length} added, ${syncPreview.updatedIds.length} updated, `
         + `${syncPreview.removedIds.length} removed from the native list, ${syncPreview.skipped.length} skipped.`),

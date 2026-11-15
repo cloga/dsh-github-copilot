@@ -98,6 +98,10 @@ native provider, use **Manage → Model preferences → Preview enabled models**
 review the additions, updates, removals, skipped models and per-request output
 defaults, then choose **Apply sync**. This one-time snapshot replaces only
 `llm-pi-ai.providers.github-copilot.models` with Settings CAS and readback.
+The nonempty saved list replaces the native built-in catalog and remains after
+the plugin is unloaded or uninstalled. Copying model settings does not transfer
+the managed route's image admission checks or tool-schema filtering to native
+requests, nor prove that supplier calls will succeed.
 Models with unproven or incompatible native catalog protocols, unknown or
 narrower server input caps, unknown context or vision support, or unknown or
 unsupported reasoning controls are skipped rather than guessed.
