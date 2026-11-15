@@ -58,6 +58,7 @@ describe('account identity display cache', () => {
     const view = await f.host.ensureIdentity()
     expect(view.activeAccountId).toBe(A)
     expect(view.accounts.find(row => row.id === B)?.identity?.login).toBe('bob')
+    expect(view.accounts.some(row => row.id === 'canonical')).toBe(false)
     expect(f.fetch).toHaveBeenCalledTimes(2)
     await f.host.ensureIdentity()
     expect(f.fetch).toHaveBeenCalledTimes(2)

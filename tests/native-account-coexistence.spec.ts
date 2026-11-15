@@ -64,7 +64,7 @@ it('applies confirmed account switches to native credentials and retains the nat
     const url = String(input)
     const token = new Headers(init?.headers).get('Authorization')
     if (url === 'https://api.github.com/copilot_internal/user') {
-      expect(token).toBe('token synthetic-canonical')
+      expect(token).toBe(`token synthetic-${B}`)
       return Response.json({ token_based_billing: true, quota_snapshots: { premium_interactions: {
         entitlement: 300, quota_remaining: 240, percent_remaining: 80, unlimited: false,
       } } })

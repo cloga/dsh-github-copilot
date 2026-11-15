@@ -55,7 +55,7 @@ it('revokes captured bindings and fences activity without native gateway behavio
 })
 it('exposes narrowly permitted selected-missing recovery while retaining error evidence', async () => {
   const f = fixture()
-  f.rows.splice(0, 1)
+  f.rows.splice(f.rows.findIndex(row => row.key === `github-copilot/account-${A}`), 1)
   const view = await f.host.get()
   expect(view).toMatchObject({ state: 'error', activeAccountId: A, switchable: true,
     diagnostic: 'COPILOT_ACCOUNTS_SELECTED_MISSING' })
