@@ -409,7 +409,8 @@ and rejects the entire Client contribution.
 The historical Credits Session-account switch and **Visible-history
 continuation** controls applied only to the managed route. They are not
 available for native model calls. Use Models account management for explicit
-profile-wide native switches; existing Session settings are not rewritten.
+profile-wide native switches. The old new-Session continuation default is no
+longer shown in Models; existing Session and default settings are not rewritten.
 The [composer capture](./images/copilot-session-continuation.png) and
 [continuation contract](./session-continuation.md) document the retired route's
 behavior, not native-route parity.

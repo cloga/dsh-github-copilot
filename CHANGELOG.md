@@ -10,6 +10,7 @@ version separately rather than treating an old `prepared` label as current statu
 - Stop registering the separate `github-copilot-preview` model provider while retaining account metadata for explicitly confirmed native model sync (#500).
 - Keep native provider settings, account grants and conversation history unchanged. Existing preview-route selections may require an explicit native model selection.
 - If no native Copilot provider is configured, add one in DSH Models; the plugin does not create its profile.
+- Remove the retired route's new-Session continuation default from Models without rewriting saved settings.
 
 ## 0.1.0-alpha.17.dsh.0.2.2.rc.3 (prepared)
 

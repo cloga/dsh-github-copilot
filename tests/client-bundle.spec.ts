@@ -257,9 +257,10 @@ describe('tsdown client artifact', () => {
       else { footer.render(footerElement); provider.render(providerElement) }
       const tree = provider.render(providerElement)
       expect(tree?.props['data-dsh-github-copilot-account-surface']).toBe('provider')
-      const connection = fixture.instance().render(tree!.props.children)
-      expect(connection?.type).toBe(fixture.client.exports.GitHubCopilotCompactAccount)
-      expect(connection?.props.embedded).toBe(true)
+      const account = tree!.props.children
+      expect(account.type).toBe(fixture.client.exports.GitHubCopilotCompactAccount)
+      expect(account.props.embedded).toBe(true)
+      expect(account.props.continuationSettings).toBeUndefined()
       expect(footer.render(footerElement)).toBeNull()
       expect(fixture.remote.status).toHaveBeenCalledOnce()
       expect(fixture.remote.start).not.toHaveBeenCalled()

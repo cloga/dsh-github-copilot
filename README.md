@@ -140,7 +140,8 @@ The plugin does not add a separate Copilot model route. Existing
 `github-copilot-preview` selections are not migrated and may become unavailable;
 stored settings and conversation history remain unchanged. Legacy
 preview-only Session account overrides and continuation controls do not apply
-to native model calls.
+to native model calls. The old new-Session continuation default is no longer
+shown; existing settings are preserved.
 Starting the plugin or completing sign-in does not automatically repair the
 native provider's settings.
 The plugin registers optional `github-copilot-hosted` search in DSH's existing

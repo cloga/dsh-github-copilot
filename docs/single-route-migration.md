@@ -19,6 +19,8 @@ and model sync retain their separate confirmation requirements. An existing
 no longer registered. Choose a supported native model explicitly if needed.
 Do not silently map the old route to a native model: matching names do not
 prove equivalent protocol, capability or account entitlement.
+The old Models new-Session continuation default applied only to the retired
+route and is no longer shown; its saved settings remain untouched.
 
 Existing Web settings are also left untouched. If a Web provider explicitly
 names `github-copilot-hosted`, removing the plugin can leave that configured
@@ -67,6 +69,7 @@ is not required for this change; this guide does not attest its publication or e
 provider 设置、凭据、模型选择或对话历史；账号切换和模型同步仍需分别确认。
 已有的 `github-copilot-preview` 选择可能因 provider 不再注册而不可用；需要时请显式选择
 受支持的原生模型。不要按名称自动映射旧路线，名称相同不能证明协议、能力或账号权限等价。
+Models 中旧的“新 Session 续接默认项”仅适用于退役路线，现已不再显示；已保存的设置保持不变。
 
 Web 设置也不会被改写。如果 Web 明确配置了 `github-copilot-hosted`，卸载插件后该
 provider 可能不可用；DSH 会报告已配置 provider 缺失，不会静默切换搜索后端。
