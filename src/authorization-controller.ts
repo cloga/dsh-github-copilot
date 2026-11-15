@@ -154,9 +154,25 @@ function nativeSyncProfileProblem(
     if (profile.modelOverrides !== undefined && (overrides === undefined || Reflect.ownKeys(overrides).length > 0)) {
       return 'NATIVE_MODEL_SYNC_OVERRIDES_CONFLICT'
     }
-    if (!emptyNativeCompatibility(profile.compat)) return 'NATIVE_MODEL_SYNC_ROUTE_COMPAT_UNPROVEN'
+    const compat = object(profile.compat)
+    if (!emptyNativeCompatibility(profile.compat) && (compat === undefined || compat.supportsStrictMode !== false
+      || Reflect.ownKeys(compat).length > 64
+      || !Reflect.ownKeys(compat).every(key => key === 'supportsStrictMode'
+        || emptyNativeCompatibility(Reflect.get(compat, key))))) {
+      return 'NATIVE_MODEL_SYNC_ROUTE_COMPAT_UNPROVEN'
+    }
     return undefined
   } catch { return 'NATIVE_MODEL_SYNC_SETTINGS_INVALID' }
+}
+
+function nativeSyncSupportsRouteCompatibility(
+  profile: Record<string, unknown>, models: readonly NativeModelProfile[],
+  accountModels: readonly { readonly id: string; readonly api: string }[],
+): boolean {
+  if (object(profile.compat)?.supportsStrictMode !== false) return true
+  const ids = new Set(models.map(model => model.id))
+  return accountModels.some(model => ids.has(model.id)
+    && (model.api === 'openai-responses' || model.api === 'openai-completions'))
 }
 
 /** Only these owned presentation leaves can cross the Remote boundary. */
@@ -643,6 +659,16 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
   /** Refresh and preview a one-time snapshot for the native canonical profile. */
   @Remote
   async previewNativeModelSync(): Promise<GitHubCopilotNativeModelSyncPreview> {
+    return this.buildNativeModelSyncPlan(true)
+  }
+
+  /** Prepare from current account evidence without forcing discovery or changing settings. */
+  @Remote
+  async prepareNativeModelSync(): Promise<GitHubCopilotNativeModelSyncPreview> {
+    return this.buildNativeModelSyncPlan(false)
+  }
+
+  private async buildNativeModelSyncPlan(forceDiscovery: boolean): Promise<GitHubCopilotNativeModelSyncPreview> {
     const empty = (state: GitHubCopilotNativeModelSyncPreview['state'],
       code?: GitHubCopilotNativeModelSyncCode): GitHubCopilotNativeModelSyncPreview => ({
       state, ...(code === undefined ? {} : { code }), enabledCount: 0, syncableCount: 0,
@@ -662,8 +688,10 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       } catch { return empty('error', 'NATIVE_MODEL_SYNC_SETTINGS_UNAVAILABLE') }
       const source = this.ctx.get('githubCopilotPreview')
       if (source === undefined) return empty('error', 'NATIVE_MODEL_SYNC_DISCOVERY_UNAVAILABLE')
-      try { await source.discoverNativeModelSync() }
-      catch { return empty('error', 'NATIVE_MODEL_SYNC_DISCOVERY_UNAVAILABLE') }
+      if (forceDiscovery) {
+        try { await source.discoverNativeModelSync() }
+        catch { return empty('error', 'NATIVE_MODEL_SYNC_DISCOVERY_UNAVAILABLE') }
+      }
       try { lease.binding.assertCurrent() }
       catch { return empty('blocked', 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH') }
       if (!this.nativeSyncUsesCanonicalAccount()) return empty('blocked', 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH')
@@ -735,6 +763,9 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
         return { ...empty('blocked', 'NATIVE_MODEL_SYNC_NO_SYNCABLE_MODELS'),
           enabledCount: plan.enabledCount, skipped: plan.skipped }
       }
+      if (!nativeSyncSupportsRouteCompatibility(profile, plan.models, snapshot.models)) {
+        return empty('blocked', 'NATIVE_MODEL_SYNC_ROUTE_COMPAT_UNPROVEN')
+      }
 
       const now = Date.now()
       for (const [id, pending] of this.nativeModelSyncPlans) {
@@ -802,11 +833,15 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       if (route.current === undefined) return failed('NATIVE_MODEL_SYNC_PROFILE_MISSING')
       const profileProblem = nativeSyncProfileProblem(route.current, route.hasSecrets)
       if (profileProblem !== undefined) return failed(profileProblem)
+      if (!nativeSyncSupportsRouteCompatibility(route.current, plan.models, snapshot.models)) {
+        return failed('NATIVE_MODEL_SYNC_ROUTE_COMPAT_UNPROVEN')
+      }
       if (route.routeRevision !== plan.routeRevision || route.markerRevision !== plan.markerRevision) {
         return failed('NATIVE_MODEL_SYNC_PLAN_STALE')
       }
       const routeApi = route.current.api
       const routeReasoning = route.current.reasoning
+      const routeCompatibility = JSON.stringify(route.current.compat)
       const latestPreferences = modelPreferencesView(this.ctx, accountModelsView(this.ctx))
       if (latestPreferences.state !== 'ready' || !latestPreferences.writable
         || latestPreferences.revision !== plan.preferencesRevision || !plan.proofCurrent()) {
@@ -841,6 +876,8 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
           || saved.routeRevision < plan.routeRevision || saved.routeRevision > plan.routeRevision + 1
           || nativeSyncProfileProblem(saved.current, saved.hasSecrets) !== undefined
           || saved.current.api !== routeApi || saved.current.reasoning !== routeReasoning
+          || JSON.stringify(saved.current.compat) !== routeCompatibility
+          || !nativeSyncSupportsRouteCompatibility(saved.current, plan.models, snapshot.models)
           || !equalJson(saved.raw?.models, plan.models) || !effectiveNativeModelsMatch(saved.current.models, plan.models)
           || currentPreferences.state !== 'ready' || !currentPreferences.writable
           || currentPreferences.revision !== plan.preferencesRevision || !plan.proofCurrent()

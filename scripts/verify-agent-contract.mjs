@@ -57,7 +57,10 @@ export async function verifyAgentContract(root = repositoryRoot) {
   require(implementation.scopeException === 'separate-explicit-human-request-only', 'plugin-only scope must not expand from an inferred compatibility task')
   const nativeSync = contract.tasks?.models
   require(nativeSync?.nativeModelSyncBoundary?.includes('one explicit confirmation')
+    && nativeSync.nativeModelSyncBoundary.includes('non-forcing preview')
     && nativeSync.nativeModelSyncBoundary.includes('native adapter-owned pi-ai catalog')
+    && nativeSync.nativeModelSyncBoundary.includes('preserve supportsStrictMode: false only when at least one synced Responses or Completions model supports it')
+    && nativeSync.nativeModelSyncBoundary.includes('unproven route compatibility')
     && nativeSync.nativeModelSyncBoundary.includes('CAS only llm-pi-ai.providers.github-copilot.models')
     && nativeSync.nativeModelSyncBoundary.includes('read back user and effective values')
     && nativeSync.nativeModelSyncBoundary.includes('No profile creation, automatic sync')

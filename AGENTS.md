@@ -49,15 +49,18 @@ with four concurrent operations and configuration/credential/disposal fences.
 The former plugin routing UI and managed Auto remain retired. Supplier calls,
 live installation and restarts are separate from synthetic CI acceptance.
 
-The user-authorized native model sync (#466) is a narrow exception to the
-no-settings-rewrite rule: after an explicit preview and confirmation, one
+The user-authorized native model sync (#466, #479) is a narrow exception to the
+no-settings-rewrite rule: after a visible preview and one explicit confirmation, one
 revision-checked write may replace only
 `llm-pi-ai.providers.github-copilot.models` in an existing canonical profile.
 Prove current canonical-account metadata and the native adapter-owned catalog;
 skip unrepresentable or uncertain model capabilities. Disclose additions,
 updates, removals, skipped models and configured output request defaults.
-Recheck account/catalog/preferences and Settings evidence before the one-shot
-write, then read back both user and effective values. Never create a profile,
+Prepare the preview without forced discovery from existing verified evidence.
+An existing `compat.supportsStrictMode: false` may be preserved only when at
+least one synced Responses or Completions model supports it; block other unproven
+compatibility overrides. Recheck account/catalog/preferences and Settings evidence
+before the one-shot write, then read back both user and effective values. Never create a profile,
 change other paths or perform this sync automatically.
 
 The user-confirmed direction on 2026-11-14 supersedes conflicting legacy feature

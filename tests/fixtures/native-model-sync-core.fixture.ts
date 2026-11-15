@@ -75,7 +75,8 @@ it('syncs a confirmed snapshot through real native Settings and model resolution
       { id: 'github-copilot', name: 'cordis:selector', config: { excludedModelIds: [excluded] } },
       { id: 'llm', name: 'cordis:llm' },
       { id: 'llm-pi-ai', name: 'cordis:native-provider', config: {
-        providers: { [provider]: { api: 'openai-responses', models: [{ id: 'old-native-model' }] } },
+        providers: { [provider]: { api: 'openai-responses', compat: { supportsStrictMode: false },
+          models: [{ id: 'old-native-model' }] } },
       } },
     ] }]))
     await writeFile(join(dir, 'cordis.yml'), '[]\n')
@@ -116,7 +117,7 @@ it('syncs a confirmed snapshot through real native Settings and model resolution
     }
     let { ctx, host } = await start()
     const controller = new GitHubCopilotAuthorizationController(ctx)
-    const preview = await controller.previewNativeModelSync()
+    const preview = await controller.prepareNativeModelSync()
     expect(preview).toMatchObject({
       state: 'ready', enabledCount: 2, syncableCount: 1,
       addedIds: [synced], removedIds: ['old-native-model'],
@@ -125,6 +126,8 @@ it('syncs a confirmed snapshot through real native Settings and model resolution
     expect((await ctx.llm.listModels(provider)).map(entry => entry.id)).toEqual(['old-native-model'])
     if (preview.planId === undefined) throw new Error('fixture preview lacks a plan')
     expect(await controller.applyNativeModelSync(preview.planId)).toEqual({ state: 'ready', modelCount: 1 })
+    const settings = ctx.settings.describe().find(row => row.ns === 'llm-pi-ai')!
+    expect(settings.value).toMatchObject({ providers: { [provider]: { compat: { supportsStrictMode: false } } } })
     await vi.waitFor(async () => expect((await ctx.llm.listModels(provider)).map(entry => entry.id)).toEqual([synced]))
     expect(await ctx.llm.resolveModelInfo(provider, synced)).toMatchObject({
       id: synced, context: { contextWindow: 128_000 }, defaultMaxTokens: 8_192,
@@ -134,6 +137,9 @@ it('syncs a confirmed snapshot through real native Settings and model resolution
     await ctx.fiber.dispose()
     ;({ ctx, host } = await start())
     expect((await ctx.llm.listModels(provider)).map(entry => entry.id)).toEqual([synced])
+    expect(ctx.settings.describe().find(row => row.ns === 'llm-pi-ai')?.value).toMatchObject({
+      providers: { [provider]: { compat: { supportsStrictMode: false } } },
+    })
 
     const known = getBuiltinModels(provider)[0]
     if (known === undefined) throw new Error('fixture native catalog is empty')

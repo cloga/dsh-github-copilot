@@ -97,6 +97,9 @@ it.each(['source', 'strict'] as const)('binds native model sync through actual C
     Gateway.apply(client)
     await client.remote.$mount(remote)
     new GitHubCopilotAuthorizationController(host)
+    await expect(client.remote.githubCopilot.prepareNativeModelSync()).resolves.toMatchObject({
+      ok: true, value: { state: 'error', code: 'NATIVE_MODEL_SYNC_ACCOUNT_UNAVAILABLE' },
+    })
     await expect(client.remote.githubCopilot.previewNativeModelSync()).resolves.toMatchObject({
       ok: true, value: { state: 'error', code: 'NATIVE_MODEL_SYNC_ACCOUNT_UNAVAILABLE' },
     })
@@ -517,7 +520,7 @@ it('mounts authorization, account, role and search-catalog Remotes on the exact 
     expect(remote.descriptors.filter(item => item.namespace !== 'githubCopilotAccounts').map(item => item.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
       'excludeModel', 'restoreModel', 'setModelExcluded', 'setModelHighCost',
-      'previewNativeModelSync', 'applyNativeModelSync', 'migrationStatus',
+      'prepareNativeModelSync', 'previewNativeModelSync', 'applyNativeModelSync', 'migrationStatus',
       'view', 'save', 'create', 'providers', 'get', 'refresh', 'getNative', 'refreshNative',
       'ensureNativeIdentity', 'refreshNativeIdentity', 'get', 'requestedModels', 'allocationSummary', 'get', 'authorize', 'setEnabled',
       'get', 'set', 'refreshIdentity', 'ensureIdentity', 'usage', 'refreshUsage', 'turn',
@@ -526,7 +529,8 @@ it('mounts authorization, account, role and search-catalog Remotes on the exact 
     ])
     for (const descriptor of remote.descriptors.filter(item => item.namespace === 'githubCopilot'
       && item.method !== 'setModelExcluded' && item.method !== 'setModelHighCost'
-      && item.method !== 'previewNativeModelSync' && item.method !== 'applyNativeModelSync')) {
+      && item.method !== 'prepareNativeModelSync' && item.method !== 'previewNativeModelSync'
+      && item.method !== 'applyNativeModelSync')) {
       expect(descriptor.result.mode).toBe('strict')
       expect(descriptor.invocation).toEqual({ kind: 'direct' })
       if (descriptor.method === 'excludeModel' || descriptor.method === 'restoreModel') {
@@ -556,6 +560,14 @@ it('mounts authorization, account, role and search-catalog Remotes on the exact 
     rpc.mockResolvedValueOnce({ ok: true, value: syncPreview })
     await expect(ctx.remote.githubCopilot.previewNativeModelSync()).resolves.toEqual({ ok: true, value: syncPreview })
     expect(rpc).toHaveBeenLastCalledWith('/api', 'githubCopilot/previewNativeModelSync',
+      { args: {} }, expect.any(AbortSignal))
+    const prepareDescriptor = remote.descriptors.find(item => item.method === 'prepareNativeModelSync')!
+    expect(prepareDescriptor.parameters).toEqual([])
+    expect(prepareDescriptor.result.create().parse(syncPreview)).toEqual(syncPreview)
+    expect(() => prepareDescriptor.result.create().parse({ ...syncPreview, credential: 'synthetic-forbidden' })).toThrow()
+    rpc.mockResolvedValueOnce({ ok: true, value: syncPreview })
+    await expect(ctx.remote.githubCopilot.prepareNativeModelSync()).resolves.toEqual({ ok: true, value: syncPreview })
+    expect(rpc).toHaveBeenLastCalledWith('/api', 'githubCopilot/prepareNativeModelSync',
       { args: {} }, expect.any(AbortSignal))
     const syncResult = { state: 'ready', modelCount: 1 }
     const applyDescriptor = remote.descriptors.find(item => item.method === 'applyNativeModelSync')!

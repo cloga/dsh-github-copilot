@@ -104,9 +104,9 @@ const sessionAccountDescriptors = remote.descriptors.filter(descriptor => descri
 const continuationDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotSessionContinuation')
 const diagnosticsDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotDiagnostics')
 const methods = authorizationDescriptors.map(descriptor => descriptor.method).sort()
-if (remote.descriptors.length !== 58 || JSON.stringify(methods) !== JSON.stringify([
+if (remote.descriptors.length !== 59 || JSON.stringify(methods) !== JSON.stringify([
   'applyNativeModelSync', 'cancel', 'discoverModels', 'ensureModels', 'excludeModel', 'migrationStatus',
-  'previewNativeModelSync', 'reconcile', 'restoreModel', 'setModelExcluded', 'setModelHighCost', 'signOut', 'start', 'status',
+  'prepareNativeModelSync', 'previewNativeModelSync', 'reconcile', 'restoreModel', 'setModelExcluded', 'setModelHighCost', 'signOut', 'start', 'status',
 ])
   || JSON.stringify(roleDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['create', 'save', 'view'])
   || JSON.stringify(catalogDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['providers'])
@@ -306,7 +306,7 @@ for (const descriptor of authorizationDescriptors) {
   const highCostPreference = descriptor.method === 'setModelHighCost'
   const narrowPreference = descriptor.method === 'setModelExcluded' || highCostPreference
   const modelPreference = narrowPreference || descriptor.method === 'excludeModel' || descriptor.method === 'restoreModel'
-  const nativeSyncPreview = descriptor.method === 'previewNativeModelSync'
+  const nativeSyncPreview = descriptor.method === 'previewNativeModelSync' || descriptor.method === 'prepareNativeModelSync'
   const nativeSyncApply = descriptor.method === 'applyNativeModelSync'
   if (descriptor.invocation.kind !== 'direct'
     || descriptor.parameters.length !== (narrowPreference ? 2 : modelPreference || nativeSyncApply ? 1 : 0)) {

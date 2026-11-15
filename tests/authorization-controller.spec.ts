@@ -26,6 +26,15 @@ function syncModel(id: string): AccountModelDescriptor {
   }
 }
 
+function syncMessagesModel(id: string): AccountModelDescriptor {
+  const model = syncModel(id)
+  return {
+    ...model, api: 'anthropic-messages',
+    reasoning: { advertisedEfforts: [], unmappedEfforts: [] },
+    evidence: { ...model.evidence, endpoints: ['/v1/messages'], selectedEndpoint: '/v1/messages' },
+  }
+}
+
 const catalogDrift = vi.hoisted(() => ({ wrongGpt6Api: false }))
 const nativeSyncCatalog = vi.hoisted(() => ({
   unavailable: false,
@@ -439,6 +448,120 @@ describe('GitHubCopilotAuthorizationController', () => {
       providers: { 'github-copilot': { api: 'openai-responses', models: [{ id: 'enabled-model' }] } },
     })
   })
+  it('prepares from existing account proof without discovery or credential reads', async () => {
+    const harness = runtime({
+      configured: true, nativeSyncModels: [syncModel('model')],
+      providerProfile: { api: 'openai-responses' },
+    })
+    const source = harness.services.get('githubCopilotPreview') as {
+      discoverNativeModelSync: ReturnType<typeof vi.fn>
+    }
+
+    await expect(harness.controller.prepareNativeModelSync()).resolves.toMatchObject({
+      state: 'ready', enabledCount: 1, syncableCount: 1,
+    })
+    expect(source.discoverNativeModelSync).not.toHaveBeenCalled()
+    expect(harness.readRecord).not.toHaveBeenCalled()
+    expect(harness.mutate).not.toHaveBeenCalled()
+    await harness.controller.previewNativeModelSync()
+    expect(source.discoverNativeModelSync).toHaveBeenCalledOnce()
+  })
+  it('does not discover models when a non-forcing sync preparation has no current proof', async () => {
+    const harness = runtime({
+      configured: true, nativeSyncAccount: 'canonical',
+      providerProfile: { api: 'openai-responses' },
+    })
+    const source = harness.services.get('githubCopilotPreview') as {
+      discoverNativeModelSync: ReturnType<typeof vi.fn>
+    }
+
+    await expect(harness.controller.prepareNativeModelSync()).resolves.toMatchObject({
+      state: 'error', code: 'NATIVE_MODEL_SYNC_MODELS_UNAVAILABLE',
+    })
+    expect(source.discoverNativeModelSync).not.toHaveBeenCalled()
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+  it('preserves the native disabled strict-mode override while syncing supported protocols', async () => {
+    const harness = runtime({
+      configured: true, nativeSyncModels: [syncModel('model')],
+      providerProfile: {
+        api: 'openai-responses',
+        compat: { supportsStrictMode: false, chatTemplateArgs: {}, chatTemplateKwargs: {} },
+      },
+    })
+    const preview = await harness.controller.prepareNativeModelSync()
+    expect(preview.state).toBe('ready')
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toEqual({
+      state: 'ready', modelCount: 1,
+    })
+    expect(harness.mutate).toHaveBeenCalledExactlyOnceWith('llm-pi-ai', [
+      expect.objectContaining({ op: 'set', path: ['providers', 'github-copilot', 'models'] }),
+    ], 0)
+    expect(harness.settingsDocument['llm-pi-ai']).toMatchObject({
+      providers: { 'github-copilot': { compat: { supportsStrictMode: false } } },
+    })
+  })
+  it('blocks disabled strict-mode compatibility if no synced model has a supporting protocol', async () => {
+    const model = syncMessagesModel('messages-model')
+    nativeSyncCatalog.models = [{ id: model.id, api: model.api }]
+    const harness = runtime({
+      configured: true, nativeSyncModels: [model],
+      providerProfile: { api: 'anthropic-messages', compat: { supportsStrictMode: false } },
+    })
+
+    await expect(harness.controller.prepareNativeModelSync()).resolves.toMatchObject({
+      state: 'blocked', code: 'NATIVE_MODEL_SYNC_ROUTE_COMPAT_UNPROVEN',
+    })
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+  it('accepts a mixed protocol list only when a synced model supports the disabled strict-mode setting', async () => {
+    const responses = syncModel('responses-model')
+    const messages = syncMessagesModel('messages-model')
+    nativeSyncCatalog.models = [
+      { id: responses.id, api: responses.api }, { id: messages.id, api: messages.api },
+    ]
+    const harness = runtime({
+      configured: true, nativeSyncModels: [responses, messages],
+      providerProfile: { compat: { supportsStrictMode: false } },
+    })
+    const preview = await harness.controller.prepareNativeModelSync()
+    expect(preview).toMatchObject({ state: 'ready', syncableCount: 2 })
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toMatchObject({
+      state: 'ready', modelCount: 2,
+    })
+  })
+  it('rechecks route compatibility before applying a prepared plan', async () => {
+    const harness = runtime({
+      configured: true, nativeSyncModels: [syncModel('model')],
+      providerProfile: { api: 'openai-responses', compat: { supportsStrictMode: false } },
+    })
+    const preview = await harness.controller.prepareNativeModelSync()
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    const settings = harness.settingsDocument['llm-pi-ai'] as {
+      providers: { 'github-copilot': { compat: { supportsStrictMode: boolean } } }
+    }
+    settings.providers['github-copilot'].compat.supportsStrictMode = true
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toMatchObject({
+      state: 'error', code: 'NATIVE_MODEL_SYNC_ROUTE_COMPAT_UNPROVEN',
+    })
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+  it('reports an uncertain sync if route compatibility changes during the write', async () => {
+    const profile: { api: string; compat?: { supportsStrictMode: boolean } } = {
+      api: 'openai-responses', compat: { supportsStrictMode: false },
+    }
+    const harness = runtime({
+      configured: true, nativeSyncModels: [syncModel('model')], providerProfile: profile,
+      beforeMutate: () => { delete profile.compat },
+    })
+    const preview = await harness.controller.prepareNativeModelSync()
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toMatchObject({
+      state: 'error', code: 'NATIVE_MODEL_SYNC_READBACK_FAILED',
+    })
+  })
   it('accepts empty schema-injected model compatibility fields during effective readback', async () => {
     const harness = runtime({
       configured: true, nativeSyncModels: [syncModel('model')],
@@ -569,10 +692,14 @@ describe('GitHubCopilotAuthorizationController', () => {
     })
     expect(harness.mutate).not.toHaveBeenCalled()
   })
-  it('refuses route compatibility overrides rather than making them invalid for the synced model set', async () => {
+  it.each([
+    ['reasoning override', { supportsReasoningEffort: true }],
+    ['enabled strict mode', { supportsStrictMode: true }],
+    ['unknown override', { custom: true }],
+  ])('refuses an unproven %s rather than changing the native route', async (_label, compat) => {
     const harness = runtime({
       configured: true, nativeSyncModels: [syncModel('model')],
-      providerProfile: { api: 'openai-responses', compat: { supportsReasoningEffort: true } },
+      providerProfile: { api: 'openai-responses', compat },
     })
     await expect(harness.controller.previewNativeModelSync()).resolves.toMatchObject({
       state: 'blocked', code: 'NATIVE_MODEL_SYNC_ROUTE_COMPAT_UNPROVEN',

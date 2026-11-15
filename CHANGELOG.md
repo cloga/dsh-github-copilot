@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-alpha.9.dsh.0.2.2.rc.3 (prepared)
+
+- Show native model-list changes and output defaults automatically from current verified account metadata; one **Sync models** action explicitly confirms the write (#479).
+- Preserve an existing disabled native strict-mode override when the synced list contains a supporting Responses or Completions model; unproven overrides remain blocked.
+- Keep account, catalog, preference, revision and readback fences; preparation does not force discovery, and sync, profile installation and Desktop restart remain explicit.
+
 ## 0.1.0-alpha.8.dsh.0.2.2.rc.3 (prepared)
 
 - Preview and explicitly confirm a one-time sync of enabled canonical-account models to an existing native Copilot provider (#466).
