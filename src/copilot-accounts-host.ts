@@ -339,10 +339,9 @@ export class CopilotAccountsHost {
       if ((accountId !== undefined || activeAccountId !== 'canonical') && !accounts.some(row => row.id === activeAccountId && row.configured)) {
         fail('COPILOT_ACCOUNTS_SELECTED_MISSING')
       }
-      if (activeAccountId !== 'canonical') {
-        const mismatch = await this.nativeCredentialMismatch(activeAccountId)
-        if (accountId === undefined && mismatch) problem = 'COPILOT_ACCOUNTS_NATIVE_CREDENTIAL_MISMATCH'
-        else if (!mismatch) accounts = accounts.filter(row => row.id !== 'canonical')
+      if (accountId === undefined && activeAccountId !== 'canonical') {
+        if (await this.nativeCredentialMismatch(activeAccountId)) problem = 'COPILOT_ACCOUNTS_NATIVE_CREDENTIAL_MISMATCH'
+        else accounts = accounts.filter(row => row.id !== 'canonical')
       }
       const retainedFailure = accountId !== undefined || this.lastFailure === 'COPILOT_ACCOUNTS_BUSY' ? undefined : this.lastFailure
       problem ??= retainedFailure ?? this.routeDiagnostic() ?? (this.busy() ? 'COPILOT_ACCOUNTS_BUSY' : undefined)
@@ -481,14 +480,20 @@ export class CopilotAccountsHost {
   async ensureAccountNamesFor(accountId: string): Promise<CopilotAccountsView> {
     const view = await this.ensureIdentityFor(accountId)
     if (view.state === 'error') return view
+    const duplicateCanonical = accountId !== 'canonical' && this.selection().accountId === accountId
+      && !(await this.nativeCredentialMismatch(accountId))
+    const accounts = duplicateCanonical ? view.accounts.filter(row => row.id !== 'canonical') : view.accounts
     // Membership is bounded; each lookup retains its own timeout, cooldown and flight.
-    const missing = view.accounts.filter(row => row.configured && row.id !== accountId && !this.cachedIdentity(row.id))
+    const missing = accounts.filter(row => row.configured && row.id !== accountId && !this.cachedIdentity(row.id))
     await Promise.all(missing.map(async row => {
       const result = await this.ensureIdentityFor(row.id)
       if (result.state === 'error') this.ctx.logger.warn('[github-copilot] %s',
         result.diagnostic ?? 'COPILOT_ACCOUNTS_IDENTITY_UNAVAILABLE')
     }))
-    return this.viewForAccount(accountId)
+    const result = await this.viewForAccount(accountId)
+    return duplicateCanonical && this.selection().accountId === accountId
+      ? { ...result, accounts: result.accounts.filter(row => row.id !== 'canonical') }
+      : result
   }
   private async readIdentity(accountId: string, force: boolean): Promise<CopilotAccountsView> {
     const operation = beginDiagnostics(this.ctx, 'identity-read')
