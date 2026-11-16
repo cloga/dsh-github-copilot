@@ -185,7 +185,7 @@ it('consumes the preview after an uncertain apply instead of offering the same p
   await openPreferences()
   await click(document.querySelector<HTMLButtonElement>('[data-dsh-github-copilot-native-model-sync-apply]')!)
   expect(document.querySelector<HTMLButtonElement>('[data-dsh-github-copilot-native-model-sync-apply]')!.disabled).toBe(true)
-  expect(document.body.textContent).toContain('Read the saved settings before trying again')
+  expect(document.body.textContent).toContain('Check the saved settings before trying again.')
   expect(face.applyNativeModelSync).toHaveBeenCalledOnce()
   expect(face.prepareNativeModelSync).toHaveBeenCalledOnce()
   await click(document.querySelector<HTMLButtonElement>('[data-dsh-github-copilot-native-model-sync-recheck]')!)
@@ -271,7 +271,7 @@ it('treats a late apply result as uncertain when the displayed account models ch
   await panel.render({ remote: face, models: { ...models, models: [models!.models[1]!] }, preferences })
   await act(async () => { apply.resolve({ ok: true, value: { state: 'ready', modelCount: 1 } }) })
   expect(document.body.textContent).not.toContain('Synced 1 models')
-  expect(document.body.textContent).toContain('Read the saved settings before trying again')
+  expect(document.body.textContent).toContain('Check the saved settings before trying again.')
   expect(face.applyNativeModelSync).toHaveBeenCalledOnce()
 })
 
