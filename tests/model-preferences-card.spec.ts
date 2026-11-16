@@ -94,6 +94,7 @@ it('shows sync changes beside the model list and applies them with one explicit 
     enabledCount: 3, syncableCount: 3, addedIds: ['first', 'third'], removedIds: ['old'],
     outputTokenDefaults: [],
     updatedIds: ['second'], skipped: [], nativeCatalogMissingIds: ['third'],
+    routeApiChange: 'openai-responses',
   } })
   face.applyNativeModelSync.mockResolvedValue({ ok: true, value: { state: 'ready', modelCount: 3 } })
   const availableModels = { ...models, models: [...models.models, { id: 'third', name: 'Third', api: 'openai-responses' }] }
@@ -108,6 +109,9 @@ it('shows sync changes beside the model list and applies them with one explicit 
   expect(sync.textContent).toBe('Sync models')
   expect(sync.disabled).toBe(false)
   expect(document.body.textContent).toContain('3 of 3 enabled model IDs will be submitted')
+  expect(document.body.textContent).toContain('Set the provider-wide API from unset to openai-responses')
+  expect(document.body.textContent).toContain('This applies to every synced model')
+  expect(document.body.textContent).toContain('matching native catalog entries agree')
   expect(document.body.textContent).toContain('Models to add')
   expect(document.body.textContent).toContain('Models to update')
   expect(document.body.textContent).toContain('IDs absent from the installed native catalog')
@@ -126,6 +130,7 @@ it('shows sync changes beside the model list and applies them with one explicit 
   await click(sync)
   expect(face.applyNativeModelSync).toHaveBeenCalledExactlyOnceWith('12345678-1234-4234-8234-123456789012')
   expect(document.body.textContent).toContain('Synced 3 models')
+  expect(document.body.textContent).toContain('Set the provider-wide API to openai-responses')
 })
 
 it('does not dispatch duplicate sync actions before React renders the busy state', async () => {
@@ -180,7 +185,7 @@ it('consumes the preview after an uncertain apply instead of offering the same p
   await openPreferences()
   await click(document.querySelector<HTMLButtonElement>('[data-dsh-github-copilot-native-model-sync-apply]')!)
   expect(document.querySelector<HTMLButtonElement>('[data-dsh-github-copilot-native-model-sync-apply]')!.disabled).toBe(true)
-  expect(document.body.textContent).toContain('Read the saved settings before trying again')
+  expect(document.body.textContent).toContain('Check the saved settings before trying again.')
   expect(face.applyNativeModelSync).toHaveBeenCalledOnce()
   expect(face.prepareNativeModelSync).toHaveBeenCalledOnce()
   await click(document.querySelector<HTMLButtonElement>('[data-dsh-github-copilot-native-model-sync-recheck]')!)
@@ -266,7 +271,7 @@ it('treats a late apply result as uncertain when the displayed account models ch
   await panel.render({ remote: face, models: { ...models, models: [models!.models[1]!] }, preferences })
   await act(async () => { apply.resolve({ ok: true, value: { state: 'ready', modelCount: 1 } }) })
   expect(document.body.textContent).not.toContain('Synced 1 models')
-  expect(document.body.textContent).toContain('Read the saved settings before trying again')
+  expect(document.body.textContent).toContain('Check the saved settings before trying again.')
   expect(face.applyNativeModelSync).toHaveBeenCalledOnce()
 })
 

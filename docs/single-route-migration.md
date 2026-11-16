@@ -34,15 +34,21 @@ account-advertised metadata through public APIs. Native Copilot OAuth and
 ordinary model calls remain owned by DSH's canonical `github-copilot` provider.
 An account switch is a separate, explicit operation and does not imply a model
 catalog sync. The optional native model sync is separately previewed and
-confirmed, writes only the existing native model-list path, and never creates a
+confirmed, writes the existing native model-list path, and never creates a
 provider profile.
 
 Model sync submits all enabled account IDs as `{ id }` entries, without a
 second capability filter or a native-catalog intersection (#508). Missing
 native IDs are advisory only. Native configuration resolves definitions from
 its own catalog and existing route settings; it may reject an unresolved ID and
-therefore the entire write. The plugin does not force an API, suppress native
-validation or claim model-call compatibility from a matching name.
+therefore the entire write. For missing IDs only, if no route API is configured,
+the preview may propose a provider-wide API when every enabled account model
+has the same verified protocol and every matching native catalog entry agrees.
+This applies to the whole route and must be disclosed before confirmation.
+Existing route APIs are preserved; mixed, incomplete or conflicting evidence
+blocks the sync. The model list and authorized route API are written together.
+Native validation remains authoritative; the plugin never guesses a protocol
+or claims model-call compatibility from a matching name.
 
 Confirming sync replaces per-model customizations, including explicit output
 request defaults. The preview discloses updated and removed entries, and the
@@ -90,8 +96,12 @@ provider 可能不可用；DSH 会报告已配置 provider 缺失，不会静默
 
 插件仍可通过公开 API 提供账号管理、额度展示和账号模型元数据。原生 Copilot OAuth
 及普通模型请求仍由 DSH canonical `github-copilot` provider 所有。账号切换是独立的
-显式操作，不代表同步模型目录。可选的原生模型同步需单独预览并确认，只写入已有的
-原生模型列表路径，不会创建 provider profile。
+显式操作，不代表同步模型目录。可选的原生模型同步需单独预览并确认，写入已有的
+原生模型列表路径，不会创建 provider profile。仅对原生目录缺失的 ID，如果尚未配置
+route API，且所有启用账号模型的已验证协议一致、目录中匹配的原生模型协议也一致，
+预览才会建议设置 provider 级 API，并明确披露它影响整条路由。已有 route API 不覆盖；
+协议混合、证据缺失或冲突时阻止同步。模型列表和获准的 API 会在同一写入中提交，
+原生校验仍是最终依据。
 
 账号界面不能替代 DSH 原生 provider 的 **Edit/Delete** 控件。新增原生 provider 组仍是
 DSH 操作；插件不拦截，也不声称能强制只保留一个组。

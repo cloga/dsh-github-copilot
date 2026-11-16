@@ -468,6 +468,57 @@ describe('GitHubCopilotAuthorizationController', () => {
     await harness.controller.previewNativeModelSync()
     expect(source.discoverNativeModelSync).toHaveBeenCalledOnce()
   })
+  it('previews and writes a provider-wide API with the IDs only when metadata and native entries agree', async () => {
+    nativeSyncCatalog.models = [{ id: 'known-model', api: 'openai-responses' }]
+    const harness = runtime({
+      configured: true,
+      nativeSyncModels: [syncModel('known-model'), syncModel('future-model')],
+      providerProfile: { models: [{ id: 'old-model' }] },
+    })
+    const preview = await harness.controller.prepareNativeModelSync()
+    expect(preview).toMatchObject({
+      state: 'ready', routeApiChange: 'openai-responses',
+      nativeCatalogMissingIds: ['future-model'],
+    })
+    expect(harness.mutate).not.toHaveBeenCalled()
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toEqual({
+      state: 'ready', modelCount: 2,
+    })
+    expect(harness.mutate).toHaveBeenCalledExactlyOnceWith('llm-pi-ai', [
+      { op: 'set', path: ['providers', 'github-copilot', 'api'], value: 'openai-responses' },
+      { op: 'set', path: ['providers', 'github-copilot', 'models'], value: [
+        { id: 'known-model' }, { id: 'future-model' },
+      ] },
+    ], 0)
+    expect(harness.settingsDocument['llm-pi-ai']).toMatchObject({
+      providers: { 'github-copilot': { api: 'openai-responses', models: [
+        { id: 'known-model' }, { id: 'future-model' },
+      ] } },
+    })
+  })
+  it('blocks route API updates for mixed or conflicting protocols without changing settings', async () => {
+    nativeSyncCatalog.models = [{ id: 'known-model', api: 'openai-responses' }]
+    const mixed = runtime({
+      configured: true,
+      nativeSyncModels: [syncModel('known-model'), syncMessagesModel('future-model')],
+      providerProfile: {},
+    })
+    await expect(mixed.controller.prepareNativeModelSync()).resolves.toMatchObject({
+      state: 'blocked', code: 'NATIVE_MODEL_SYNC_ROUTE_API_UNPROVEN',
+    })
+    expect(mixed.mutate).not.toHaveBeenCalled()
+
+    const conflict = runtime({
+      configured: true, nativeSyncModels: [syncModel('known-model'), syncModel('future-model')],
+      providerProfile: { api: 'anthropic-messages' },
+    })
+    await expect(conflict.controller.prepareNativeModelSync()).resolves.toMatchObject({
+      state: 'blocked', code: 'NATIVE_MODEL_SYNC_ROUTE_API_CONFLICT',
+    })
+    expect(conflict.mutate).not.toHaveBeenCalled()
+  })
   it('does not discover models when a non-forcing sync preparation has no current proof', async () => {
     const harness = runtime({
       configured: true, nativeSyncAccount: 'canonical',

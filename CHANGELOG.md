@@ -5,6 +5,11 @@ release tags do not update this file after publication. Check the exact
 [GitHub Release](https://github.com/cloga/dsh-github-copilot/releases) and npm
 version separately rather than treating an old `prepared` label as current status.
 
+## 0.1.0-alpha.21.dsh.0.2.2.rc.3 (prepared)
+
+- Include a conditionally verified provider-wide API in confirmed native model sync when enabled account models share one protocol and matching native catalog entries agree (#510).
+- Disclose the route-wide effect before confirmation; preserve existing route APIs and block mixed, missing or conflicting protocol evidence.
+
 ## 0.1.0-alpha.20.dsh.0.2.2.rc.3 (prepared)
 
 - Record native turn-account evidence for valid explicitly configured Copilot model IDs even when absent from the native built-in catalog (#488).

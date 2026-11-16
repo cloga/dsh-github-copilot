@@ -310,9 +310,17 @@ assert(alphaCore.evidenceScope === 'unchanged-tagged-source-target'
 const nativeSync = manifest.capabilities?.find(capability => capability.id === 'confirmed-native-model-sync')
 assert(nativeSync?.required === true
   && nativeSync.evidenceScope === 'tagged-native-settings-and-resolution-with-synthetic-catalog-proof-plus-separate-adapter-ownership-tests-not-live-provider'
+  && nativeSync.sourceMarkers?.some(marker => marker.file === 'src/native-model-sync.ts'
+    && marker.marker === 'planNativeModelSyncRouteApi')
+  && nativeSync.sourceMarkers?.some(marker => marker.file === 'src/authorization-controller.ts'
+    && marker.marker === "path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'api']")
+  && nativeSync.tests?.some(entry => entry.file === 'tests/native-model-sync.spec.ts'
+    && entry.name === 'sets one route API for missing catalog IDs only when account and existing native APIs agree')
   && nativeSync.tests?.some(entry => entry.file === 'tests/fixtures/native-model-sync-core.fixture.ts')
+  && nativeSync.tests?.some(entry => entry.file === 'tests/fixtures/native-model-sync-core.fixture.ts'
+    && entry.name === 'syncs a confirmed snapshot and conditional route API through real native Settings and model resolution across restart using synthetic catalog proof')
   && (await read('.github/workflows/ci.yml')).includes("['native-model-sync-core.fixture.ts',1]"),
-  'native model sync evidence must retain bounded synthetic scope and an executed tagged-source fixture')
+  'native model sync evidence must retain conditional route API proof and bounded tagged-source fixture coverage')
 const nativeAccountEvidence = manifest.capabilities?.find(capability => capability.id === 'copilot-session-accounts')
 const reviewerAccountAssertion = 'expected all 37 native reviewer/account tests, none skipped'
 assert(nativeAccountEvidence?.tests?.some(entry => entry.file === 'tests/native-copilot-access.spec.ts'

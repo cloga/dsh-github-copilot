@@ -731,7 +731,11 @@ test('contract validation preserves the explicitly confirmed native model sync b
       contract => { contract.tasks.models.nativeModelSyncBoundary = contract.tasks.models.nativeModelSyncBoundary.replace('non-forcing preview', 'preview') },
       contract => { contract.tasks.models.nativeModelSyncBoundary = contract.tasks.models.nativeModelSyncBoundary.replace('ID-only account model submission, not capability qualification', 'copy account capabilities') },
       contract => { contract.tasks.models.nativeModelSyncBoundary = contract.tasks.models.nativeModelSyncBoundary.replace('Missing native IDs are advisory, not skipped', 'Guess definitions for absent IDs') },
+      contract => { contract.tasks.models.nativeModelSyncBoundary = contract.tasks.models.nativeModelSyncBoundary.replace('For missing native IDs with no configured route API', 'For all native IDs') },
+      contract => { contract.tasks.models.nativeModelSyncBoundary = contract.tasks.models.nativeModelSyncBoundary.replace('every enabled account model has one identical supported API and every matching native catalog entry agrees', 'without protocol evidence') },
+      contract => { contract.tasks.models.nativeModelSyncBoundary = contract.tasks.models.nativeModelSyncBoundary.replace('preserve an existing route API', 'overwrite an existing route API') },
       contract => { contract.tasks.models.nativeModelSyncBoundary = contract.tasks.models.nativeModelSyncBoundary.replace('preserve supportsStrictMode: false only when at least one synced Responses or Completions model supports it', 'permit all overrides') },
+      contract => { contract.tasks.models.nativeModelSyncBoundary = contract.tasks.models.nativeModelSyncBoundary.replace('read back both user and effective values', 'read back user only') },
       contract => { contract.tasks.models.tests = contract.tasks.models.tests.filter(value => !value.includes('native-model-sync')) },
     ]) {
       const contract = structuredClone(original)
