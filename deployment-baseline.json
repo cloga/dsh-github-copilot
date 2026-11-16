@@ -8,14 +8,14 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.1.0-alpha.20.dsh.0.2.2.rc.3"
+    "version": "0.1.0-alpha.21.dsh.0.2.2.rc.3"
   },
   "releaseLines": [
     { "core": "0.2.0-rc.2", "version": "0.4.2-alpha.15", "status": "published" },
     { "core": "0.2.1-alpha.4", "version": "0.4.2-alpha.16", "status": "published" },
     { "core": "0.2.1-alpha.5", "version": "0.1.0-alpha.2.dsh.0.2.1.alpha.5", "status": "published" },
     { "core": "0.2.1-rc.3", "version": "0.1.0-alpha.5.dsh.0.2.1.rc.3", "status": "published" },
-    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.20.dsh.0.2.2.rc.3", "status": "pending" }
+    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.21.dsh.0.2.2.rc.3", "status": "pending" }
   ],
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -748,14 +748,22 @@
       "evidenceScope": "tagged-native-settings-and-resolution-with-synthetic-catalog-proof-plus-separate-adapter-ownership-tests-not-live-provider",
       "sourceMarkers": [
         {"file": "src/native-model-sync.ts", "marker": "nativeCatalogMissingIds"},
+        {"file": "src/native-model-sync.ts", "marker": "planNativeModelSyncRouteApi"},
         {"file": "src/native-copilot-access.ts", "marker": "captureNativeCopilotCatalog"},
         {"file": "src/authorization-controller.ts", "marker": "path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'models']"},
+        {"file": "src/authorization-controller.ts", "marker": "path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'api']"},
         {"file": "src/model-preferences-card.ts", "marker": "Sync models"},
+        {"file": "src/model-preferences-card.ts", "marker": "data-dsh-github-copilot-native-model-sync-route-api"},
         {"file": "src/authorization-controller.ts", "marker": "nativeSyncSupportsRouteCompatibility"},
-        {"file": "src/remote.ts", "marker": "GitHubCopilotNativeModelSyncPreviewSchema"}
+        {"file": "src/remote.ts", "marker": "GitHubCopilotNativeModelSyncPreviewSchema"},
+        {"file": "src/remote.ts", "marker": "routeApiChange"}
       ],
       "tests": [
         {"file": "tests/native-model-sync.spec.ts", "name": "submits all enabled account IDs without copying or qualifying capabilities"},
+        {"file": "tests/native-model-sync.spec.ts", "name": "sets one route API for missing catalog IDs only when account and existing native APIs agree"},
+        {"file": "tests/native-model-sync.spec.ts", "name": "does not set a route API for a fully native mixed-protocol list"},
+        {"file": "tests/native-model-sync.spec.ts", "name": "blocks missing IDs when account protocols are mixed or existing native APIs conflict"},
+        {"file": "tests/native-model-sync.spec.ts", "name": "preserves a matching configured route API and blocks a conflicting one"},
         {"file": "tests/native-model-sync.spec.ts", "name": "does not reject native entries for narrower input, image formats or unavailable account reasoning controls"},
         {"file": "tests/native-model-sync.spec.ts", "name": "leaves mixed-protocol model definitions with the native catalog instead of rewriting them"},
         {"file": "tests/native-model-sync.spec.ts", "name": "includes unknown native IDs with an advisory instead of filtering them or inventing defaults"},
@@ -765,6 +773,8 @@
         {"file": "tests/native-copilot-access.spec.ts", "name": "exposes the proven unfiltered adapter catalog independently of the configured model list"},
         {"file": "tests/native-copilot-access.spec.ts", "name": "revokes a catalog snapshot when its native Loader entry is removed"},
         {"file": "tests/authorization-controller.spec.ts", "name": "previews enabled canonical models and applies only the confirmed native models path with CAS/readback"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "previews and writes a provider-wide API with the IDs only when metadata and native entries agree"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "blocks route API updates for mixed or conflicting protocols without changing settings"},
         {"file": "tests/authorization-controller.spec.ts", "name": "prepares from existing account proof without discovery or credential reads"},
         {"file": "tests/authorization-controller.spec.ts", "name": "preserves the native disabled strict-mode override while syncing supported protocols"},
         {"file": "tests/authorization-controller.spec.ts", "name": "blocks disabled strict-mode compatibility if no synced model has a supporting protocol"},
@@ -772,11 +782,12 @@
         {"file": "tests/authorization-controller.spec.ts", "name": "rejects a plan that expires while checking the native credential before writing"},
         {"file": "tests/authorization-controller.spec.ts", "name": "reports an uncertain commit if the proven native catalog changes during the write"},
         {"file": "tests/model-preferences-card.spec.ts", "name": "shows sync changes beside the model list and applies them with one explicit action"},
+        {"file": "tests/remote-codec.spec.ts", "name": "accepts only known route APIs in a native model sync preview"},
         {"file": "tests/model-preferences-card.spec.ts", "name": "does not dispatch duplicate sync actions before React renders the busy state"},
         {"file": "tests/model-preferences-card.spec.ts", "name": "allows model edits while preparing and ignores the superseded plan"},
         {"file": "tests/remote-codec.spec.ts", "name": "accepts named native-sync safety diagnostics without accepting extra fields"},
         {"file": "tests/fixtures/remote-core.fixture.ts", "name": "binds native model sync through actual Client and %s Host gateways"},
-        {"file": "tests/fixtures/native-model-sync-core.fixture.ts", "name": "syncs a confirmed snapshot through real native Settings and model resolution across restart using synthetic catalog proof"}
+        {"file": "tests/fixtures/native-model-sync-core.fixture.ts", "name": "syncs a confirmed snapshot and conditional route API through real native Settings and model resolution across restart using synthetic catalog proof"}
       ]
     },
     {

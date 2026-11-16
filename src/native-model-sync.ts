@@ -1,4 +1,4 @@
-import type { AccountModelDescriptor } from './account-model-catalog.ts'
+import type { AccountModelApi, AccountModelDescriptor } from './account-model-catalog.ts'
 
 export type NativeModelSyncSkipCode = 'NATIVE_API_UNAVAILABLE' | 'NATIVE_API_MISMATCH' | 'NATIVE_INHERITED_API_MISMATCH'
   | 'NATIVE_COMPATIBILITY_UNPROVEN'
@@ -33,6 +33,56 @@ export interface NativeModelSyncInput {
   readonly currentModels: readonly Readonly<Record<string, unknown>>[]
   readonly currentModelsUseCatalog: boolean
   readonly nativeCatalog: readonly NativeCatalogModel[]
+}
+
+export type NativeModelSyncRouteApiPlan =
+  | { readonly state: 'ready'; readonly changed: false }
+  | { readonly state: 'ready'; readonly changed: true; readonly api: AccountModelApi }
+  | {
+    readonly state: 'blocked'
+    readonly code: 'NATIVE_MODEL_SYNC_ROUTE_API_UNPROVEN' | 'NATIVE_MODEL_SYNC_ROUTE_API_CONFLICT'
+    readonly changed: false
+  }
+
+export function planNativeModelSyncRouteApi(input: {
+  readonly accountModels: readonly AccountModelDescriptor[]
+  readonly models: readonly NativeModelProfile[]
+  readonly currentApi: string | undefined
+  readonly nativeCatalog: readonly NativeCatalogModel[]
+}): NativeModelSyncRouteApiPlan {
+  const accountById = new Map(input.accountModels.map(model => [model.id, model]))
+  const nativeById = new Map(input.nativeCatalog.map(model => [model.id, model]))
+  const foundModels = input.models.map(({ id }) => accountById.get(id))
+  if (foundModels.length === 0 || foundModels.some(model => model === undefined)) {
+    return { state: 'blocked', code: 'NATIVE_MODEL_SYNC_ROUTE_API_UNPROVEN', changed: false }
+  }
+  const targetModels = foundModels.filter((model): model is AccountModelDescriptor => model !== undefined)
+
+  if (input.currentApi !== undefined) {
+    if (targetModels.some(model => model.api !== input.currentApi)
+      || input.models.some(({ id }) => {
+        const native = nativeById.get(id)
+        return native !== undefined && native.api !== input.currentApi
+      })) {
+      return { state: 'blocked', code: 'NATIVE_MODEL_SYNC_ROUTE_API_CONFLICT', changed: false }
+    }
+    return { state: 'ready', changed: false }
+  }
+
+  const missingNativeModel = input.models.some(({ id }) => !nativeById.has(id))
+  if (!missingNativeModel) return { state: 'ready', changed: false }
+
+  const apis = new Set(targetModels.map(model => model.api))
+  if (apis.size !== 1) return { state: 'blocked', code: 'NATIVE_MODEL_SYNC_ROUTE_API_UNPROVEN', changed: false }
+  const api = targetModels[0]?.api
+  if (api === undefined) return { state: 'blocked', code: 'NATIVE_MODEL_SYNC_ROUTE_API_UNPROVEN', changed: false }
+  if (input.models.some(({ id }) => {
+    const native = nativeById.get(id)
+    return native !== undefined && native.api !== api
+  })) {
+    return { state: 'blocked', code: 'NATIVE_MODEL_SYNC_ROUTE_API_CONFLICT', changed: false }
+  }
+  return { state: 'ready', api, changed: true }
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

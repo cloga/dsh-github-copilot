@@ -123,6 +123,8 @@ const nativeModelSyncCode = z.enum([
   'NATIVE_MODEL_SYNC_NATIVE_AUTH_UNPROVEN',
   'NATIVE_MODEL_SYNC_OVERRIDES_CONFLICT',
   'NATIVE_MODEL_SYNC_ROUTE_COMPAT_UNPROVEN',
+  'NATIVE_MODEL_SYNC_ROUTE_API_UNPROVEN',
+  'NATIVE_MODEL_SYNC_ROUTE_API_CONFLICT',
   'NATIVE_MODEL_SYNC_NO_SYNCABLE_MODELS',
   'NATIVE_MODEL_SYNC_PLAN_EXPIRED',
   'NATIVE_MODEL_SYNC_PLAN_STALE',
@@ -145,6 +147,7 @@ export const GitHubCopilotNativeModelSyncPreviewSchema = z.object({
   removedIds: z.array(z.string().min(1).max(200)).max(512),
   updatedIds: z.array(z.string().min(1).max(200)).max(512),
   nativeCatalogMissingIds: z.array(z.string().min(1).max(200)).max(512).optional(),
+  routeApiChange: z.enum(['anthropic-messages', 'openai-responses', 'openai-completions']).optional(),
   skipped: z.array(z.object({
     id: z.string().min(1).max(200),
     code: z.enum([

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { AccountModelDescriptor } from '../src/account-model-catalog.ts'
-import { matchesNativeModelProfile, planNativeModelSync } from '../src/native-model-sync.ts'
+import {
+  matchesNativeModelProfile, planNativeModelSync, planNativeModelSyncRouteApi,
+} from '../src/native-model-sync.ts'
 
 function accountModel(id: string): AccountModelDescriptor {
   return {
@@ -31,6 +33,56 @@ describe('planNativeModelSync', () => {
       models: [{ id: 'existing' }, { id: 'new' }],
       outputTokenDefaults: [],
       addedIds: ['new'], removedIds: ['removed'], updatedIds: ['existing'], skipped: [], nativeCatalogMissingIds: [],
+    })
+  })
+
+  describe('planNativeModelSyncRouteApi', () => {
+    it('sets one route API for missing catalog IDs only when account and existing native APIs agree', () => {
+      expect(planNativeModelSyncRouteApi({
+        accountModels: [accountModel('known'), accountModel('future')],
+        models: [{ id: 'known' }, { id: 'future' }],
+        currentApi: undefined,
+        nativeCatalog: [{ id: 'known', api: 'openai-responses' }],
+      })).toEqual({ state: 'ready', api: 'openai-responses', changed: true })
+    })
+
+    it('does not set a route API for a fully native mixed-protocol list', () => {
+      expect(planNativeModelSyncRouteApi({
+        accountModels: [accountModel('responses'), {
+          ...accountModel('messages'), api: 'anthropic-messages',
+        }],
+        models: [{ id: 'responses' }, { id: 'messages' }],
+        currentApi: undefined,
+        nativeCatalog: [
+          { id: 'responses', api: 'openai-responses' },
+          { id: 'messages', api: 'anthropic-messages' },
+        ],
+      })).toEqual({ state: 'ready', changed: false })
+    })
+
+    it('blocks missing IDs when account protocols are mixed or existing native APIs conflict', () => {
+      const models = [{ id: 'known' }, { id: 'future' }]
+      const nativeCatalog = [{ id: 'known', api: 'openai-responses' }]
+      expect(planNativeModelSyncRouteApi({
+        accountModels: [accountModel('known'), { ...accountModel('future'), api: 'anthropic-messages' }],
+        models, currentApi: undefined, nativeCatalog,
+      })).toMatchObject({ state: 'blocked', code: 'NATIVE_MODEL_SYNC_ROUTE_API_UNPROVEN', changed: false })
+      expect(planNativeModelSyncRouteApi({
+        accountModels: [accountModel('known'), accountModel('future')],
+        models, currentApi: undefined, nativeCatalog: [{ id: 'known', api: 'openai-completions' }],
+      })).toMatchObject({ state: 'blocked', code: 'NATIVE_MODEL_SYNC_ROUTE_API_CONFLICT', changed: false })
+    })
+
+    it('preserves a matching configured route API and blocks a conflicting one', () => {
+      const input = {
+        accountModels: [accountModel('known'), accountModel('future')],
+        models: [{ id: 'known' }, { id: 'future' }],
+        nativeCatalog: [{ id: 'known', api: 'openai-responses' }],
+      }
+      expect(planNativeModelSyncRouteApi({ ...input, currentApi: 'openai-responses' }))
+        .toEqual({ state: 'ready', changed: false })
+      expect(planNativeModelSyncRouteApi({ ...input, currentApi: 'anthropic-messages' }))
+        .toMatchObject({ state: 'blocked', code: 'NATIVE_MODEL_SYNC_ROUTE_API_CONFLICT', changed: false })
     })
   })
 
