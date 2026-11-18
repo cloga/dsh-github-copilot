@@ -307,6 +307,13 @@ const alphaCore = dshBaselines.find(entry => entry.release === '0.1.3-alpha.1')
 assert(alphaCore.evidenceScope === 'unchanged-tagged-source-target'
   && alphaCore.standaloneNpmArtifacts === 'not-published'
   && alphaCore.managedProviderValidation === 'not-verified', 'alpha.1 source evidence must not pretend unavailable npm artifacts were tested')
+const nativeHeaders = manifest.capabilities?.find(capability => capability.id === 'native-copilot-ide-headers')
+assert(nativeHeaders?.required === true
+  && nativeHeaders.evidenceScope === 'synthetic-native-stream-not-live-supplier'
+  && nativeHeaders.sourceMarkers?.some(marker => marker.file === 'src/native-copilot-headers.ts'
+    && marker.marker === 'llm-pi-ai/request-headers')
+  && nativeHeaders.tests?.some(entry => entry.file === 'tests/fixtures/auto-review-copilot-core.fixture.ts'),
+'native IDE headers must retain public-hook and synthetic native-stream evidence')
 const nativeSync = manifest.capabilities?.find(capability => capability.id === 'confirmed-native-model-sync')
 assert(nativeSync?.required === true
   && nativeSync.evidenceScope === 'tagged-native-settings-and-resolution-with-synthetic-catalog-proof-plus-separate-adapter-ownership-tests-not-live-provider'

@@ -29,6 +29,7 @@ import Tools, { defineTool } from '@deepseek-ai/dsh-tools'
 import ApprovalService, { setApprovalPolicy } from '@deepseek-ai/dsh-user-approval'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import previewPlugin from '../../src/preview-route.ts'
+import { copilotPublicHeaders } from '../../src/preview-provider.ts'
 import { installAutoReviewSampling } from '../../src/auto-review-sampling.ts'
 import { captureNativeCopilot } from '../../src/native-copilot-access.ts'
 import { createNativeCopilotSearch } from '../../src/native-copilot-search.ts'
@@ -155,6 +156,7 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
   const wireBodies: Record<string, unknown>[] = []
   const searchBodies: Record<string, unknown>[] = []
   const wireTokens: (string | null)[] = []
+  const wireHeaders: Headers[] = []
   const strictMode = outcome === 'deny'
   const useOverrides = outcome === 'deny' || outcome === 'http-error'
   let normalizedNativeSettings: unknown
@@ -185,8 +187,12 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
       ] })
     }
     wireCalls += 1
+    wireHeaders.push(new Headers(init?.headers))
     wireTokens.push(new Headers(init?.headers).get('authorization'))
     wireBodies.push(body)
+    if (customNative && !new Headers(init?.headers).has('editor-version')) {
+      return Response.json({ error: { message: 'missing Editor-Version header for IDE auth' } }, { status: 400 })
+    }
     if (canonicalNative && body.temperature === 0) {
       return Response.json({ message: "Unsupported parameter: 'temperature'", code: 'invalid_request_body' }, { status: 400 })
     }
@@ -453,7 +459,7 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
     expect(ctx.settings.describe({ redactSecrets: true }).find(row => row.ns === 'llm-pi-ai')?.value)
       .toEqual(normalizedNativeSettings)
   }
-  return { result, executions, wireCalls, wireBodies, searchBodies, wireTokens, readScopes,
+  return { result, executions, wireCalls, wireBodies, searchBodies, wireTokens, wireHeaders, readScopes,
     ctx, agent, model: MODEL, preview }
 }
 
@@ -463,9 +469,12 @@ describe('native Auto reviewer Copilot compatibility', () => {
     'canonical-native-custom-turn-account',
     'canonical-native-reference-turn-account',
   ] as const)('records %s through real Loader qualification and synthetic stream delivery', async scope => {
-    const { ctx, agent, model, preview, wireTokens } = await run('allow', true, undefined, scope)
+    const { ctx, agent, model, preview, wireTokens, wireHeaders, result } = await run('allow', true, undefined, scope)
     if (scope !== 'canonical-native-turn-account') {
       expect((await captureNativeCopilot(ctx))?.models.has(model)).toBe(false)
+      expect(wireHeaders.length).toBeGreaterThan(0)
+      for (const headers of wireHeaders) expect(headers.has('editor-version')).toBe(false)
+      expect(result.isError).toBe(true)
     }
     await preview.dispose()
     const register = () => ctx.effect(() => () => {})
@@ -496,8 +505,16 @@ describe('native Auto reviewer Copilot compatibility', () => {
         const options = { ...call.config, messages: [],
           sessionId: agent.session.id, signal: controller.signal, ...purpose === undefined ? {} : { purpose } }
         let chunks = 0
-        for await (const _chunk of call.stream(marked ? markAgentLoopRequest(options) : options)) chunks++
+        let finished = false
+        for await (const chunk of call.stream(marked ? markAgentLoopRequest(options) : options)) {
+          chunks++
+          if (chunk.type === 'finish') {
+            finished = true
+            expect(chunk.reason.kind).toBe('stop')
+          }
+        }
         expect(chunks).toBeGreaterThan(0)
+        expect(finished).toBe(true)
       }
       const previousWireCalls = wireTokens.length
       await dispatch(false)
@@ -507,6 +524,12 @@ describe('native Auto reviewer Copilot compatibility', () => {
       expect(wireTokens.slice(previousWireCalls)).toEqual([
         'Bearer synthetic-access', 'Bearer synthetic-access', 'Bearer synthetic-access',
       ])
+      for (const headers of wireHeaders.slice(previousWireCalls)) {
+        for (const name of ['Editor-Version', 'Editor-Plugin-Version', 'Copilot-Integration-Id']) {
+          expect(headers.get(name)).toBe(copilotPublicHeaders()[name])
+        }
+        expect(headers.get('user-agent')).not.toBe(copilotPublicHeaders()['User-Agent'])
+      }
       await vi.waitFor(() => expect(owner.turns.evidence(agent.session, 1))
         .toMatchObject({ accountId: 'canonical', source: 'global' }))
       agent.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })

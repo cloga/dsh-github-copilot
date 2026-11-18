@@ -18,6 +18,7 @@ import { readSettingsNamespace } from './settings-reader.ts'
 import GitHubCopilotAuthorizationController from './authorization-controller.ts'
 import previewPlugin from './preview-route.ts'
 import { installAutoReviewSampling } from './auto-review-sampling.ts'
+import { installNativeCopilotHeaders } from './native-copilot-headers.ts'
 import { createNativeCopilotSearch, NativeCopilotSearchController } from './native-copilot-search.ts'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID, GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
 export {
@@ -74,6 +75,7 @@ export type {
 /** Register model integration after the required native services are available. */
 export function apply(ctx: Context, config: LiveInlineConfig): void {
   ctx.effect(() => installAutoReviewSampling(ctx))
+  ctx.effect(() => installNativeCopilotHeaders(ctx))
   ctx.inject(['web', 'llm', 'settings', 'credentials', 'loader', 'pluginPackages'], scope => {
     const provider = createNativeCopilotSearch(scope)
     new NativeCopilotSearchController(scope, provider)
