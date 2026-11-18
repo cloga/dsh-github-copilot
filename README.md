@@ -134,6 +134,14 @@ request defaults, with native definitions.** Review updated and removed entries
 before confirming. Other route-wide settings remain unchanged. This selects a
 model list; it does not prove supplier compatibility or enforce account-specific
 limits. Native requests retain DSH's transport, validation and error behavior.
+While loaded, the plugin fills missing `Editor-Version`, `Editor-Plugin-Version`
+and `Copilot-Integration-Id` request headers from the published pi-ai Copilot
+provider through DSH's public request-header hook. This covers ID-only models
+without inherited catalog headers. It preserves explicit headers, DSH
+attribution and native authentication, and does not apply to custom endpoints
+or other providers. No settings are written or failed messages retried.
+Unloading the plugin removes this contribution: the saved model list remains,
+but affected models can again fail with `missing Editor-Version header for IDE auth`.
 Custom native authentication,
 endpoints, headers, nonempty model overrides, or unproven route compatibility
 overrides block sync rather than changing those settings. An existing

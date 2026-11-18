@@ -136,6 +136,16 @@ before the one-shot write, then atomically CAS the model list and any authorized
 route API together and read back both user and effective values. Never create a
 profile, change other paths or perform this sync automatically.
 
+Native ID-only request headers (#512) use only the public synchronous
+`llm-pi-ai/request-headers` waterfall. Fill missing Editor-Version,
+Editor-Plugin-Version and Copilot-Integration-Id from the published Copilot
+provider on its declared default endpoints and exact native route only.
+Preserve explicit headers and DSH attribution; never read credentials, copy
+capabilities, mutate catalogs/settings, replace transport or retry messages.
+Disposal removes the listener, not saved IDs; model-list persistence does not
+promise working inference after unload. Keep synthetic header delivery separate
+from live supplier acceptance.
+
 The user-confirmed direction on 2026-11-14 supersedes conflicting legacy feature
 requirements below: this plugin is a lightweight GitHub Copilot model integration
 for DSH Desktop, not a second agent product. The qualification target is the exact

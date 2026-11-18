@@ -11,6 +11,11 @@ version separately rather than treating an old `prepared` label as current statu
 - Preserve rc.5's native route-specific Web search preference and explicit Copilot backend selection; add synthetic regressions for both.
 - The signed Windows nightly Desktop mirror is separate from pending plugin qualification, publication, installation, and live runtime acceptance.
 
+## 0.1.0-alpha.22.dsh.0.2.2.rc.3 (prepared)
+
+- Fill missing native Copilot IDE request headers for ID-only models through the public header hook, using published provider values rather than a static model list (#512).
+- Preserve native authentication, explicit headers, attribution and retry ownership. No settings migration, Core patch or automatic message replay; unloading removes the runtime contribution.
+
 ## 0.1.0-alpha.21.dsh.0.2.2.rc.3 (prepared)
 
 - Include a conditionally verified provider-wide API in confirmed native model sync when enabled account models share one protocol and matching native catalog entries agree (#510).

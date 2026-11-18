@@ -109,6 +109,12 @@ API 变更会在同一次 Settings CAS 中写入并分别读回。原生校验�
 **同步会用原生定义替换已有的模型自定义参数，包括单次请求输出默认值。**
 确认前请检查更新和移除项。其他路线级设置保持不变。这只是模型列表选择，不代表供应商
 兼容性已经验证，也不会强制执行账号特有的限制；传输、校验和错误处理仍由原生拥有。
+插件加载时，通过 DSH 公开请求头钩子，从已发布 pi-ai Copilot provider 补齐缺失的
+`Editor-Version`、`Editor-Plugin-Version` 和 `Copilot-Integration-Id`。
+这覆盖仅含 ID、无法继承目录请求头的模型；保留显式请求头、DSH 标识和原生认证，
+不影响自定义端点或其他 provider，不写设置，也不自动重试失败消息。
+停用插件会移除此请求头补充：模型列表仍保留，但受影响模型可能再次出现
+`missing Editor-Version header for IDE auth`。
 原生 provider 存在自定义认证、端点、请求头、非空模型覆盖或无法验证的
 路线兼容性覆盖时，同步会停止，不会修改这些设置。已有的 `compat.supportsStrictMode: false`
 会保留，但至少一个同步模型必须使用支持该设置的 Responses 或 Completions 协议。已有的
