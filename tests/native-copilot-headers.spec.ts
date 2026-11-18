@@ -7,6 +7,12 @@ import { copilotPublicHeaders } from '../src/preview-provider.ts'
 const endpoint = githubCopilotProvider().getModels()[0]!.baseUrl
 const request = { provider: 'github-copilot', model: 'not-in-native-catalog', baseURL: endpoint }
 
+function entries(headers: Headers): [string, string][] {
+  const result: [string, string][] = []
+  headers.forEach((value, name) => result.push([name, value]))
+  return result
+}
+
 describe('native Copilot request headers', () => {
   it('fills only missing public IDE headers and removes its contribution on disposal', async () => {
     const ctx = new Context()
@@ -30,7 +36,7 @@ describe('native Copilot request headers', () => {
       expect(other.has('authorization')).toBe(false)
       expect(other.has('user-agent')).toBe(false)
       remove()
-      expect([...prepare(new Headers())]).toEqual([])
+      expect(entries(prepare(new Headers()))).toEqual([])
     } finally { remove(); await ctx.fiber.dispose() }
   })
 
@@ -49,7 +55,7 @@ describe('native Copilot request headers', () => {
         const headers = new Headers({ 'x-existing': 'preserved' })
         const next = () => headers
         expect(ctx.waterfall('llm-pi-ai/request-headers', candidate, headers, next)).toBe(headers)
-        expect([...headers]).toEqual([['x-existing', 'preserved']])
+        expect(entries(headers)).toEqual([['x-existing', 'preserved']])
       }
     } finally { await ctx.fiber.dispose() }
   })
