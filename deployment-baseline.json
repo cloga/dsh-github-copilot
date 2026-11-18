@@ -8,14 +8,14 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.1.0-alpha.21.dsh.0.2.2.rc.3"
+    "version": "0.1.0-alpha.22.dsh.0.2.2.rc.3"
   },
   "releaseLines": [
     { "core": "0.2.0-rc.2", "version": "0.4.2-alpha.15", "status": "published" },
     { "core": "0.2.1-alpha.4", "version": "0.4.2-alpha.16", "status": "published" },
     { "core": "0.2.1-alpha.5", "version": "0.1.0-alpha.2.dsh.0.2.1.alpha.5", "status": "published" },
     { "core": "0.2.1-rc.3", "version": "0.1.0-alpha.5.dsh.0.2.1.rc.3", "status": "published" },
-    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.21.dsh.0.2.2.rc.3", "status": "pending" }
+    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.22.dsh.0.2.2.rc.3", "status": "pending" }
   ],
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -739,6 +739,23 @@
         {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "defaults automatic oversized recovery on without a manual command, enabled=%s"},
         {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "escalates only a typed summary capacity failure once: %s"},
         {"file": "tests/preview-route.spec.ts", "name": "binds explicit summary capacity proof to its Agent rather than the current default"}
+      ]
+    },
+    {
+      "id": "native-copilot-ide-headers",
+      "required": true,
+      "activation": "request-local-native-header-waterfall",
+      "evidenceScope": "synthetic-native-stream-not-live-supplier",
+      "sourceMarkers": [
+        {"file": "src/native-copilot-headers.ts", "marker": "llm-pi-ai/request-headers"},
+        {"file": "src/index.ts", "marker": "installNativeCopilotHeaders"},
+        {"file": "src/native-copilot-headers.ts", "marker": "endpoints.has(endpoint.href)"}
+      ],
+      "tests": [
+        {"file": "tests/native-copilot-headers.spec.ts", "name": "fills only missing public IDE headers and removes its contribution on disposal"},
+        {"file": "tests/native-copilot-headers.spec.ts", "name": "does not contribute to other routes or custom endpoints"},
+        {"file": "tests/native-copilot-headers.spec.ts", "name": "composes with other contributors without retaining per-request headers"},
+        {"file": "tests/fixtures/auto-review-copilot-core.fixture.ts", "name": "records %s through real Loader qualification and synthetic stream delivery"}
       ]
     },
     {

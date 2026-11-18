@@ -108,6 +108,11 @@ export async function verifyAgentContract(root = repositoryRoot) {
   require(implementation.unsupportedCapability === 'report-limitation-and-plugin-local-alternative', 'plugin-only missing capabilities must not trigger Core patches')
   require(implementation.scopeException === 'separate-explicit-human-request-only', 'plugin-only scope must not expand from an inferred compatibility task')
   const nativeSync = contract.tasks?.models
+  require(nativeSync?.nativeHeaderBoundary?.includes('llm-pi-ai/request-headers')
+    && nativeSync.nativeHeaderBoundary.includes('Preserve explicit headers, DSH attribution and native OAuth')
+    && nativeSync.read?.includes('src/native-copilot-headers.ts')
+    && nativeSync.tests?.includes('tests/native-copilot-headers.spec.ts'),
+  'native IDE headers must retain public-hook ownership and bounded regression coverage')
   require(nativeSync?.nativeModelSyncBoundary?.includes('One explicit confirmation')
     && nativeSync.nativeModelSyncBoundary.includes('ID-only account model submission, not capability qualification')
     && nativeSync.nativeModelSyncBoundary.includes('Missing native IDs are advisory, not skipped')

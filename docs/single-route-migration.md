@@ -54,8 +54,22 @@ Confirming sync replaces per-model customizations, including explicit output
 request defaults. The preview discloses updated and removed entries, and the
 saved list is checked against both user and effective Settings. Failures and
 uncertain outcomes remain errors, with no automatic retry. Successful ID-only
-lists remain usable by the native adapter after plugin unload; that persistence
-does not prove supplier capability or successful inference.
+lists remain saved after plugin unload; that persistence does not prove supplier
+capability or successful inference.
+
+On the pinned native adapter, ID-only models absent from the installed catalog
+do not inherit its per-model IDE headers. A route-wide API selects a generic
+protocol provider, not an alternative Copilot wire. The plugin supplements
+missing `Editor-Version`, `Editor-Plugin-Version` and `Copilot-Integration-Id`
+through the public `llm-pi-ai/request-headers` waterfall, taking values and
+eligible default endpoints from the published pi-ai Copilot provider. It does
+not copy capabilities, mutate the catalog, replace credentials or implement
+another transport. Explicit request headers and native User-Agent attribution
+remain unchanged; other providers and custom endpoints receive no contribution.
+The listener is removed on disposal, without deleting the saved model list.
+Consequently, affected models can fail again after unload. A synthetic native
+stream regression covers missing-header rejection and successful header
+delivery; it does not certify supplier acceptance or all model capabilities.
 
 The account controls cannot replace DSH's native provider **Edit/Delete**
 controls. Saving another native provider group remains a native DSH action; the
@@ -102,6 +116,14 @@ route API，且所有启用账号模型的已验证协议一致、目录中匹�
 预览才会建议设置 provider 级 API，并明确披露它影响整条路由。已有 route API 不覆盖；
 协议混合、证据缺失或冲突时阻止同步。模型列表和获准的 API 会在同一写入中提交，
 原生校验仍是最终依据。
+
+当前固定版本的原生适配器中，不在内置目录的 ID-only 模型不会继承模型级 IDE 请求头。
+插件通过公开 `llm-pi-ai/request-headers` 钩子，从已发布 pi-ai Copilot provider 补齐
+缺失的 `Editor-Version`、`Editor-Plugin-Version`、`Copilot-Integration-Id`，
+仅适用于原生 Copilot 路由及该 provider 公布的默认端点。保留显式请求头和原生
+User-Agent；不改目录、能力、凭据或设置，不新增传输，也不自动重试。
+卸载插件会移除该补充而保留模型列表，因此受影响模型可能再次出现缺少请求头错误。
+合成原生流回归覆盖缺头拒绝和补齐后的交付，不代表所有模型能力或真实供应商调用均已验证。
 
 账号界面不能替代 DSH 原生 provider 的 **Edit/Delete** 控件。新增原生 provider 组仍是
 DSH 操作；插件不拦截，也不声称能强制只保留一个组。

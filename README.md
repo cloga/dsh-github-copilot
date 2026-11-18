@@ -73,15 +73,15 @@ After the exact compatible release is available and verified, download its
 original asset and checksum in an empty directory:
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.21.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.21.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.21.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.22.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.22.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.22.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 For the `web` profile, install the same Release asset:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.21.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.21.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.22.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.22.dsh.0.2.2.rc.3.tgz
 ```
 
 Choose the intended profile explicitly. Then:
@@ -130,6 +130,14 @@ request defaults, with native definitions.** Review updated and removed entries
 before confirming. Other route-wide settings remain unchanged. This selects a
 model list; it does not prove supplier compatibility or enforce account-specific
 limits. Native requests retain DSH's transport, validation and error behavior.
+While loaded, the plugin fills missing `Editor-Version`, `Editor-Plugin-Version`
+and `Copilot-Integration-Id` request headers from the published pi-ai Copilot
+provider through DSH's public request-header hook. This covers ID-only models
+without inherited catalog headers. It preserves explicit headers, DSH
+attribution and native authentication, and does not apply to custom endpoints
+or other providers. No settings are written or failed messages retried.
+Unloading the plugin removes this contribution: the saved model list remains,
+but affected models can again fail with `missing Editor-Version header for IDE auth`.
 Custom native authentication,
 endpoints, headers, nonempty model overrides, or unproven route compatibility
 overrides block sync rather than changing those settings. An existing
