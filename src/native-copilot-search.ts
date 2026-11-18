@@ -15,9 +15,6 @@ import { copilotPublicHeaders } from './preview-provider.ts'
 import { onSettingsNamespaceUpdated, readSettingsNamespace } from './settings-reader.ts'
 import { normalizeSearchResponse } from './traditional-search.ts'
 import type { NativeCopilotSearchModels } from './native-copilot-search-remote.ts'
-import type { DiagnosticsHandle } from './diagnostics-collector.ts'
-import type { DiagnosticsOutcome } from './diagnostics-types.ts'
-import type {} from './diagnostics-host.ts'
 
 const unavailable = () => new WebError('COPILOT_NATIVE_SEARCH_UNAVAILABLE', 'WEB_PROVIDER_UNAVAILABLE')
 const failed = () => new WebError('COPILOT_NATIVE_SEARCH_FAILED', 'WEB_PROVIDER_ERROR')
@@ -201,10 +198,6 @@ export function createNativeCopilotSearch(ctx: Context): NativeCopilotSearch {
       const deadline = AbortSignal.timeout(25000)
       const signal = AbortSignal.any([controller.signal, deadline, ...(callerSignal ? [callerSignal] : [])])
       pending.set(controller, undefined)
-      let observation: DiagnosticsHandle | undefined
-      let outcome: DiagnosticsOutcome = 'unknown'
-      try { observation = ctx.get('githubCopilotDiagnostics')?.collector.beginNative('native-copilot-search') }
-      catch { ctx.logger.warn('[github-copilot] COPILOT_NATIVE_DIAGNOSTICS_OBSERVATION_FAILED') }
       try {
         const configured = searchModel()
         const { eligible, headers, baseURL, check } = await prepare(controller, signal, true, configured)
@@ -234,7 +227,6 @@ export function createNativeCopilotSearch(ctx: Context): NativeCopilotSearch {
         await dispatch('Probe web search capability.', true)
         const body = await dispatch(request.query, false)
         const result = normalizeSearchResponse(body)
-        outcome = 'success'
         return { ...result, sources: result.sources.filter(source => {
           try {
             const url = new URL(source.url)
@@ -242,16 +234,12 @@ export function createNativeCopilotSearch(ctx: Context): NativeCopilotSearch {
           } catch { return false }
         }).slice(0, 64), truncated: result.sources.length > 64 }
       } catch (error) {
-        outcome = callerSignal?.aborted ? 'cancelled'
-          : controller.signal.aborted || !active ? 'revoked' : 'failed'
         if (callerSignal?.aborted) throw new WebError('web search aborted', 'ABORTED')
         if (controller.signal.aborted || !active) throw unavailable()
         if (deadline.aborted) throw new WebError('web search timed out', 'WEB_PROVIDER_ERROR')
         if (error instanceof WebError) throw error
         throw failed()
       } finally {
-        try { observation?.finish(outcome) }
-        catch { ctx.logger.warn('[github-copilot] COPILOT_NATIVE_DIAGNOSTICS_OBSERVATION_FAILED') }
         controller.abort()
         pending.delete(controller)
       }

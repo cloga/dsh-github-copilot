@@ -68,7 +68,7 @@ it('preserves frozen native requests and conditional tool execution while adapti
     modifyRecord: async () => { throw new Error('valid synthetic credential must not refresh') },
   })
   await ctx.plugin(LlmRuntime)
-  await ctx.plugin(previewPlugin, {})
+  await ctx.plugin(previewPlugin, { registerLegacyProvider: true })
   await ctx.get('githubCopilotPreview')!.refresh()
   let otherRequest: GenerateOptions | undefined
   ctx.llm.registerAdapter([OTHER], new class extends LlmAdapter {

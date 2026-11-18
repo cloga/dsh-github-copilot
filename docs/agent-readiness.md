@@ -4,6 +4,12 @@
 > at the time, not current setup requirements or release status. Start with
 > [AGENTS.md](../AGENTS.md), the [current README](../README.md) and
 > [model compatibility acceptance](./model-compatibility-acceptance.md).
+>
+> **Route update:** the later confirmed native-only product scope supersedes
+> the #93/#99/#101 managed-route migration plan below. Production adds no second
+> model provider; no profile cleanup or settings/history migration is required.
+> Existing `github-copilot-preview` selections may be unavailable and are not
+> rewritten. See [retiring the duplicate route](./single-route-migration.md).
 
 ## Current documentation-impact follow-up
 
@@ -20,6 +26,27 @@ The check verifies the declaration's structure and committed file changes, not
 whether the chosen documents are relevant, correct or complete. Reviewers must
 compare source behavior, limitations and evidence with every affected document.
 Retain explicitly labeled historical records rather than rewriting old results.
+
+## Current delivery-classification follow-up
+
+Repository engineering delivery is distinct from plugin publication and local
+installation. For the same assessed PR paths, `documentation-impact` also reads
+`## Release delivery`: choose `repository-only`, `plugin-update`,
+`explicit-plugin-artifact` or `release-recovery`, with `Details` of at least 20
+characters. Repository-only and recovery declarations reject important-file or
+manifest changes. Plugin-update declarations require more than version, baseline
+and package-whitelist edits. An explicit artifact declaration additionally needs
+an `Authorization` statement identifying the artifact-specific request, or the
+already reviewed/authorized plugin update for version-only follow-through.
+The latter preserves standing release permission without a new approval prompt.
+
+The gate reads actual base/head manifests even when documentation behavior is
+declared unchanged. It preserves the existing shipped-file/version policy and
+does not infer runtime benefit, authenticate consent or prove the justification.
+Review those semantics against the user's request. Repository-only work ends at
+reviewed merge and required CI: no new plugin version, installation or restart.
+Existing released artifacts remain immutable; do not remove old packaged tools
+as an incidental cleanup. See [the delivery rules](../AGENTS.md#classify-delivery-before-packaging-502).
 
 Tracking: [#73](https://github.com/cloga/dsh-github-copilot/issues/73). Audited baseline: `d9d0954` (2026-09-05). This is an evidence inventory, not a blanket certification of live Copilot behavior.
 
@@ -77,7 +104,7 @@ The provider integration introduced in `0.4.0-alpha.5` replaces the older indepe
 - **Discovery triggers (#95):** successful explicit UI **Start sign-in**/account switch forces one bounded discovery after immediate or polled completion. Opening Models separately calls non-forcing `ensureModels()` once for missing/idle/stale/error/loading signed-in metadata; error re-entry retries only after shared cooldown with no same-mount loop; loading joins the existing Host flight to observe completion without extra network. Fresh ready cache needs no request, and true unavailable/empty models do not auto-retry. Status/details remain network-free, not the entire opening flow. Background credential/reset events clear Client state and read status, not force discovery on every token event; next open/use ensures metadata.
 - **Freshness and authority (#95):** `github-copilot` settings default to `accountModelTtlMs: 86400000` (24h maximum reuse) and `accountModelFailureCooldownMs: 300000` (5min failure cooldown). One shared Host flight serves callers; no periodic metadata polling timer (the timestamp's display-only timer is separate). Last same-account metadata may display during TTL refresh/loading/error but never authorize requests. Credential/account/permission invalidation or proof expiry revokes request evidence immediately; the TTL does not extend tokens. Definitive `UNKNOWN_MODEL` triggers one bounded metadata refresh without message replay/model switching; generic HTTP/network errors are not guessed into that category.
 - **Last-success display (#97):** `snapshot.discoveredAt` appears beside the model count outside **Manage**, without a duplicate inside. Past times use English relative text; the tooltip and accessible semantic `time` expose the full local date, time and time zone. Missing/invalid timestamps or no account hide it; future times use an absolute label. One mounted 60-second display-only timer updates the relative text without RPC/status/discovery, and is disposed when the timestamp disappears or the view unmounts. Pending/failed refresh keeps the last success time; successful refresh replaces it and sign-out clears it. Cache/discovery and authorization rules are unchanged.
-- **Honest integration limit:** the published provider-card slot is additive and cannot replace Core **Edit/Delete**. Normal plugin discovery needs no manual model definitions, but the native editor stays available. Embedding account controls does not merge/remove canonical `github-copilot` and managed `github-copilot-preview`, or automatically copy credentials, rewrite configuration/history or migrate selection. The later explicit native account switch is the only credential-projection exception; see [account ownership](./copilot-accounts.md). Any optional real route removal still requires the [separate reviewed migration](./single-route-migration.md).
+- **Honest integration limit:** the published provider-card slot is additive and cannot replace Core **Edit/Delete**. Normal plugin discovery needs no manual model definitions, but the native editor stays available. Embedding account controls does not merge/remove configured profiles, copy credentials, rewrite configuration/history or migrate selection. Production adds no second model provider; the legacy migration procedure below is superseded and no profile removal is needed. The later explicit native account switch is the only credential-projection exception; see [account ownership](./copilot-accounts.md).
 - **Acceptance still required:** test missing/idle/stale/error/loading open-time ensure versus fresh-cache no-request, shared Host flight, TTL/cooldown boundaries, display-only stale data, immediate revocation, definitive unknown-model refresh without replay, Manage-only manual refresh and visible Retry. Retain provider/footer/old-Core fallback, overlapping-owner transfer, final-unmount cleanup and once-per-explicit-login tests. Read the implementation PR's actual results before claiming these checks passed; documentation is not runtime or live OAuth evidence.
 - **Historical browser/media evidence:** `copilot-search-routing.png` showed the now-retired plugin-detail routing card in isolated Edge with synthetic providers. It is not a current UI, live credentials, provider availability, search success or Desktop activation claim. Host TTL/cooldown timing and account-control lifecycle remain unit-test evidence rather than screenshot evidence.
 
@@ -86,7 +113,7 @@ The provider integration introduced in `0.4.0-alpha.5` replaces the older indepe
 - **V3 ownership:** one global Host account and shared metadata source supply many models; explicitly selected/history-backed Sessions retain independent model context. Search facts use the captured initiating Session's effective request-header/config or explicit `GenerateOptions`, not another Session or future default C. Plans are cached per owner to prevent A/B different-model reuse/cancellation. No global current-model/search-status card is added.
 - **Cold entrypoints:** Chat picker and `/model` `listModels()` ensure the shared managed source without visiting Settings first. Actual cold managed search performs a non-forcing shared ensure before deriving facts. The same 24h maximum TTL, 5min cooldown, account generation and capability/probe checks remain.
 - **Native API limits:** a new Copilot draft warns that saving a native profile adds another real group, not another account. Add cannot be vetoed and Save cannot be disabled through the public additive slot. Public `session.selectModel` also writes the future global default; unselected empty Sessions can inherit it. Do not claim enforced one-route registration or immutable empty Sessions.
-- **Delivery boundary:** code does not auto-migrate configuration, credentials, selections or history. After release, the operator must resolve approved Session/default choices separately; the config-only v1 Ops command performs no automated selection writes, then may compare-and-swap only the reviewed user-native profile path after ruling out base/journal conflicts, and read back registration. Any search allowlist change to `github-copilot-preview` is a separate reviewed Ops edit, never silent broadening. See [migration](./single-route-migration.md).
+- **Delivery boundary:** code does not auto-migrate configuration, credentials, selections or history. Existing preview-route selections may need an explicit native model choice but are never rewritten. No config-only provider-removal command or search-allowlist edit is required to stop production from registering the legacy provider; see the [current route behavior](./single-route-migration.md).
 - **Request-context correction:** `Agent.options` remains Core's activation seed, not selected-model evidence. Real `installModelSelection` overrides request/assembly; the Session records effective `requestHeader().config` before tools. Capture the initiating Session's proven request context or use explicit `GenerateOptions`; otherwise traditional search is unavailable. Pending new selection before its next request must not expose the prior header as current prompt guidance.
 - **Acceptance/evidence:** use real `installModelSelection` to check concurrent A/B models against unchanged activation/default seed C, reject unproven or stale-header prompt guidance after a pending selection, cold Chat and `/model` discovery, cold search/probe, owner invalidation, missing initiator, Add warning with Save retained, and CAS-conflict refusal/readback. README screenshots do not prove these behaviors or a completed migration; consult the implementation and operations evidence separately.
 
@@ -95,7 +122,7 @@ The provider integration introduced in `0.4.0-alpha.5` replaces the older indepe
 - **Entry point:** no-argument `githubCopilot.migrationStatus()` reads public live leaves synchronously. Generic `session/list` may be stale and inventory lacks loaded-version evidence. The new result carries loaded build `plugin.name`/`plugin.version`, protocol 1, observation time, five structural capability flags and `complete.sessions/defaultSelection/routes`; unknown/incomplete required selection or route evidence must fail the maintenance gate, not be treated as absence. Idle Agents normally have `activeRequestSelection: null`.
 - **Session scope:** pending model projection → recorded request-header config → current default only for genuinely empty live Sessions with known projection state. Each row has selection provenance; a running Agent's separate `activeRequestSelection` is its latest recorded header, not proof of an in-flight LLM call. `routes.nativeConfigured`, `nativeRegistered` and `managedRegistered` distinguish effective config from registry state.
 - **Read-only boundary:** no authorization status/discovery, credential access, network, settings/Session mutations, normal UI or global model/search card. Seven ordinary authorization Remotes retain their existing codec; the eighth Remote uses its own strict `GitHubCopilotMigrationStatus` codec. Source ownership is `src/migration-status.ts` plus the controller/Remote bridge; focused evidence is `tests/migration-status.spec.ts`.
-- **Limits and Ops handoff:** `historyScope: live-agents-only` excludes cold history. Require operator acknowledgement that older conversations may need explicit selection on resume. Version/capability self-reports are not full Desktop/Core byte attestation or an atomic cross-namespace guarantee; recheck just before CAS. The separate planned Ops `tools/migrate-copilot-managed-route.ps1` in `cloga/dsh-windows-ops` is config-only v1, with no automatic Session/default writes, plugin install, restart or full Desktop-baseline acceptance. This document does not establish its publication, installation or a completed live migration.
+- **Historical Ops handoff, superseded:** `historyScope: live-agents-only` excluded cold history in the earlier migration plan. The planned `tools/migrate-copilot-managed-route.ps1` is not required for current production behavior; this document does not establish that it was published or run.
 - **Acceptance:** verify loaded identity, missing/malformed seams and incomplete evidence, fresh live-Agent enumeration, pending-versus-recorded selections, truly empty defaults, running-header caveats, effective-config/registry distinction, bounded strict codec and zero side effects. Read actual test/Ops results rather than treating this checklist as a passing report.
 
 ## Core alpha2 compatibility follow-up (#105, planned alpha.11)

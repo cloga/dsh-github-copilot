@@ -548,6 +548,7 @@ it('mounts authorization, account, role and search-catalog Remotes on the exact 
     Gateway.apply(ctx)
     const dispose = await ctx.remote.$mount(remote)
     expect(registered).toEqual([remote])
+    expect(remote.descriptors.some(item => item.namespace === 'githubCopilotDiagnostics')).toBe(false)
     expect(remote.descriptors.filter(item => item.namespace !== 'githubCopilotAccounts').map(item => item.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
       'excludeModel', 'restoreModel', 'setModelExcluded', 'setModelHighCost',
@@ -556,7 +557,6 @@ it('mounts authorization, account, role and search-catalog Remotes on the exact 
       'ensureNativeIdentity', 'refreshNativeIdentity', 'get', 'requestedModels', 'allocationSummary', 'get', 'authorize', 'setEnabled',
       'get', 'set', 'refreshIdentity', 'ensureIdentity', 'usage', 'refreshUsage', 'turn',
       'get', 'set', 'authorizeNext', 'defaults', 'setDefault',
-      'get', 'clear', 'setEnabled', 'setAutoAllocationEnabled', 'setRequestEnabled', 'setNativeEnabled', 'recordClient',
     ])
     for (const descriptor of remote.descriptors.filter(item => item.namespace === 'githubCopilot'
       && item.method !== 'setModelExcluded' && item.method !== 'setModelHighCost'

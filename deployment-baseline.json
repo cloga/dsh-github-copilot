@@ -8,14 +8,14 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.1.0-alpha.14.dsh.0.2.2.rc.3"
+    "version": "0.1.0-alpha.21.dsh.0.2.2.rc.3"
   },
   "releaseLines": [
     { "core": "0.2.0-rc.2", "version": "0.4.2-alpha.15", "status": "published" },
     { "core": "0.2.1-alpha.4", "version": "0.4.2-alpha.16", "status": "published" },
     { "core": "0.2.1-alpha.5", "version": "0.1.0-alpha.2.dsh.0.2.1.alpha.5", "status": "published" },
     { "core": "0.2.1-rc.3", "version": "0.1.0-alpha.5.dsh.0.2.1.rc.3", "status": "published" },
-    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.14.dsh.0.2.2.rc.3", "status": "pending" }
+    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.21.dsh.0.2.2.rc.3", "status": "pending" }
   ],
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -256,7 +256,7 @@
           "desktopPackageSet": "not-materialized",
           "managedProviderValidation": "synthetic-tagged-source-runtime",
           "resolvedProfileDiagnostics": "plugin-owned-empty-modelErrors",
-          "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/search-routing.spec.ts", "tests/routed-web.spec.ts", "tests/deepseek-search-fallback.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/fixtures/alpha2-contracts-core.fixture.ts", "tests/fixtures/compaction-pressure-core.fixture.ts", "tests/remote-codec.spec.ts", "tests/dual-model-projection.spec.ts", "tests/fixtures/scoped-compaction-core.fixture.ts", "tests/fixtures/model-exclusions-core.fixture.ts", "tests/fixtures/turn-usage-core.fixture.ts", "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "tests/fixtures/copilot-accounts-host-core.fixture.ts", "tests/fixtures/copilot-accounts-gateway-core.fixture.ts", "tests/fixtures/copilot-accounts-request-core.fixture.ts", "tests/copilot-stream-liveness.spec.ts", "tests/copilot-stream-adapter.spec.ts", "tests/fixtures/auto-review-copilot-core.fixture.ts", "tests/fixtures/diagnostics-storage-core.fixture.ts", "tests/fixtures/diagnostics-gateway-core.fixture.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts", "tests/fixtures/alpha4-contracts-core.fixture.ts", "tests/fixtures/copilot-usage-selector-core.fixture.ts"]
+          "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/search-routing.spec.ts", "tests/routed-web.spec.ts", "tests/deepseek-search-fallback.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/fixtures/alpha2-contracts-core.fixture.ts", "tests/fixtures/compaction-pressure-core.fixture.ts", "tests/remote-codec.spec.ts", "tests/dual-model-projection.spec.ts", "tests/fixtures/scoped-compaction-core.fixture.ts", "tests/fixtures/model-exclusions-core.fixture.ts", "tests/fixtures/turn-usage-core.fixture.ts", "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "tests/fixtures/copilot-accounts-host-core.fixture.ts", "tests/fixtures/copilot-accounts-gateway-core.fixture.ts", "tests/fixtures/copilot-accounts-request-core.fixture.ts", "tests/copilot-stream-liveness.spec.ts", "tests/copilot-stream-adapter.spec.ts", "tests/fixtures/auto-review-copilot-core.fixture.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts", "tests/fixtures/alpha4-contracts-core.fixture.ts", "tests/fixtures/copilot-usage-selector-core.fixture.ts"]
         },
         {
           "release": "0.2.1-alpha.5",
@@ -282,7 +282,7 @@
           "desktopPackageSet": "not-materialized",
           "managedProviderValidation": "synthetic-tagged-source-runtime",
           "resolvedProfileDiagnostics": "plugin-owned-empty-modelErrors",
-          "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/search-routing.spec.ts", "tests/routed-web.spec.ts", "tests/deepseek-search-fallback.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/fixtures/alpha2-contracts-core.fixture.ts", "tests/fixtures/compaction-pressure-core.fixture.ts", "tests/remote-codec.spec.ts", "tests/dual-model-projection.spec.ts", "tests/fixtures/scoped-compaction-core.fixture.ts", "tests/fixtures/model-exclusions-core.fixture.ts", "tests/fixtures/turn-usage-core.fixture.ts", "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "tests/fixtures/copilot-accounts-host-core.fixture.ts", "tests/fixtures/copilot-accounts-gateway-core.fixture.ts", "tests/fixtures/copilot-accounts-request-core.fixture.ts", "tests/copilot-stream-liveness.spec.ts", "tests/copilot-stream-adapter.spec.ts", "tests/fixtures/auto-review-copilot-core.fixture.ts", "tests/fixtures/diagnostics-storage-core.fixture.ts", "tests/fixtures/diagnostics-gateway-core.fixture.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts", "tests/fixtures/alpha4-contracts-core.fixture.ts", "tests/fixtures/copilot-usage-selector-core.fixture.ts"]
+          "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/search-routing.spec.ts", "tests/routed-web.spec.ts", "tests/deepseek-search-fallback.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/fixtures/alpha2-contracts-core.fixture.ts", "tests/fixtures/compaction-pressure-core.fixture.ts", "tests/remote-codec.spec.ts", "tests/dual-model-projection.spec.ts", "tests/fixtures/scoped-compaction-core.fixture.ts", "tests/fixtures/model-exclusions-core.fixture.ts", "tests/fixtures/turn-usage-core.fixture.ts", "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "tests/fixtures/copilot-accounts-host-core.fixture.ts", "tests/fixtures/copilot-accounts-gateway-core.fixture.ts", "tests/fixtures/copilot-accounts-request-core.fixture.ts", "tests/copilot-stream-liveness.spec.ts", "tests/copilot-stream-adapter.spec.ts", "tests/fixtures/auto-review-copilot-core.fixture.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts", "tests/fixtures/alpha4-contracts-core.fixture.ts", "tests/fixtures/copilot-usage-selector-core.fixture.ts"]
         },
         {
           "release": "0.2.1-rc.3",
@@ -310,7 +310,7 @@
           "evidenceScope": "unchanged-tagged-source-target",
           "standaloneNpmArtifacts": "tested",
           "managedProviderValidation": "synthetic-tagged-source-and-published-artifact-runtime",
-          "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/search-routing.spec.ts", "tests/routed-web.spec.ts", "tests/deepseek-search-fallback.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/fixtures/alpha2-contracts-core.fixture.ts", "tests/fixtures/compaction-pressure-core.fixture.ts", "tests/remote-codec.spec.ts", "tests/dual-model-projection.spec.ts", "tests/fixtures/scoped-compaction-core.fixture.ts", "tests/fixtures/model-exclusions-core.fixture.ts", "tests/fixtures/turn-usage-core.fixture.ts", "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "tests/fixtures/copilot-accounts-host-core.fixture.ts", "tests/fixtures/copilot-accounts-gateway-core.fixture.ts", "tests/fixtures/copilot-accounts-request-core.fixture.ts", "tests/copilot-stream-liveness.spec.ts", "tests/copilot-stream-adapter.spec.ts", "tests/fixtures/auto-review-copilot-core.fixture.ts", "tests/fixtures/diagnostics-storage-core.fixture.ts", "tests/fixtures/diagnostics-gateway-core.fixture.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts", "tests/fixtures/alpha4-contracts-core.fixture.ts", "tests/fixtures/copilot-usage-selector-core.fixture.ts"]
+          "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/search-routing.spec.ts", "tests/routed-web.spec.ts", "tests/deepseek-search-fallback.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/fixtures/alpha2-contracts-core.fixture.ts", "tests/fixtures/compaction-pressure-core.fixture.ts", "tests/remote-codec.spec.ts", "tests/dual-model-projection.spec.ts", "tests/fixtures/scoped-compaction-core.fixture.ts", "tests/fixtures/model-exclusions-core.fixture.ts", "tests/fixtures/turn-usage-core.fixture.ts", "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "tests/fixtures/copilot-accounts-host-core.fixture.ts", "tests/fixtures/copilot-accounts-gateway-core.fixture.ts", "tests/fixtures/copilot-accounts-request-core.fixture.ts", "tests/copilot-stream-liveness.spec.ts", "tests/copilot-stream-adapter.spec.ts", "tests/fixtures/auto-review-copilot-core.fixture.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts", "tests/fixtures/alpha4-contracts-core.fixture.ts", "tests/fixtures/copilot-usage-selector-core.fixture.ts"]
         },
         {
           "release": "0.2.2-rc.3",
@@ -337,7 +337,7 @@
           "evidenceScope": "unchanged-tagged-source-target",
           "standaloneNpmArtifacts": "not-tested",
           "managedProviderValidation": "not-verified",
-          "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/search-routing.spec.ts", "tests/routed-web.spec.ts", "tests/deepseek-search-fallback.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/fixtures/alpha2-contracts-core.fixture.ts", "tests/fixtures/compaction-pressure-core.fixture.ts", "tests/remote-codec.spec.ts", "tests/dual-model-projection.spec.ts", "tests/fixtures/scoped-compaction-core.fixture.ts", "tests/fixtures/model-exclusions-core.fixture.ts", "tests/fixtures/turn-usage-core.fixture.ts", "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "tests/fixtures/copilot-accounts-host-core.fixture.ts", "tests/fixtures/copilot-accounts-gateway-core.fixture.ts", "tests/fixtures/copilot-accounts-request-core.fixture.ts", "tests/copilot-stream-liveness.spec.ts", "tests/copilot-stream-adapter.spec.ts", "tests/fixtures/auto-review-copilot-core.fixture.ts", "tests/fixtures/diagnostics-storage-core.fixture.ts", "tests/fixtures/diagnostics-gateway-core.fixture.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts", "tests/fixtures/alpha4-contracts-core.fixture.ts", "tests/fixtures/copilot-usage-selector-core.fixture.ts", "tests/native-web-composition.spec.ts", "tests/dual-model-host.spec.ts", "tests/fixtures/native-model-sync-core.fixture.ts"]
+          "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/search-routing.spec.ts", "tests/routed-web.spec.ts", "tests/deepseek-search-fallback.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/fixtures/alpha2-contracts-core.fixture.ts", "tests/fixtures/compaction-pressure-core.fixture.ts", "tests/remote-codec.spec.ts", "tests/dual-model-projection.spec.ts", "tests/fixtures/scoped-compaction-core.fixture.ts", "tests/fixtures/model-exclusions-core.fixture.ts", "tests/fixtures/turn-usage-core.fixture.ts", "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "tests/fixtures/copilot-accounts-host-core.fixture.ts", "tests/fixtures/copilot-accounts-gateway-core.fixture.ts", "tests/fixtures/copilot-accounts-request-core.fixture.ts", "tests/copilot-stream-liveness.spec.ts", "tests/copilot-stream-adapter.spec.ts", "tests/fixtures/auto-review-copilot-core.fixture.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts", "tests/fixtures/alpha4-contracts-core.fixture.ts", "tests/fixtures/copilot-usage-selector-core.fixture.ts", "tests/loader-composition.spec.ts", "tests/native-web-composition.spec.ts", "tests/dual-model-host.spec.ts", "tests/fixtures/native-model-sync-core.fixture.ts"]
         }
       ],
       "packages": [
@@ -406,54 +406,35 @@
     {
       "id": "copilot-local-diagnostics",
       "required": true,
-      "evidenceScope": "synthetic-collector-ui-native-gateway-storage-and-settings-not-live-reliability",
-      "activation": "default-off-explicit-profile-local-enable",
+      "evidenceScope": "synthetic-retirement-settings-and-immediate-error-guidance-not-live-desktop",
+      "activation": "retired-no-collection",
       "sourceMarkers": [
-        {"file": "src/diagnostics-types.ts", "marker": "DIAGNOSTICS_MAX_BYTES = 2 * 1024 * 1024"},
-        {"file": "src/diagnostics-collector.ts", "marker": "noteClientGaps"},
-        {"file": "src/auto-allocation-diagnostics.ts", "marker": "assessmentOutcome: assessmentOutcome.optional()"},
-        {"file": "src/request-diagnostics.ts", "marker": "REQUEST_DIAGNOSTICS_MAX_ROWS = 128"},
-        {"file": "src/request-diagnostics.ts", "marker": "CredentialChangeSchema"},
-        {"file": "src/diagnostics-collector.ts", "marker": "beginCredentialChange"},
         {"file": "src/request-body-composition.ts", "marker": "bytes: 32 * 1024 * 1024"},
         {"file": "src/request-body-composition.ts", "marker": "concurrent: 4"},
-        {"file": "src/request-diagnostics.ts", "marker": "REQUEST_DIAGNOSTICS_RETENTION_MS = 24 * 60 * 60 * 1000"},
+        {"file": "src/config.ts", "marker": "diagnosticsEnabled: z.boolean().default(false).hidden().volatile()"},
+        {"file": "src/config.ts", "marker": "autoAllocationDiagnosticsEnabled: z.boolean().default(false).hidden().volatile()"},
         {"file": "src/config.ts", "marker": "requestDiagnosticsEnabled: z.boolean().default(false).hidden().volatile()"},
         {"file": "src/config.ts", "marker": "nativeDiagnosticsEnabled: z.boolean().default(false).hidden().volatile()"},
-        {"file": "src/native-diagnostics.ts", "marker": "observeNativeStream"},
-        {"file": "src/diagnostics-host.ts", "marker": "diagnosticsDomainForProfile"},
-        {"file": "src/diagnostics-client.ts", "marker": "createClientDiagnosticsScope"},
-        {"file": "src/remote.ts", "marker": "...diagnosticsRemote.descriptors"},
-        {"file": "src/config.ts", "marker": "diagnosticsEnabled:"},
-        {"file": "AGENTS.md", "marker": "Default-off local account/Checking/compaction diagnostics"}
+        {"file": "AGENTS.md", "marker": "Local diagnostics is retired (#499)"}
       ],
       "tests": [
-        {"file": "tests/diagnostics-collector.spec.ts", "name": "is disabled until enabled, records success denominators and settles once"},
-        {"file": "tests/diagnostics-collector.spec.ts", "name": "requires independent native consent and fences paused or cleared native operations"},
-        {"file": "tests/native-diagnostics.spec.ts", "name": "preserves chunks and records only fixed, content-free terminal evidence"},
-        {"file": "tests/fixtures/diagnostics-native-core.fixture.ts", "name": "observes native and prepared streams through the published waterfall without affecting output"},
-        {"file": "tests/auto-allocation-diagnostics.spec.ts", "name": "separates assessment outcomes without changing model opportunities or exposing errors"},
-        {"file": "tests/auto-allocation-diagnostics.spec.ts", "name": "keeps legacy reasons unrecorded and captures no-fit and successful assessment outcomes"},
-        {"file": "tests/request-diagnostics.spec.ts", "name": "requires independent consent, captures status/timing and never infers upload or retry count"},
-        {"file": "tests/request-diagnostics.spec.ts", "name": "bounds credential evidence under request consent and fences late commit updates"},
-        {"file": "tests/diagnostics-card.spec.ts", "name": "keeps every diagnostic population collapsed independently without changing collection"},
+        {"file": "tests/loader-composition.spec.ts", "name": "does not open local diagnostics or change previously enabled settings"},
+        {"file": "tests/client-search-inject.spec.ts", "name": "does not mount local diagnostics even when a legacy Remote is present"},
+        {"file": "tests/remote-codec.spec.ts", "name": "does not expose the retired local diagnostics namespace"},
         {"file": "tests/request-body-composition.spec.ts", "name": "partitions a 20.4 MiB request without parsing its payload object graph"},
-        {"file": "tests/preview-transport-failures.spec.ts", "name": "does not wait for large-request composition before native success and updates the exact settled row"},
-        {"file": "tests/request-diagnostics.spec.ts", "name": "updates only its own retained record after native settlement, never across clear/pause/eviction"},
-        {"file": "tests/preview-transport-failures.spec.ts", "name": "records verified 408 once without changing the native error, serialized input or dispatch count"},
-        {"file": "tests/diagnostics-client.spec.ts", "name": "rejects stale status responses and settles an unmounted Checking operation once"},
-        {"file": "tests/diagnostics-card.spec.ts", "name": "requires a confirmed durable enable and a separate destructive clear confirmation"},
-        {"file": "tests/fixtures/diagnostics-storage-core.fixture.ts", "name": "isolates profiles on the home-wide backend and preserves memory on a real publish failure"},
-        {"file": "tests/fixtures/diagnostics-gateway-core.fixture.ts", "name": "binds diagnostics through actual strict Client and Host gateways with durable enable and clear fences"}
+        {"file": "tests/preview-transport-failures.spec.ts", "name": "preserves a large request and native success without local diagnostics"},
+        {"file": "tests/preview-transport-failures.spec.ts", "name": "preserves the native 408 error, serialized input and dispatch count"}
       ]
     },
     {
       "id": "copilot-session-accounts",
       "required": true,
       "evidenceScope": "synthetic-turn-routing-native-gateways-settings-persistence-and-ui-not-live-account-access",
-      "activation": "managed-only-explicit-session-choice-or-global-default",
+      "activation": "managed-session-choice-or-global-default-with-qualified-native-turn-evidence",
       "sourceMarkers": [
         {"file": "src/session-accounts-host.ts", "marker": "class SessionAccountsHost"},
+        {"file": "src/session-accounts-host.ts", "marker": "route.accountModelIds?.has(evidence.model)"},
+        {"file": "src/native-copilot-access.ts", "marker": "accountModelIds"},
         {"file": "src/session-accounts-controller.ts", "marker": "extends TypertRemoteService"},
         {"file": "src/session-accounts-remote.ts", "marker": "githubCopilotSessionAccount"},
         {"file": "src/config.ts", "marker": "sessionAccounts:"},
@@ -464,6 +445,13 @@
         {"file": "tests/session-accounts.spec.ts", "name": "freezes each turn across preference changes, steps and retries"},
         {"file": "tests/session-accounts-host.spec.ts", "name": "holds account mutation fencing through abort until the actual turn boundary"},
         {"file": "tests/session-accounts-host.spec.ts", "name": "ignores identity completion after the turn ends"},
+        {"file": "tests/session-accounts-host.spec.ts", "name": "records native evidence only after matching account proof and delivery"},
+        {"file": "tests/session-accounts-host.spec.ts", "name": "records an explicitly configured native model without treating it as protocol-qualified"},
+        {"file": "tests/native-copilot-access.spec.ts", "name": "qualifies the explicitly configured model ID only for account attribution"},
+        {"file": "tests/fixtures/auto-review-copilot-core.fixture.ts", "name": "records %s through real Loader qualification and synthetic stream delivery"},
+        {"file": "tests/session-accounts-host.spec.ts", "name": "keeps native evidence separate from managed account admission and identity"},
+        {"file": "tests/session-accounts-host.spec.ts", "name": "leaves native evidence unknown when the selected and canonical accounts differ"},
+        {"file": "tests/native-account-coexistence.spec.ts", "name": "applies confirmed account switches to native credentials and retains the native route after disposal"},
         {"file": "tests/copilot-usage-card.spec.ts", "name": "switches only subsequent Session turns inside Credits and can restore inheritance"},
         {"file": "tests/fixtures/remote-core.fixture.ts", "name": "binds Session account choices and historical reads through native Client and %s Host gateways"},
         {"file": "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "name": "persists independent accounts and SettingsForms CAS across restart with native sign-out recovery"}
@@ -664,18 +652,19 @@
     {
       "id": "native-subagent-copilot-invocation",
       "required": true,
-      "evidenceScope": "synthetic-two-account-tagged-source-production-host-child-invocation-with-default-switch-not-live-or-explicit-child-account-policy",
+      "evidenceScope": "synthetic-two-account-tagged-source-native-provider-child-invocation-with-default-switch-and-explicit-model-configuration-not-live-or-session-account-policy",
       "sourceMarkers": [
         {"file": "scripts/verify-tagged-core.mjs", "marker": "tests/fixtures/subagent-copilot-core.fixture.ts"},
         {"file": ".github/workflows/ci.yml", "marker": "['subagent-copilot-core.fixture.ts',1],['native-subagent-copilot-core.fixture.ts',3]"},
         {"file": ".github/workflows/ci.yml", "marker": "s.assertionResults.some(t=>t.status!=='passed')"},
         {"file": "tests/fixtures/native-subagent-copilot-core.fixture.ts", "marker": "it.each(['absent', 'enabled', 'disposed'] as const)"},
         {"file": "tests/fixtures/subagent-copilot-core.fixture.ts", "marker": "await ctx.plugin(GitHubCopilotPlugin,"},
-        {"file": "tests/fixtures/subagent-copilot-core.fixture.ts", "marker": "accounts.turns.current(child.session)"},
+        {"file": "tests/fixtures/subagent-copilot-core.fixture.ts", "marker": "COPILOT_ACCOUNTS_BUSY"},
         {"file": "src/session-accounts-host.ts", "marker": "class SessionAccountsHost"}
       ],
       "tests": [
-        {"file": "tests/fixtures/subagent-copilot-core.fixture.ts", "name": "routes concurrently authorized native children to their selected Copilot models and efforts"},
+        {"file": "tests/fixtures/subagent-copilot-core.fixture.ts", "name": "routes native Copilot children across a confirmed account switch"},
+        {"file": "tests/fixtures/native-subagent-copilot-core.fixture.ts", "name": "selects and concurrently dispatches native Copilot subagents with the plugin %s"},
         {"file": "tests/session-accounts-host.spec.ts", "name": "freezes a running turn while allowing later Session/default choices independently"},
         {"file": "tests/session-accounts-host.spec.ts", "name": "rejects stale CAS and missing accounts instead of persisting a fallback"}
       ]
@@ -758,26 +747,34 @@
       "activation": "visible-nonforcing-preview-and-one-shot-confirmation",
       "evidenceScope": "tagged-native-settings-and-resolution-with-synthetic-catalog-proof-plus-separate-adapter-ownership-tests-not-live-provider",
       "sourceMarkers": [
-        {"file": "src/native-model-sync.ts", "marker": "NATIVE_INHERITED_API_MISMATCH"},
+        {"file": "src/native-model-sync.ts", "marker": "nativeCatalogMissingIds"},
+        {"file": "src/native-model-sync.ts", "marker": "planNativeModelSyncRouteApi"},
         {"file": "src/native-copilot-access.ts", "marker": "captureNativeCopilotCatalog"},
         {"file": "src/authorization-controller.ts", "marker": "path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'models']"},
+        {"file": "src/authorization-controller.ts", "marker": "path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'api']"},
         {"file": "src/model-preferences-card.ts", "marker": "Sync models"},
+        {"file": "src/model-preferences-card.ts", "marker": "data-dsh-github-copilot-native-model-sync-route-api"},
         {"file": "src/authorization-controller.ts", "marker": "nativeSyncSupportsRouteCompatibility"},
-        {"file": "src/remote.ts", "marker": "GitHubCopilotNativeModelSyncPreviewSchema"}
+        {"file": "src/remote.ts", "marker": "GitHubCopilotNativeModelSyncPreviewSchema"},
+        {"file": "src/remote.ts", "marker": "routeApiChange"}
       ],
       "tests": [
-        {"file": "tests/native-model-sync.spec.ts", "name": "copies only enabled account models and reports additions, removals, and changed model definitions"},
-        {"file": "tests/native-model-sync.spec.ts", "name": "does not repoint a known native model when its inherited catalog protocol differs"},
-        {"file": "tests/native-model-sync.spec.ts", "name": "skips new non-Responses models without a native compatibility baseline"},
-        {"file": "tests/native-model-sync.spec.ts", "name": "skips narrower or unknown server input caps that cannot be represented natively"},
-        {"file": "tests/native-model-sync.spec.ts", "name": "skips missing vision or reasoning evidence rather than treating it as disabled"},
-        {"file": "tests/native-model-sync.spec.ts", "name": "does not expose an off control that the managed account model does not expose"},
+        {"file": "tests/native-model-sync.spec.ts", "name": "submits all enabled account IDs without copying or qualifying capabilities"},
+        {"file": "tests/native-model-sync.spec.ts", "name": "sets one route API for missing catalog IDs only when account and existing native APIs agree"},
+        {"file": "tests/native-model-sync.spec.ts", "name": "does not set a route API for a fully native mixed-protocol list"},
+        {"file": "tests/native-model-sync.spec.ts", "name": "blocks missing IDs when account protocols are mixed or existing native APIs conflict"},
+        {"file": "tests/native-model-sync.spec.ts", "name": "preserves a matching configured route API and blocks a conflicting one"},
+        {"file": "tests/native-model-sync.spec.ts", "name": "does not reject native entries for narrower input, image formats or unavailable account reasoning controls"},
+        {"file": "tests/native-model-sync.spec.ts", "name": "leaves mixed-protocol model definitions with the native catalog instead of rewriting them"},
+        {"file": "tests/native-model-sync.spec.ts", "name": "includes unknown native IDs with an advisory instead of filtering them or inventing defaults"},
+        {"file": "tests/native-model-sync.spec.ts", "name": "treats native schema-injected empty fields as unchanged but discloses removal of custom definitions"},
         {"file": "tests/preview-route.spec.ts", "name": "binds native sync discovery and proof to the global account, not the initiating Session"},
-        {"file": "tests/native-model-sync.spec.ts", "name": "syncs vision only when account metadata covers every native request image format"},
         {"file": "tests/account-model-catalog.spec.ts", "name": "distinguishes absent vision and reasoning metadata from explicitly declared empty support"},
         {"file": "tests/native-copilot-access.spec.ts", "name": "exposes the proven unfiltered adapter catalog independently of the configured model list"},
         {"file": "tests/native-copilot-access.spec.ts", "name": "revokes a catalog snapshot when its native Loader entry is removed"},
         {"file": "tests/authorization-controller.spec.ts", "name": "previews enabled canonical models and applies only the confirmed native models path with CAS/readback"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "previews and writes a provider-wide API with the IDs only when metadata and native entries agree"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "blocks route API updates for mixed or conflicting protocols without changing settings"},
         {"file": "tests/authorization-controller.spec.ts", "name": "prepares from existing account proof without discovery or credential reads"},
         {"file": "tests/authorization-controller.spec.ts", "name": "preserves the native disabled strict-mode override while syncing supported protocols"},
         {"file": "tests/authorization-controller.spec.ts", "name": "blocks disabled strict-mode compatibility if no synced model has a supporting protocol"},
@@ -785,11 +782,12 @@
         {"file": "tests/authorization-controller.spec.ts", "name": "rejects a plan that expires while checking the native credential before writing"},
         {"file": "tests/authorization-controller.spec.ts", "name": "reports an uncertain commit if the proven native catalog changes during the write"},
         {"file": "tests/model-preferences-card.spec.ts", "name": "shows sync changes beside the model list and applies them with one explicit action"},
+        {"file": "tests/remote-codec.spec.ts", "name": "accepts only known route APIs in a native model sync preview"},
         {"file": "tests/model-preferences-card.spec.ts", "name": "does not dispatch duplicate sync actions before React renders the busy state"},
         {"file": "tests/model-preferences-card.spec.ts", "name": "allows model edits while preparing and ignores the superseded plan"},
         {"file": "tests/remote-codec.spec.ts", "name": "accepts named native-sync safety diagnostics without accepting extra fields"},
         {"file": "tests/fixtures/remote-core.fixture.ts", "name": "binds native model sync through actual Client and %s Host gateways"},
-        {"file": "tests/fixtures/native-model-sync-core.fixture.ts", "name": "syncs a confirmed snapshot through real native Settings and model resolution across restart using synthetic catalog proof"}
+        {"file": "tests/fixtures/native-model-sync-core.fixture.ts", "name": "syncs a confirmed snapshot and conditional route API through real native Settings and model resolution across restart using synthetic catalog proof"}
       ]
     },
     {
@@ -1466,17 +1464,19 @@
       ]
     },
     {
-      "id": "single-managed-route-native-oauth",
+      "id": "native-route-account-metadata",
       "required": true,
       "sourceMarkers": [
         {"file": "src/authorization-controller.ts", "marker": "current !== undefined && providerSupportsStrictMode(current) !== false"},
-        {"file": "src/preview-route.ts", "marker": "displayName: 'GitHub Copilot (multi-account)'"},
+        {"file": "src/index.ts", "marker": "registerLegacyProvider: false"},
+        {"file": "src/preview-route.ts", "marker": "registerLegacyProvider = false"},
         {"file": "src/client.ts", "marker": "GitHubCopilotAccountSurface"}
       ],
       "tests": [
-        {"file": "tests/single-route.spec.ts", "name": "keeps the native login flow while exposing only the account-driven provider"},
-        {"file": "tests/single-route.spec.ts", "name": "discovers new IDs and reasoning metadata without a canonical model profile"},
-        {"file": "tests/single-route.spec.ts", "name": "honors explicit legacy-profile removal from settings without deleting OAuth"},
+        {"file": "tests/single-route.spec.ts", "name": "keeps the native login flow without registering a second model provider"},
+        {"file": "tests/single-route.spec.ts", "name": "discovers account model metadata without registering a model provider"},
+        {"file": "tests/single-route.spec.ts", "name": "handles model preference updates without registering a legacy provider"},
+        {"file": "tests/single-route.spec.ts", "name": "does not replace a removed native profile with the retired provider"},
         {"file": "tests/authorization-controller.spec.ts", "name": "does not recreate an absent canonical profile during status or explicit reconciliation"},
         {"file": "tests/authorization-controller.spec.ts", "name": "keeps absent-profile legacy journal conflicts visible instead of bypassing ownership review"}
       ]

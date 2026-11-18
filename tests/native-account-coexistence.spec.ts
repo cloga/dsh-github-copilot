@@ -1,15 +1,31 @@
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
 import '@earendil-works/pi-ai/api/openai-completions'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { Context } from '@deepseek-ai/cordis'
 import Authorization from '@deepseek-ai/dsh-authorization'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import LlmRuntime, { BlockAssembler, createUserMessage } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { BlockAssembler, createUserMessage, isAgentLoopRequest, markAgentLoopRequest } from '@deepseek-ai/dsh-llm'
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
+import { SessionId } from '@deepseek-ai/dsh-session'
 import * as CorePiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { afterEach, expect, it, vi } from 'vitest'
 import * as Companion from '../src/index.ts'
 import type { InlineConfig } from '../src/config.ts'
 import { GITHUB_COPILOT_CREDENTIAL_KEY as KEY, GITHUB_COPILOT_PREVIEW_PROVIDER_ID as MANAGED } from '../src/copilot-identity.ts'
+
+vi.mock('../src/native-copilot-access.ts', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../src/native-copilot-access.ts')>()
+  const { getBuiltinModels } = await import('@earendil-works/pi-ai/providers/all')
+  return { ...original, captureNativeCopilot: vi.fn(async () => ({
+    namespace: 'llm-pi-ai',
+    models: new Map(getBuiltinModels('github-copilot').map(({ id, api }) => [id, { id, api }])),
+    accountModelIds: new Set(getBuiltinModels('github-copilot').map(({ id }) => id)),
+    assertCurrent: () => {},
+  })) }
+})
 
 const A = '11111111-1111-4111-8111-111111111111'
 const B = '22222222-2222-4222-8222-222222222222'
@@ -19,6 +35,7 @@ afterEach(() => vi.unstubAllGlobals())
 
 it('applies confirmed account switches to native credentials and retains the native route after disposal', async () => {
   const ctx = new Context()
+  let markerFixture: string | undefined
   const model = getBuiltinModels('github-copilot').find(model => model.api === 'openai-completions')
   if (!model) throw new Error('Pinned native Copilot completions model unavailable')
   const expires = Date.now() + 7_200_000
@@ -56,9 +73,10 @@ it('applies confirmed account switches to native credentials and retains the nat
     grants.delete(recordKey)
     ctx.emit('credentials/record-updated', recordKey as never)
   })
+  let hasNativeHeader = true
   const nativeAgent = { id: 'native-session', status: 'running',
     session: { id: 'native-session', header: { id: 'native-session' },
-      requestHeader: () => ({ config: nativeSelection, adapterDefaults: {} }) } }
+      requestHeader: () => hasNativeHeader ? { config: nativeSelection, adapterDefaults: {} } : undefined } }
   const wireAccounts: string[] = []
   vi.stubGlobal('fetch', vi.fn(async (input: unknown, init?: RequestInit) => {
     const url = String(input)
@@ -121,13 +139,78 @@ it('applies confirmed account switches to native credentials and retains the nat
     await vi.waitFor(() => expect(ctx.get('githubCopilotAccounts')).toBeDefined())
     const accounts = ctx.get('githubCopilotAccounts')!
     expect(await accounts.get()).toMatchObject({ state: 'ready', activeAccountId: A, switchable: true })
-    expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(expect.arrayContaining(['github-copilot', MANAGED]))
+    const providers = ctx.llm.listProviders().map(provider => provider.id)
+    expect(providers).toEqual(['github-copilot'])
+    expect(providers).not.toContain(MANAGED)
     await send('github-copilot')
-    await send(MANAGED)
     const requestAgent = { ctx, session: nativeAgent.session } as unknown as Agent
     const requestSignal = new AbortController()
+    hasNativeHeader = false
+    await Reflect.apply(ctx.waterfall, ctx, [scopeTarget(requestAgent, requestAgent), 'agent/pre-step',
+      { agent: requestAgent, turn: 1, step: 1, messages: [], signal: requestSignal.signal, modelSelection: nativeSelection },
+      async () => ({ kind: 'enter', messages: [] })])
     await ctx.waterfall(scopeTarget(requestAgent, requestAgent), 'agent/request',
       { agent: requestAgent, turn: 1, step: 1, signal: requestSignal.signal }, async () => nativeSelection)
+    // Core records the first request header before the stream is dispatched.
+    hasNativeHeader = true
+    const auxiliary = await ctx.llm.prepareCall({ provider: 'github-copilot', model: model.id })
+    for await (const _chunk of auxiliary.stream({ ...auxiliary.config, signal: requestSignal.signal, messages: [] })) {}
+    expect(ctx.get('githubCopilotSessionAccounts')?.turns.evidence(nativeAgent.session, 1)).toBeUndefined()
+    const review = await ctx.llm.prepareCall({ provider: 'github-copilot', model: model.id })
+    for await (const _chunk of review.stream(markAgentLoopRequest({ ...review.config, signal: requestSignal.signal,
+      sessionId: SessionId(nativeAgent.session.id), purpose: 'auto-review', messages: [] }))) {}
+    expect(ctx.get('githubCopilotSessionAccounts')?.turns.evidence(nativeAgent.session, 1)).toBeUndefined()
+    if (process.env.DSH_CORE_EVIDENCE === 'published-artifact-runtime') {
+      expect(process.env.DSH_PUBLISHED_CORE_RELEASE).toBe('0.2.2-rc.3')
+      const require = createRequire(import.meta.url)
+      const manifest = realpathSync(require.resolve('@deepseek-ai/dsh-llm/package.json'))
+      expect(JSON.parse(readFileSync(manifest, 'utf8'))).toMatchObject({
+        name: '@deepseek-ai/dsh-llm', version: '0.2.2-rc.3',
+      })
+      const packageRoot = dirname(manifest)
+      markerFixture = mkdtempSync(join(tmpdir(), 'copilot-llm-marker-'))
+      const packageMetadata = JSON.parse(readFileSync(manifest, 'utf8')) as {
+        dependencies?: Record<string, string>
+        peerDependencies?: Record<string, string>
+      }
+      const packageRequire = createRequire(manifest)
+      const markerNodeModules = join(markerFixture, 'node_modules')
+      mkdirSync(markerNodeModules)
+      for (const dependency of new Set([
+        ...Object.keys(packageMetadata.dependencies ?? {}),
+        ...Object.keys(packageMetadata.peerDependencies ?? {}),
+      ])) {
+        let dependencyRoot = dirname(realpathSync(packageRequire.resolve(dependency)))
+        while (!existsSync(join(dependencyRoot, 'package.json'))
+          || JSON.parse(readFileSync(join(dependencyRoot, 'package.json'), 'utf8')).name !== dependency) {
+          const parent = dirname(dependencyRoot)
+          if (parent === dependencyRoot) throw new Error(`Could not locate published dependency ${dependency}`)
+          dependencyRoot = parent
+        }
+        const destination = join(markerNodeModules, dependency)
+        mkdirSync(dirname(destination), { recursive: true })
+        symlinkSync(dependencyRoot, destination, 'junction')
+      }
+      const copy = join(markerFixture, 'llm')
+      cpSync(packageRoot, copy, { recursive: true, errorOnExist: true, force: false })
+      const other: typeof import('@deepseek-ai/dsh-llm') = require(join(copy, 'lib', 'index.js'))
+      const ownMarker = markAgentLoopRequest({ provider: 'github-copilot', model: model.id, messages: [] })
+      expect(isAgentLoopRequest(ownMarker)).toBe(true)
+      expect(other.isAgentLoopRequest(ownMarker)).toBe(false)
+      const foreign = await ctx.llm.prepareCall({ provider: 'github-copilot', model: model.id })
+      const foreignRequest = other.markAgentLoopRequest({ ...foreign.config, signal: requestSignal.signal,
+        sessionId: SessionId(nativeAgent.session.id), messages: [] })
+      expect(other.isAgentLoopRequest(foreignRequest)).toBe(true)
+      expect(isAgentLoopRequest(foreignRequest)).toBe(false)
+      for await (const _chunk of foreign.stream(foreignRequest)) {}
+      expect(ctx.get('githubCopilotSessionAccounts')?.turns.evidence(nativeAgent.session, 1)).toBeUndefined()
+    }
+    const ordinary = await ctx.llm.prepareCall({ provider: 'github-copilot', model: model.id })
+    for await (const _chunk of ordinary.stream(markAgentLoopRequest({ ...ordinary.config, signal: requestSignal.signal,
+      sessionId: SessionId(nativeAgent.session.id),
+      messages: [createUserMessage({ content: [{ type: 'text', text: 'hello' }], source: { kind: 'user' } })] }))) {}
+    await vi.waitFor(() => expect(ctx.get('githubCopilotSessionAccounts')?.turns.evidence(nativeAgent.session, 1))
+      .toMatchObject({ accountId: A, source: 'global' }))
     expect(await accounts.switchAccount(B, revision)).toMatchObject({
       state: 'error', activeAccountId: A, diagnostic: 'COPILOT_ACCOUNTS_BUSY',
     })
@@ -138,7 +221,6 @@ it('applies confirmed account switches to native credentials and retains the nat
     expect(await accounts.switchAccount(B, revision)).toMatchObject({ state: 'ready', activeAccountId: B })
     expect(await ctx.githubCopilotUsage.getNative()).toMatchObject({ state: 'ready', accountId: 'canonical' })
     await send('github-copilot')
-    await send(MANAGED)
     expect(ctx.agentDefaultModel.currentSelection()).toEqual(nativeSelection)
     expect(nativeConfig).toEqual({ providers: { 'github-copilot': { models: [{ id: model.id }] } } })
     expect(grants.get(KEY)?.payload.refresh).toBe(`synthetic-${B}`)
@@ -152,11 +234,16 @@ it('applies confirmed account switches to native credentials and retains the nat
     await send('github-copilot')
     expect(wireAccounts).toEqual([
       `Bearer synthetic-access-${A}`, `Bearer synthetic-access-${A}`, `Bearer synthetic-access-${A}`,
-      `Bearer synthetic-access-${B}`, `Bearer synthetic-access-${B}`, `Bearer synthetic-access-${B}`,
+      `Bearer synthetic-access-${A}`, `Bearer synthetic-access-${A}`,
+      ...(process.env.DSH_CORE_EVIDENCE === 'published-artifact-runtime' ? [`Bearer synthetic-access-${A}`] : []),
+      `Bearer synthetic-access-${B}`, `Bearer synthetic-access-${B}`,
     ])
     expect(grants.get(KEY)?.payload.refresh).toBe(`synthetic-${B}`)
     expect(ctx.agentDefaultModel.currentSelection()).toEqual(nativeSelection)
     expect(modifyRecord).toHaveBeenCalledTimes(1)
     expect(deleteRecord).not.toHaveBeenCalled()
-  } finally { await ctx.fiber.dispose() }
+  } finally {
+    try { await ctx.fiber.dispose() }
+    finally { if (markerFixture !== undefined) rmSync(markerFixture, { recursive: true, force: true }) }
+  }
 })

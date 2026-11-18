@@ -57,6 +57,18 @@ GitHub Releases and npm are the default distribution channels for every new vers
 
 Important user-requested features, behavior fixes, compatibility fixes, and security or stability fixes include release follow-through by default after a reviewed merge and green required CI. Do not stop at the merged PR or ask for a second release confirmation. User instructions limiting delivery to code/review or forbidding publication take precedence; documentation-only, internal-only and unrelated releases are not implicitly authorized. Follow the [important-update delivery rule](./AGENTS.md#important-update-release-delivery).
 
+First classify actual plugin-consumer impact in the PR's `Release delivery`
+section. Repository engineering (agent guidance, CI, tests and unshipped tools)
+completes at reviewed merge and green CI, without a plugin version or local
+upgrade. Do not expand the package whitelist merely to manufacture a release.
+An engineering artifact needs an explicit plugin-artifact distribution request,
+not a generic "publish" instruction or status question. Existing shipped-file
+gates still apply to executables and other release-significant files;
+documentation-only source edits may wait for the next justified release.
+Version-only follow-through of an already authorized plugin update can cite that
+reviewed update under `explicit-plugin-artifact` without another approval prompt.
+See [delivery classification](./AGENTS.md#classify-delivery-before-packaging-502).
+
 Prepare version alignment in the implementation PR. Important runtime or delivery changes fail the `release-ready` PR check unless `package.json` is strictly newer than the base and `deployment-baseline.json` plus both README install URLs agree. Retain the current prerelease channel unless promotion is requested. Docs/tests-only changes may keep the current version. Never move or reuse a tag. Local installation, sign-out and worktree checkout still need explicit approval; restarting active Sessions requires acknowledgement of the interruption.
 
 After the release-ready PR merges, the successful main CI run calls the reusable Release workflow on that exact SHA. It creates or reconciles the annotated version tag and a draft-first Release, rebuilds and verifies the package, writes and verifies `SHA256SUMS`, checks remote asset digests, and only then publishes an immutable Release. Identical reruns reconcile safely; conflicting tags, releases or bytes fail closed. A tag created by `GITHUB_TOKEN` does not trigger a second workflow, so publication occurs in the gated main workflow rather than depending on recursive tag events. Do not hand-upload a replacement or bypass failed CI.

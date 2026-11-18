@@ -69,8 +69,12 @@ function nativeSyncMessage(code: string): string {
       return 'Native model overrides conflict with a custom model list. Review them before syncing; they will not be removed automatically.'
     case 'NATIVE_MODEL_SYNC_ROUTE_COMPAT_UNPROVEN':
       return 'Native route compatibility overrides cannot be verified for the new model list. Review them before syncing.'
+    case 'NATIVE_MODEL_SYNC_ROUTE_API_UNPROVEN':
+      return 'Enabled models do not share one verified protocol for the missing native IDs. No settings were changed.'
+    case 'NATIVE_MODEL_SYNC_ROUTE_API_CONFLICT':
+      return 'The existing route API or native catalog conflicts with account protocol metadata. No settings were changed.'
     case 'NATIVE_MODEL_SYNC_NO_SYNCABLE_MODELS':
-      return 'No enabled account models can be represented by the native provider configuration.'
+      return 'No enabled account model IDs are available to submit.'
     case 'NATIVE_MODEL_SYNC_PLAN_EXPIRED':
     case 'NATIVE_MODEL_SYNC_PLAN_STALE':
       return 'The model list changed or expired. Review the refreshed changes before syncing again.'
@@ -78,7 +82,7 @@ function nativeSyncMessage(code: string): string {
       return 'Native settings changed elsewhere. Review the refreshed changes before syncing again.'
     case 'NATIVE_MODEL_SYNC_READBACK_FAILED':
     case 'NATIVE_MODEL_SYNC_SAVE_FAILED':
-      return 'Could not confirm the native settings update. Read the saved settings before trying again.'
+      return 'Could not confirm the native settings update. Check the saved settings before trying again.'
     default:
       return 'Native model sync is unavailable. No settings were changed.'
   }
@@ -213,6 +217,7 @@ export function GitHubCopilotModelPreferencesPanel(props: {
 
   const applyNativeSync = async (): Promise<void> => {
     const planId = syncPreview?.planId
+    const routeApiChange = syncPreview?.routeApiChange
     const scope = request.current
     if (planId === undefined || nativeSyncDisabled || syncPending.current || scope.pending) return
     const generation = scope.generation
@@ -239,7 +244,9 @@ export function GitHubCopilotModelPreferencesPanel(props: {
         }
         return
       }
-      setSyncResult(`Synced ${parsed.data.modelCount} models to the native provider settings. This does not select a model.`)
+      setSyncResult(`Synced ${parsed.data.modelCount} models to the native provider settings.`
+        + (routeApiChange === undefined ? '' : ` Set the provider-wide API to ${routeApiChange}.`)
+        + ' This does not select a model.')
     } catch { if (current()) uncertain() }
     finally {
       syncPending.current = false
@@ -363,29 +370,38 @@ export function GitHubCopilotModelPreferencesPanel(props: {
     createElement('summary', null, settingsKnown
       ? `Model preferences · ${visibleCount} enabled · ${excluded.size} excluded` : 'Model preferences · Read-only'),
     createElement('p', { style: { fontSize: '14px', marginBlock: '12px' } },
-      'Exclusions are shared across GitHub Copilot accounts; availability below reflects the current account. Newly discovered models are enabled by default. Unavailable saved exclusions are retained and apply again if that model returns. Excluded models disappear from the managed picker and cannot start a new turn. An admitted turn keeps its model. Fixed selections are not changed; select another model before the next turn. Restoring a model does not select it.'),
+      'Exclusions are shared across GitHub Copilot accounts; availability below reflects the current account. Newly discovered models are enabled by default. Unavailable saved exclusions are retained and apply again if that model returns. Excluded models are omitted from the next explicitly reviewed native model sync; this does not change the current native catalog or select another model. Restoring a model does not select it.'),
     createElement('section', { 'aria-label': 'Sync models to native provider', style: { display: 'grid', gap: '8px',
       paddingBlock: '12px', borderBlock: '1px solid color-mix(in srgb, currentColor 18%, transparent)' } },
       createElement('strong', null, 'Native provider model list'),
       createElement('p', { style: { ...nativeCaptionStyle, margin: 0 } },
-        'Sync enabled models from the verified account used by the native provider. The native provider’s built-in catalog is replaced by this saved list, which remains after the plugin is unloaded or uninstalled. Credentials, model selection, and conversation history do not change; managed permission-field filtering does not transfer to native requests. Core also uses each configured maxTokens as its per-request output default.'),
+        'Submit all enabled model IDs from the verified account used by the native provider. Native settings resolve the model definitions; account capabilities are not copied. Existing per-model settings, including output defaults, are replaced by ID-only entries. This saved list remains after the plugin is unloaded or uninstalled. Credentials, model selection, and conversation history do not change. Native validation may reject the update; this is not proof that every model or capability will work.'),
       syncPreparing ? createElement('p', { role: 'status', style: { ...nativeCaptionStyle, margin: 0 } },
         'Checking the current model list…') : !availabilityKnown
         ? createElement('p', { role: 'status', style: { ...nativeCaptionStyle, margin: 0 } },
           'Use Refresh models to verify the current account model list before syncing.') : null,
       syncPreview === undefined ? null : createElement('div', { role: 'region', 'aria-label': 'Native model sync changes',
         'data-dsh-github-copilot-native-model-sync-preview-result': true, style: { display: 'grid', gap: '6px' } },
+      syncPreview.routeApiChange === undefined ? null : createElement('p', {
+        role: 'note', 'data-dsh-github-copilot-native-model-sync-route-api': true,
+        style: { ...nativeCaptionStyle, margin: 0 },
+      }, `Set the provider-wide API from unset to ${syncPreview.routeApiChange}. This applies to every synced model; account metadata and matching native catalog entries agree.`),
       createElement('p', { style: { ...nativeCaptionStyle, margin: 0 } },
-        `${syncPreview.syncableCount} of ${syncPreview.enabledCount} enabled models will be written; `
+        `${syncPreview.syncableCount} of ${syncPreview.enabledCount} enabled model IDs will be submitted; `
         + `${syncPreview.addedIds.length} added, ${syncPreview.updatedIds.length} updated, `
         + `${syncPreview.removedIds.length} removed from the native list, ${syncPreview.skipped.length} skipped.`),
       createElement('div', { role: 'region', 'aria-label': 'Model changes and output defaults', tabIndex: 0,
         style: { maxHeight: '240px', overflowY: 'auto', ...nativeCaptionStyle } },
+      !syncPreview.nativeCatalogMissingIds?.length ? null : createElement('div', null,
+        createElement('strong', null, 'IDs absent from the installed native catalog'),
+        createElement('p', null, 'These IDs are included, not skipped. Any verified provider-wide API change is shown below; native validation may still reject the entire update.'),
+        createElement('ul', null, ...syncPreview.nativeCatalogMissingIds.map(id =>
+          createElement('li', { key: id }, createElement('code', null, id))))),
       syncPreview.removedIds.length === 0 ? null : createElement('div', null,
         createElement('strong', null, 'Native models that will be removed'),
         createElement('ul', null, ...syncPreview.removedIds.map(id => createElement('li', { key: id }, createElement('code', null, id))))),
       syncPreview.skipped.length === 0 ? null : createElement('div', null,
-        createElement('strong', null, 'Models skipped by native compatibility checks'),
+        createElement('strong', null, 'Models unavailable for this native list'),
         createElement('ul', null, ...syncPreview.skipped.map(item => createElement('li', { key: item.id },
           createElement('code', null, item.id), ` — ${nativeSyncSkipMessage(item.code)} (${item.code})`)))),
       syncPreview.addedIds.length === 0 ? null : createElement('div', null,

@@ -1,146 +1,118 @@
-# Optional migration to the account-discovered Copilot route
-
-> **Superseded historical proposal — do not execute.** Current product direction
-> retains DSH's native `github-copilot` route; the separate managed route still
-> exists and native-only acceptance is incomplete. Removing the native profile
-> as proposed below is not a current migration recommendation or authorization.
-> Follow the [current README](../README.md#use) instead.
->
-> **历史方案，已被取代，请勿执行。** 当前方向保留 DSH 原生
-> `github-copilot` 路线；托管路线仍然存在，纯原生验收尚未完成。
-> 下文移除原生配置的步骤不再是当前迁移建议或授权，请参阅
-> [当前使用指南](../README.zh.md#使用)。
+# Retiring the duplicate Copilot model route
 
 [English guide](../README.md) · [中文操作说明](#中文操作说明)
 
-## Result and boundaries
+## Current behavior
 
-The selected Host-owned OAuth account supplies many account models. The stable managed
-route ID is `github-copilot-preview`, displayed as **GitHub Copilot**.
-Fresh installations need no native provider definition. Upgrades preserve
-existing `llm-pi-ai.providers.github-copilot`; two real groups can remain until
-explicit migration. This is configuration removal, not hiding a card.
+The production plugin contributes account controls and account-discovered
+metadata, but registers no `github-copilot-preview` language-model provider.
+DSH's native `github-copilot` provider owns model selection, catalog, request
+transport and conversation execution. Account metadata is used only by explicit
+native model synchronization and account-related enhancements; discovery does
+not silently modify the native catalog or a selected model.
 
-Native Add/Save can recreate another group. The warning is additive, not
-single-route enforcement; Core Edit/Delete remains. Model discovery/UI lifecycle
-is described in the [current README](../README.md#use), not a
-prerequisite to removing a route.
+No profile cleanup or migration is required to stop the plugin from creating a
+second provider. This change does not automatically rewrite existing provider
+settings, credentials, selections or conversation history. Account switches
+and model sync retain their separate confirmation requirements. An existing
+`github-copilot-preview` selection may be unavailable because that provider is
+no longer registered. Choose a supported native model explicitly if needed.
+Do not silently map the old route to a native model: matching names do not
+prove equivalent protocol, capability or account entitlement.
+The old Models new-Session continuation default applied only to the retired
+route and is no longer shown; its saved settings remain untouched.
 
-Keep `llm-pi-ai` and authorization mounted and preserve the canonical credential
-record `llm-pi-ai/github-copilot` and any independently authorized saved accounts.
-Do not sign out, delete credentials or remove
-authorization to hide a group. `models: []` can mean the default catalog, not
-disabled models.
+Existing Web settings are also left untouched. If a Web provider explicitly
+names `github-copilot-hosted`, removing the plugin can leave that configured
+provider unavailable; DSH reports the missing configured provider rather than
+silently switching to another search backend.
 
-Plugin code never auto-migrates settings, selections or histories. Installation,
-real requests, Session/default changes, configuration edits and Host interruption
-need their own explicit approvals. Public `session.selectModel` also writes the
-future global default: other selected/history-backed Sessions keep their context,
-but unselected empty Sessions may inherit it.
+## Account and catalog ownership
 
-## Read-only readiness and maintenance scope
+The plugin may continue to provide account management, quota presentation and
+account-advertised metadata through public APIs. Native Copilot OAuth and
+ordinary model calls remain owned by DSH's canonical `github-copilot` provider.
+An account switch is a separate, explicit operation and does not imply a model
+catalog sync. The optional native model sync is separately previewed and
+confirmed, writes the existing native model-list path, and never creates a
+provider profile.
 
-Use no-argument `githubCopilot.migrationStatus()` for fresh live-Agent evidence,
-not stale generic `session/list` or an unversioned inventory. It reports:
+Model sync submits all enabled account IDs as `{ id }` entries, without a
+second capability filter or a native-catalog intersection (#508). Missing
+native IDs are advisory only. Native configuration resolves definitions from
+its own catalog and existing route settings; it may reject an unresolved ID and
+therefore the entire write. For missing IDs only, if no route API is configured,
+the preview may propose a provider-wide API when every enabled account model
+has the same verified protocol and every matching native catalog entry agrees.
+This applies to the whole route and must be disclosed before confirmation.
+Existing route APIs are preserved; mixed, incomplete or conflicting evidence
+blocks the sync. The model list and authorized route API are written together.
+Native validation remains authoritative; the plugin never guesses a protocol
+or claims model-call compatibility from a matching name.
 
-| Field | Interpretation |
-|---|---|
-| `plugin.name/version`, `protocolVersion: 1`, `observedAt` | Loaded build's structural self-report, not full Desktop/Core byte attestation |
-| `capabilities` | `agentsList`, `sessionProjections`, `settingsCas`, `providerRegistry`, `defaultSelection` |
-| `complete.sessions/defaultSelection/routes` | Observation completeness; missing/false is unknown, not safe absence |
-| `effectiveSelection` / `selectionSource` | Pending projection, then request-header config, then default only for genuinely empty Sessions with known projection state |
-| `activeRequestSelection` | Latest recorded header, not proven in-flight model work; idle usually null |
-| Native effective configuration and native/managed registration | Separate facts, never infer one from the other |
+Confirming sync replaces per-model customizations, including explicit output
+request defaults. The preview discloses updated and removed entries, and the
+saved list is checked against both user and effective Settings. Failures and
+uncertain outcomes remain errors, with no automatic retry. Successful ID-only
+lists remain usable by the native adapter after plugin unload; that persistence
+does not prove supplier capability or successful inference.
 
-This read uses no auth/discovery, credentials or network and writes no settings
-or Sessions. `historyScope: live-agents-only` excludes cold stored conversations.
-Operators must acknowledge that old conversations may need explicit selection
-when resumed. The observation is not an atomic cross-namespace transaction;
-recheck immediately before CAS.
+The account controls cannot replace DSH's native provider **Edit/Delete**
+controls. Saving another native provider group remains a native DSH action; the
+plugin does not intercept it or claim to enforce a single group.
 
-The planned `cloga/dsh-windows-ops` command
-`tools/migrate-copilot-managed-route.ps1` is separate **config-only v1**
-maintenance. This guide does not attest its publication or execution. It does
-not select Sessions/defaults, scan cold history, install/restart DSH or certify a
-Desktop baseline. Resolve approved selection blockers separately.
+## Rollback and support
 
-## Review before removal
+Removing or disabling the plugin does not restore the retired provider or alter
+stored selections. Reinstalling an older plugin version may register
+`github-copilot-preview` again, but is not a migration or a safe automatic
+rollback for every stored selection. Review any explicit account, model, Web or
+profile changes independently and preserve unrelated later edits.
 
-1. Verify an absence-preserving published plugin is installed **and loaded**,
-   with matching Host/Client. Older code may recreate the profile. A version
-   declaration or screenshot is not loaded-runtime evidence.
-2. Ensure discovery and accepted managed models. Use visible Retry or intentional
-   Refresh, not repeated sign-in/disabled validation. Metadata is not transport
-   proof; a real test request needs separate approval.
-3. Deliberately select only approved Sessions/defaults. Preserve model/effort
-   only if actually supported. Review paused histories, presets/task references
-   without bulk rewrites. Confirm selections before removing their old route.
-4. Review configuration source, effective base layers, namespace revision and
-   ownership journals. Inherited configuration, ambiguity or another writer
-   blocks removal. Never delete journals or patch Core to force it.
+Synthetic tests verify that the plugin does not add a second provider alongside
+the native provider. They do not prove a specific Desktop version is installed,
+loaded or making successful supplier calls.
 
-Keep the existing profile if any prerequisite is uncertain.
-
-## Apply the reviewed Ops migration after release
-
-Historical procedure only; do not apply it to the current native-first design.
-
-1. Recheck readiness/capabilities/completeness and approved selections. Obtain the
-   cold-history acknowledgement. Any Host interruption needs separate approval.
-2. Take a private settings-only backup outside Git/shared docs. Do not copy or
-   disclose OAuth credentials. Check current user-native profile/base/journal.
-3. CAS-remove only the reviewed user-native
-   `llm-pi-ai.providers.github-copilot` path against the observed revision.
-   Preserve the mount/section, credentials, companion and all other provider
-   fields. Conflict/already-absent is not permission for blind retry.
-4. Read persisted/effective settings and actual registry, then composer and
-   `/model`. Report one managed group only when canonical registration is truly
-   absent and no other layer supplies it. A hidden card/write success is not enough.
-5. Separately review any nonempty search `providers` allowlist. An approved
-   replacement of the legacy entry with `github-copilot-preview` preserves other
-   entries; never clear/broaden automatically.
-6. Verify credentials, approved selections/default and other histories separately.
-   `route: not-configured` is optional canonical absence, not login failure or
-   proof of a successful model/search call.
-
-A stuck **Deleting…** dialog proves neither removal nor its failure. Do not
-repeat deletion; review persisted state after an authorized stop.
-
-## History, search and rollback
-
-Managed IDs remain stable. No transparent canonical alias/history conversion is
-created. Resumed canonical conversations need an explicit supported selection,
-or preservation/restoration of their original route. Search keeps its existing
-[initiator, metadata, allowlist and proof boundaries](./session-search-routing.md);
-removing canonical does not turn managed chat into custom inline transport.
-
-For rollback, stop the relevant Host with permission and compare fresh settings
-with the private backup. Restore only reviewed canonical fields and approved
-selection changes, never overwrite unrelated later edits. Keep ambiguous
-journals for review. Restart with approval and verify registration, credentials
-and selections separately; this is not model-call proof. Older plugin rollback
-may recreate canonical, not a second account.
+The read-only `githubCopilot.migrationStatus()` reports
+`historyScope: live-agents-only`; it cannot rule out old selections in cold
+stored histories. The previously planned `tools/migrate-copilot-managed-route.ps1`
+is not required for this change; this guide does not attest its publication or execution.
 
 ## 中文操作说明
 
-以下仅保留历史记录；不要按此移除当前原生 provider。
+生产插件保留账号界面和账号发现的元数据，但不再注册
+`github-copilot-preview` 语言模型 provider。模型选择、目录、请求传输和对话执行
+由 DSH 原生 `github-copilot` provider 所有。账号元数据仅供显式原生模型同步及
+账号增强功能使用；发现元数据不会静默修改原生目录或当前模型。
 
-新安装无需原生 provider；升级保留已有 canonical 配置，两组都是真实路由，
-不是两个账号。迁移只在明确批准后移除审核过的
-`llm-pi-ai.providers.github-copilot`；canonical 凭据、独立授权的已保存账号、`llm-pi-ai`、授权服务及其它配置保留。
-不要退出登录、删除凭据或使用 `models: []` 来隐藏分组。
+无需清理 profile 或执行迁移，插件即可停止创建第二个 provider。此变更不会自动改写现有
+provider 设置、凭据、模型选择或对话历史；账号切换和模型同步仍需分别确认。
+已有的 `github-copilot-preview` 选择可能因 provider 不再注册而不可用；需要时请显式选择
+受支持的原生模型。不要按名称自动映射旧路线，名称相同不能证明协议、能力或账号权限等价。
+Models 中旧的“新 Session 续接默认项”仅适用于退役路线，现已不再显示；已保存的设置保持不变。
 
-先验证发布版本已实际加载，再调用无参数 `githubCopilot.migrationStatus()`。
-版本、能力或完整性未知就停止；它只覆盖 live Agent，不扫描冷历史，也不调用
-凭据／发现／网络。最新 header 不等于正在推理，结构自报不等于完整字节证明。
-拟议 Ops 命令仅做配置维护，本文不证明其已发布、已执行或迁移已完成。
+Web 设置也不会被改写。如果 Web 明确配置了 `github-copilot-hosted`，卸载插件后该
+provider 可能不可用；DSH 会报告已配置 provider 缺失，不会静默切换搜索后端。
 
-单独批准 Session／未来默认值选择、真实测试请求、配置写入与停止／重启。
-`session.selectModel` 同时修改未来默认值，未选择的空 Session 可能继承；
-其它已选／历史 Session 不批量改写。恢复旧 canonical 会话时可能需显式选择支持的
-托管模型，不能承诺透明续接。
+插件仍可通过公开 API 提供账号管理、额度展示和账号模型元数据。原生 Copilot OAuth
+及普通模型请求仍由 DSH canonical `github-copilot` provider 所有。账号切换是独立的
+显式操作，不代表同步模型目录。可选的原生模型同步需单独预览并确认，写入已有的
+原生模型列表路径，不会创建 provider profile。仅对原生目录缺失的 ID，如果尚未配置
+route API，且所有启用账号模型的已验证协议一致、目录中匹配的原生模型协议也一致，
+预览才会建议设置 provider 级 API，并明确披露它影响整条路由。已有 route API 不覆盖；
+协议混合、证据缺失或冲突时阻止同步。模型列表和获准的 API 会在同一写入中提交，
+原生校验仍是最终依据。
 
-检查 base 层和 journal，私密备份设置但不复制 OAuth。写入前重新查询，
-按 revision 做窄路径 CAS；冲突不盲重试。回读持久化／有效配置、真实 registry、
-composer 与 `/model`，才能确认单组。搜索 allowlist 修改另行审核，不隐式扩大。
-回退仅恢复获准字段，不用整份备份覆盖后来改动；注册恢复仍不证明模型调用成功。
+账号界面不能替代 DSH 原生 provider 的 **Edit/Delete** 控件。新增原生 provider 组仍是
+DSH 操作；插件不拦截，也不声称能强制只保留一个组。
+
+移除或停用插件不会恢复已退役的 provider，也不会改动已保存的选择。重新安装旧版本
+可能再次注册 `github-copilot-preview`，但不代表完成迁移，也不一定能安全恢复所有旧选择。
+如需处理账号、模型、Web 或 profile 变更，应分别审核并保留之后的无关修改。
+
+合成测试验证插件不会在原生 provider 之外添加第二个 provider；不能证明特定 Desktop
+版本已安装、加载或成功调用供应商。
+
+只读的 `githubCopilot.migrationStatus()` 报告
+`historyScope: live-agents-only`，无法排除冷存储历史中的旧选择。此前规划的
+`tools/migrate-copilot-managed-route.ps1` 并非此变更的必要步骤；本文不证明其已发布或执行。

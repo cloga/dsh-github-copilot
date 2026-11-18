@@ -6,12 +6,184 @@ import { test } from 'node:test'
 import { spawnSync } from 'node:child_process'
 import { attribution, describeRepository, doctor, planTask, repositoryRoot } from '../../scripts/agent.mjs'
 import { verifyAgentContract, verifyCurrentCoreDocument, verifyCurrentTaskStatus, verifyDocumentationReview } from '../../scripts/verify-agent-contract.mjs'
-import { assessDocumentationImpact } from '../../scripts/verify-documentation-impact.mjs'
+import { assessDeliveryImpact, assessDocumentationImpact } from '../../scripts/verify-documentation-impact.mjs'
+import { assessLocalDelivery, readLocalDelivery } from '../../scripts/local-delivery.mjs'
+
+const localDeliveryExample = () => ({
+  schemaVersion: 1,
+  target: { profile: 'desktop', desktopVersion: '0.2.2-rc.3', pluginVersion: '0.1.0-alpha.17.dsh.0.2.2.rc.3' },
+  stages: {
+    desktop: { status: 'passed', version: '0.2.2-rc.3', observedAtMs: 100 },
+    release: { status: 'passed', version: '0.1.0-alpha.17.dsh.0.2.2.rc.3', observedAtMs: 200 },
+    preflight: { status: 'passed', observedAtMs: 300 },
+    installed: { status: 'passed', version: '0.1.0-alpha.17.dsh.0.2.2.rc.3', observedAtMs: 400 },
+    loaded: { status: 'passed', version: '0.1.0-alpha.17.dsh.0.2.2.rc.3', observedAtMs: 500 },
+    behavior: { status: 'passed', observedAtMs: 600 },
+  },
+  peers: { bundled: 'matching', resolved: 'matching', loaded: 'matching' },
+})
+
+test('local delivery keeps reported completion distinct from independent verification', () => {
+  const result = assessLocalDelivery(localDeliveryExample(), 1000)
+  assert.equal(result.state, 'reported-complete')
+  assert.equal(result.nextStage, null)
+  assert.equal(result.executionVerified, false)
+  assert.equal(result.authorizationVerified, false)
+  assert.equal(result.acceptanceVerified, false)
+})
+
+test('local delivery resumes at the first incomplete or stale stage', () => {
+  const input = localDeliveryExample()
+  input.stages.loaded = { status: 'blocked', version: null, observedAtMs: 500 }
+  input.stages.behavior = { status: 'not-run', observedAtMs: null }
+  input.peers.loaded = 'unknown'
+  const result = assessLocalDelivery(input, 1000)
+  assert.equal(result.state, 'incomplete')
+  assert.equal(result.nextStage, 'loaded')
+  assert.equal(result.stages.loaded, 'blocked')
+  assert.ok(result.warnings.includes('loaded-peer-unknown'))
+  input.stages.loaded = { status: 'passed', version: input.target.pluginVersion, observedAtMs: 700 }
+  input.stages.behavior = { status: 'passed', observedAtMs: 600 }
+  assert.equal(assessLocalDelivery(input, 1000).stages.behavior, 'stale')
+  input.stages.installed.observedAtMs = 800
+  assert.equal(assessLocalDelivery(input, 1000).stages.loaded, 'stale')
+  input.stages.installed = { status: 'failed', version: null, observedAtMs: 800 }
+  assert.equal(assessLocalDelivery(input, 1000).stages.installed, 'failed')
+})
+
+test('local delivery rejects false readiness from version mismatch and future evidence', () => {
+  const input = localDeliveryExample()
+  input.stages.loaded.version = '0.1.0-alpha.16.dsh.0.2.2.rc.3'
+  const result = assessLocalDelivery(input, 1000)
+  assert.equal(result.nextStage, 'loaded')
+  assert.equal(result.stages.loaded, 'version-mismatch')
+  assert.equal(result.stages.behavior, 'stale')
+  input.stages.loaded.observedAtMs = 1001
+  assert.throws(() => assessLocalDelivery(input, 1000), /LOCAL_DELIVERY_INVALID/)
+  const invalid = localDeliveryExample()
+  invalid.stages.behavior.authorization = 'granted'
+  assert.throws(() => assessLocalDelivery(invalid, 1000), /LOCAL_DELIVERY_INVALID/)
+  const otherProfile = localDeliveryExample()
+  otherProfile.target.profile = 'web'
+  assert.throws(() => assessLocalDelivery(otherProfile, 1000), /LOCAL_DELIVERY_INVALID/)
+})
+
+test('local delivery distinguishes mismatched and unknown shared peers', () => {
+  const input = localDeliveryExample()
+  input.peers = { bundled: 'matching', resolved: 'mismatch', loaded: 'unknown' }
+  const result = assessLocalDelivery(input, 1000)
+  assert.equal(result.state, 'reported-complete-with-uncertainty')
+  assert.deepEqual(result.warnings, ['resolved-peer-mismatch', 'loaded-peer-unknown'])
+})
+
+test('local delivery reads only bounded, unambiguous state outside the checkout', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'copilot-local-delivery-'))
+  const file = join(root, 'state.json')
+  try {
+    await writeFile(file, JSON.stringify(localDeliveryExample()))
+    assert.equal((await readLocalDelivery(file, repositoryRoot, 1000)).state, 'reported-complete')
+    const state = localDeliveryExample()
+    state.stages.loaded = { status: 'blocked', version: null, observedAtMs: 500 }
+    state.stages.behavior = { status: 'not-run', observedAtMs: null }
+    await writeFile(file, JSON.stringify(state))
+    const result = spawnSync(process.execPath, [join(repositoryRoot, 'scripts', 'agent.mjs'),
+      'local-delivery', '--state', file], { cwd: repositoryRoot, encoding: 'utf8' })
+    assert.equal(result.status, 1)
+    assert.equal(JSON.parse(result.stdout).nextStage, 'loaded')
+    state.stages.loaded = localDeliveryExample().stages.loaded
+    state.stages.behavior = localDeliveryExample().stages.behavior
+    state.peers.loaded = 'unknown'
+    await writeFile(file, JSON.stringify(state))
+    const warning = spawnSync(process.execPath, [join(repositoryRoot, 'scripts', 'agent.mjs'),
+      'local-delivery', '--state', file], { cwd: repositoryRoot, encoding: 'utf8' })
+    assert.equal(warning.status, 1)
+    assert.equal(JSON.parse(warning.stdout).state, 'reported-complete-with-uncertainty')
+    await writeFile(file, '{"schemaVersion":1,"schemaVersion":1}')
+    await assert.rejects(readLocalDelivery(file, repositoryRoot, 1000), /LOCAL_DELIVERY_INVALID/)
+    await writeFile(file, '{"secret":"PRIVATE_SENTINEL"}')
+    const invalid = spawnSync(process.execPath, [join(repositoryRoot, 'scripts', 'agent.mjs'),
+      'local-delivery', '--state', file], { cwd: repositoryRoot, encoding: 'utf8' })
+    assert.equal(invalid.status, 2)
+    assert.equal(JSON.parse(invalid.stdout).error, 'LOCAL_DELIVERY_INVALID')
+    assert.ok(!`${invalid.stdout}${invalid.stderr}`.includes('PRIVATE_SENTINEL'))
+    await writeFile(file, 'x'.repeat(65537))
+    await assert.rejects(readLocalDelivery(file, repositoryRoot, 1000), /LOCAL_DELIVERY_INVALID/)
+    await assert.rejects(readLocalDelivery(join(repositoryRoot, 'package.json'), repositoryRoot, 1000), /LOCAL_DELIVERY_UNSAFE_FILE/)
+    await assert.rejects(readLocalDelivery(join(root, 'missing.json'), repositoryRoot, 1000), /LOCAL_DELIVERY_FILE_UNAVAILABLE/)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
 
 const documentationImpactBody = `### Documentation impact
 - Behavior: user-facing
 - Docs: README.md, README.zh.md, docs/accounts.md
 - Details: Explain the account switch and its profile-wide behavior.`
+
+const deliveryImpactBody = classification => `## Release delivery
+- Classification: ${classification}
+- Details: Classify the actual consumer impact before changing the package.`
+
+test('repository engineering completes without a plugin release or local upgrade', () => {
+  const manifest = { version: '1.0.0', files: ['lib/'] }
+  const input = {
+    changedFiles: ['AGENTS.md', '.github/workflows/ci.yml', 'scripts/agent.mjs'],
+    baseManifest: manifest, manifest,
+    body: deliveryImpactBody('repository-only'),
+  }
+  assert.deepEqual(assessDeliveryImpact(input), {
+    classification: 'repository-only', localInstallation: 'not-needed',
+  })
+  for (const change of [
+    { changedFiles: ['src/index.ts'] },
+    { changedFiles: ['scripts/autonomy-evaluation.mjs'] },
+    { changedFiles: ['package.json'], manifest: { ...manifest, version: '1.1.0' } },
+    { changedFiles: ['package.json'], manifest: { ...manifest, files: ['lib/', 'scripts/new-evaluator.mjs'] } },
+  ]) assert.throws(() => assessDeliveryImpact({ ...input, ...change }), /DELIVERY_IMPACT_REPOSITORY_PACKAGE_CHANGE/)
+  for (const body of [
+    '', '<!-- ' + input.body + ' -->',
+    input.body + '\n- Classification: plugin-update',
+    input.body + '\n## Release delivery\n- Classification: plugin-update',
+    input.body.replace('repository-only', 'publish-everything'),
+    input.body.replace(/- Details:.*/, '- Details: TODO'),
+  ]) assert.throws(() => assessDeliveryImpact({ ...input, body }), /DELIVERY_IMPACT/)
+})
+
+test('version and whitelist edits alone cannot manufacture a plugin update', () => {
+  const baseManifest = { version: '1.0.0', files: ['lib/'], engines: { dsh: '1.0.0' } }
+  const input = {
+    changedFiles: ['package.json', 'deployment-baseline.json', 'README.md'],
+    baseManifest,
+    manifest: { ...baseManifest, version: '1.1.0', files: ['lib/', 'scripts/new-evaluator.mjs'] },
+    body: deliveryImpactBody('plugin-update'),
+  }
+  assert.throws(() => assessDeliveryImpact(input), /DELIVERY_IMPACT_CONSUMER_CHANGE_REQUIRED/)
+  for (const change of [
+    { changedFiles: [...input.changedFiles, 'src/index.ts'] },
+    { manifest: { ...input.manifest, engines: { dsh: '1.1.0' } } },
+  ]) assert.equal(assessDeliveryImpact({ ...input, ...change }).localInstallation, 'separate-authorization')
+  const explicit = { ...input, body: deliveryImpactBody('explicit-plugin-artifact') }
+  assert.throws(() => assessDeliveryImpact(explicit), /DELIVERY_IMPACT_ARTIFACT_AUTHORIZATION_REQUIRED/)
+  assert.equal(assessDeliveryImpact({
+    ...explicit,
+    body: explicit.body + '\n- Authorization: The user explicitly requested distributing this offline tool in a plugin package.',
+  }).classification, 'explicit-plugin-artifact')
+  assert.equal(assessDeliveryImpact({
+    ...explicit, manifest: { ...baseManifest, version: '1.1.0' },
+    body: explicit.body + '\n- Authorization: Version alignment follows the already reviewed and authorized plugin runtime fix; no new artifact scope.',
+  }).classification, 'explicit-plugin-artifact')
+})
+
+test('release recovery cannot introduce a new version or change consumer payloads', () => {
+  const manifest = { version: '1.0.0', files: ['lib/'] }
+  const input = {
+    changedFiles: ['.github/workflows/ci.yml'], baseManifest: manifest, manifest,
+    body: deliveryImpactBody('release-recovery'),
+  }
+  assert.equal(assessDeliveryImpact(input).localInstallation, 'not-needed')
+  assert.throws(() => assessDeliveryImpact({ ...input, manifest: { ...manifest, version: '1.1.0' } }),
+    /DELIVERY_IMPACT_REPOSITORY_PACKAGE_CHANGE/)
+  assert.throws(() => assessDeliveryImpact({ ...input, changedFiles: ['src/index.ts'] }),
+    /DELIVERY_IMPACT_REPOSITORY_PACKAGE_CHANGE/)
+})
 
 test('documentation impact requires reviewable evidence for code and tooling changes', () => {
   const unchanged = {
@@ -103,8 +275,20 @@ test('documentation impact CLI checks the actual PR base, head and event body', 
       env: { ...process.env, GITHUB_EVENT_NAME: 'pull_request', GITHUB_EVENT_PATH: event, GITHUB_BASE_REF: 'test-base' },
     })
 
-    await writeFile(event, JSON.stringify({ pull_request: { body: documentationImpactBody } }))
+    await writeFile(event, JSON.stringify({
+      pull_request: { body: documentationImpactBody + '\n\n' + deliveryImpactBody('plugin-update') },
+    }))
     assert.equal(invoke().status, 0)
+    await writeFile(event, JSON.stringify({ pull_request: { body: documentationImpactBody } }))
+    assert.match(invoke().stderr, /DELIVERY_IMPACT_DECLARATION_REQUIRED/)
+    await writeFile(event, JSON.stringify({
+      pull_request: { body: `### Documentation impact
+- Behavior: unchanged
+- Details: This claim cannot bypass the package delivery check.
+
+${deliveryImpactBody('repository-only')}` },
+    }))
+    assert.match(invoke().stderr, /DELIVERY_IMPACT_REPOSITORY_PACKAGE_CHANGE/)
     await writeFile(event, JSON.stringify({ pull_request: { body: 'SECRET_SENTINEL' } }))
     const rejected = invoke()
     assert.notEqual(rejected.status, 0)
@@ -149,6 +333,9 @@ test('task map distinguishes retired routing from current native controls', asyn
   const missingContext = structuredClone(contract)
   missingContext.tasks.search.riskContext = ''
   assert.throws(() => verifyCurrentTaskStatus(missingContext), /current task status/)
+  const missingContinuationBoundary = structuredClone(contract)
+  missingContinuationBoundary.tasks.continuation.accountUiBoundary = 'There is no add-only OAuth entry in Chat.'
+  assert.throws(() => verifyCurrentTaskStatus(missingContinuationBoundary), /current task status/)
 })
 
 test('agent contract keeps documentation review and PR-body edit checks wired into CI', async () => {
@@ -161,6 +348,7 @@ test('agent contract keeps documentation review and PR-body edit checks wired in
   for (const invalid of [
     { ...policy, detailsRequired: false },
     { ...policy, versionOnlyInsufficient: false },
+    { ...policy, deliveryClasses: ['publish-everything'] },
     { ...policy, rerunOnBodyEdit: false },
     { ...policy, semanticReview: 'automated' },
     { ...policy, semanticReview: 'human-required' },
@@ -168,6 +356,7 @@ test('agent contract keeps documentation review and PR-body edit checks wired in
     assert.throws(() => verifyDocumentationReview(invalid, template, workflow), /documentation impact/)
   }
   assert.throws(() => verifyDocumentationReview(policy, template.replace('### Documentation impact', '### Removed'), workflow), /documentation impact/)
+  assert.throws(() => verifyDocumentationReview(policy, template.replace('## Release delivery', '## Removed'), workflow), /documentation impact/)
   assert.throws(() => verifyDocumentationReview(policy, template, workflow.replace('opened, synchronize, reopened, edited', 'opened, synchronize, reopened')), /documentation impact/)
   assert.throws(() => verifyDocumentationReview(policy, template, workflow.replace('test "$DOCUMENTATION_RESULT" = success', 'echo ignored')), /documentation impact/)
 })
@@ -185,6 +374,9 @@ test('describes actual package metadata without claiming a release exists', asyn
   assert.equal(result.acceptance.executed, false)
   assert.equal(result.acceptance.executionVerified, false)
   assert.equal(result.acceptance.independenceVerified, false)
+  assert.equal(result.localDelivery.mode, 'reported-state-only')
+  assert.equal(result.localDelivery.authorizationVerified, false)
+  assert.equal(result.localDelivery.acceptanceVerified, false)
   assert.deepEqual(result.acceptance.liveUi, {
     schemaVersion: 2, ci: 'guarded-exact-head', source: 'report-consistency-only',
     browserManualRequireLiveContract: true, automaticClosure: false,
@@ -212,6 +404,7 @@ test('plans only known task IDs with unexecuted argument arrays', async () => {
   ])
   assert.ok(!(await planTask('tooling')).commands.some(command => command.argv.includes('pnpm')))
   assert.deepEqual((await planTask('tooling')).acceptance, (await describeRepository()).acceptance)
+  assert.deepEqual((await planTask('tooling')).localDelivery, (await describeRepository()).localDelivery)
 })
 
 test('context diagnostics preserve shared usage and include native whole-turn evidence', async () => {
@@ -244,6 +437,9 @@ test('multi-account plan retains explicit direct-grant ownership and UI boundari
   assert.match(contract.tasks.accounts.risk, /Credits selects this Session's subsequent turns or restores inheritance/)
   assert.match(contract.tasks.accounts.risk, /hold account pins through native turn\/end\/disposal/)
   assert.match(contract.tasks.accounts.risk, /No durable account events, history\/default\/model\/Usage writes/)
+  assert.ok(plan.read.includes('src/native-copilot-access.ts'))
+  assert.ok(plan.tests.includes('tests/fixtures/auto-review-copilot-core.fixture.ts'))
+  assert.match(contract.tasks.accounts.nativeTurnEvidenceBoundary, /never qualifies reviewer\/search protocols/)
   const doc = await readFile(join(repositoryRoot, 'docs/copilot-accounts.md'), 'utf8')
   assert.match(doc, /immutable account identifier/)
   assert.match(doc, /not a cross-namespace/)
@@ -298,7 +494,10 @@ test('important updates carry release follow-through without a second approval p
   for (const boundary of ['install into a user profile', 'sign-out', 'worktree checkout']) {
     assert.ok(plan.boundaries.approvalRequired.includes(boundary))
   }
-  assert.match(plan.delivery, /reviewed merge without a separate approval prompt; important updates continue to verified Release/)
+  assert.match(plan.delivery, /reviewed merge without a separate approval prompt; important plugin updates continue to verified Release/)
+  assert.match(plan.delivery, /Repository-only engineering completes at reviewed merge and green required CI/)
+  assert.match(plan.delivery, /Never expand the package whitelist/)
+  assert.match(plan.delivery, /explicit plugin-artifact request, not a generic publish\/status question/)
   assert.ok(plan.commands.every(command => command.executed === false))
 })
 
@@ -396,7 +595,7 @@ test('manual replay recovery plan retains explicit consent and rejects weakened 
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-test('login environment plan rejects weakened native OAuth and tenant boundaries', async () => {
+test('account plan rejects weakened login and native turn evidence boundaries', async () => {
   const plan = await planTask('accounts')
   assert.ok(plan.read.includes('src/copilot-login-environment.ts'))
   assert.ok(plan.tests.includes('tests/scripts/copilot-login-environment.test.mjs'))
@@ -419,10 +618,20 @@ test('login environment plan rejects weakened native OAuth and tenant boundaries
       await writeFile(join(root, 'agent-contract.json'), JSON.stringify(contract))
       await assert.rejects(verifyAgentContract(root), /login environments/)
     }
+    for (const mutate of [
+      contract => { delete contract.tasks.accounts.nativeTurnEvidenceBoundary },
+      contract => { contract.tasks.accounts.nativeTurnEvidenceBoundary = contract.tasks.accounts.nativeTurnEvidenceBoundary.replace('never qualifies reviewer/search protocols', 'qualifies reviewer/search protocols') },
+      contract => { contract.tasks.accounts.tests = contract.tasks.accounts.tests.filter(file => file !== 'tests/fixtures/auto-review-copilot-core.fixture.ts') },
+    ]) {
+      const contract = structuredClone(original)
+      mutate(contract)
+      await writeFile(join(root, 'agent-contract.json'), JSON.stringify(contract))
+      await assert.rejects(verifyAgentContract(root), /native account evidence/)
+    }
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-test('large composition plan rejects weakened replay, transport and consent boundaries', async () => {
+test('diagnostics retirement plan rejects collection or weakened data preservation and 408 boundaries', async () => {
   const plan = await planTask('diagnostics')
   assert.ok(plan.read.includes('src/request-body-composition.ts'))
   assert.ok(plan.tests.includes('tests/request-body-composition.spec.ts'))
@@ -437,13 +646,14 @@ test('large composition plan rejects weakened replay, transport and consent boun
     await writeFile(join(root, 'AGENTS.md'), await readFile(join(repositoryRoot, 'AGENTS.md')))
     for (const mutate of [
       contract => { delete contract.tasks.diagnostics.compositionBoundary },
-      contract => { contract.tasks.diagnostics.compositionBoundary = 'Increase replay limits and wait for diagnostics before sending' },
-      contract => { contract.tasks.diagnostics.tests = contract.tasks.diagnostics.tests.filter(file => file !== 'tests/request-body-composition.spec.ts') },
+      contract => { contract.tasks.diagnostics.runtimeStatus = 'enabled' },
+      contract => { contract.tasks.diagnostics.risk = 'Clear old data and start collection' },
+      contract => { contract.tasks.diagnostics.tests = contract.tasks.diagnostics.tests.filter(file => file !== 'tests/loader-composition.spec.ts') },
     ]) {
       const contract = structuredClone(original)
       mutate(contract)
       await writeFile(join(root, 'agent-contract.json'), JSON.stringify(contract))
-      await assert.rejects(verifyAgentContract(root), /large-request composition/)
+      await assert.rejects(verifyAgentContract(root), /retired Local diagnostics/)
     }
   } finally { await rm(root, { recursive: true, force: true }) }
 })
@@ -462,6 +672,9 @@ test('contract validation rejects a redundant release prompt or weakened release
       [contract => { contract.boundaries.releaseDelivery.requiredConditions = ['reviewed-merge'] }, /release delivery/],
       [contract => { contract.boundaries.releaseDelivery.localGateWhenRegistryBlocked = 'skip-ci' }, /blocked local gate/],
       [contract => { contract.boundaries.releaseDelivery.completionEvidence = [] }, /release delivery/],
+      [contract => { delete contract.boundaries.releaseDelivery.deliveryClassification }, /delivery classification/],
+      [contract => { contract.boundaries.releaseDelivery.deliveryClassification.repositoryOnlyCompletion = 'plugin-release' }, /delivery classification/],
+      [contract => { contract.boundaries.releaseDelivery.deliveryClassification.repositoryOnlyArtifacts = 'package-tools-to-release' }, /delivery classification/],
     ]) {
       const contract = structuredClone(original)
       mutate(contract)
@@ -516,7 +729,13 @@ test('contract validation preserves the explicitly confirmed native model sync b
       contract => { delete contract.tasks.models.nativeModelSyncBoundary },
       contract => { contract.tasks.models.nativeModelSyncBoundary = 'Automatically replace every provider.' },
       contract => { contract.tasks.models.nativeModelSyncBoundary = contract.tasks.models.nativeModelSyncBoundary.replace('non-forcing preview', 'preview') },
+      contract => { contract.tasks.models.nativeModelSyncBoundary = contract.tasks.models.nativeModelSyncBoundary.replace('ID-only account model submission, not capability qualification', 'copy account capabilities') },
+      contract => { contract.tasks.models.nativeModelSyncBoundary = contract.tasks.models.nativeModelSyncBoundary.replace('Missing native IDs are advisory, not skipped', 'Guess definitions for absent IDs') },
+      contract => { contract.tasks.models.nativeModelSyncBoundary = contract.tasks.models.nativeModelSyncBoundary.replace('For missing native IDs with no configured route API', 'For all native IDs') },
+      contract => { contract.tasks.models.nativeModelSyncBoundary = contract.tasks.models.nativeModelSyncBoundary.replace('every enabled account model has one identical supported API and every matching native catalog entry agrees', 'without protocol evidence') },
+      contract => { contract.tasks.models.nativeModelSyncBoundary = contract.tasks.models.nativeModelSyncBoundary.replace('preserve an existing route API', 'overwrite an existing route API') },
       contract => { contract.tasks.models.nativeModelSyncBoundary = contract.tasks.models.nativeModelSyncBoundary.replace('preserve supportsStrictMode: false only when at least one synced Responses or Completions model supports it', 'permit all overrides') },
+      contract => { contract.tasks.models.nativeModelSyncBoundary = contract.tasks.models.nativeModelSyncBoundary.replace('read back both user and effective values', 'read back user only') },
       contract => { contract.tasks.models.tests = contract.tasks.models.tests.filter(value => !value.includes('native-model-sync')) },
     ]) {
       const contract = structuredClone(original)

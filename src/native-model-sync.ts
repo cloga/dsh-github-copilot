@@ -1,5 +1,4 @@
-import type { ImageMediaType } from '@deepseek-ai/dsh-attachment'
-import type { AccountModelDescriptor } from './account-model-catalog.ts'
+import type { AccountModelApi, AccountModelDescriptor } from './account-model-catalog.ts'
 
 export type NativeModelSyncSkipCode = 'NATIVE_API_UNAVAILABLE' | 'NATIVE_API_MISMATCH' | 'NATIVE_INHERITED_API_MISMATCH'
   | 'NATIVE_COMPATIBILITY_UNPROVEN'
@@ -9,11 +8,6 @@ export type NativeModelSyncSkipCode = 'NATIVE_API_UNAVAILABLE' | 'NATIVE_API_MIS
 
 export interface NativeModelProfile {
   readonly id: string
-  readonly name: string
-  readonly contextWindow: number
-  readonly maxTokens: number
-  readonly input: readonly ('text' | 'image')[]
-  readonly reasoningEfforts: false | Readonly<Record<string, string | null>>
 }
 
 export interface NativeModelSyncPreview {
@@ -25,6 +19,7 @@ export interface NativeModelSyncPreview {
   readonly removedIds: readonly string[]
   readonly updatedIds: readonly string[]
   readonly skipped: readonly { readonly id: string; readonly code: NativeModelSyncSkipCode }[]
+  readonly nativeCatalogMissingIds: readonly string[]
 }
 
 export interface NativeCatalogModel {
@@ -37,26 +32,57 @@ export interface NativeModelSyncInput {
   readonly excludedModelIds: ReadonlySet<string>
   readonly currentModels: readonly Readonly<Record<string, unknown>>[]
   readonly currentModelsUseCatalog: boolean
-  readonly routeApi?: string
-  readonly routeReasoning?: string
   readonly nativeCatalog: readonly NativeCatalogModel[]
 }
 
-const nativeImageMediaTypes = {
-  'image/png': true, 'image/jpeg': true, 'image/webp': true, 'image/gif': true,
-} satisfies Record<ImageMediaType, true>
-
-function profileFor(model: AccountModelDescriptor): NativeModelProfile {
-  const efforts = model.reasoning.advertisedEfforts.filter(effort => effort !== 'off')
-  return {
-    id: model.id,
-    name: model.name,
-    contextWindow: model.contextWindow,
-    maxTokens: model.maxTokens,
-    input: [...model.input],
-    reasoningEfforts: efforts.length === 0 ? false
-      : Object.fromEntries(efforts.map(effort => [effort, effort])),
+export type NativeModelSyncRouteApiPlan =
+  | { readonly state: 'ready'; readonly changed: false }
+  | { readonly state: 'ready'; readonly changed: true; readonly api: AccountModelApi }
+  | {
+    readonly state: 'blocked'
+    readonly code: 'NATIVE_MODEL_SYNC_ROUTE_API_UNPROVEN' | 'NATIVE_MODEL_SYNC_ROUTE_API_CONFLICT'
+    readonly changed: false
   }
+
+export function planNativeModelSyncRouteApi(input: {
+  readonly accountModels: readonly AccountModelDescriptor[]
+  readonly models: readonly NativeModelProfile[]
+  readonly currentApi: string | undefined
+  readonly nativeCatalog: readonly NativeCatalogModel[]
+}): NativeModelSyncRouteApiPlan {
+  const accountById = new Map(input.accountModels.map(model => [model.id, model]))
+  const nativeById = new Map(input.nativeCatalog.map(model => [model.id, model]))
+  const foundModels = input.models.map(({ id }) => accountById.get(id))
+  if (foundModels.length === 0 || foundModels.some(model => model === undefined)) {
+    return { state: 'blocked', code: 'NATIVE_MODEL_SYNC_ROUTE_API_UNPROVEN', changed: false }
+  }
+  const targetModels = foundModels.filter((model): model is AccountModelDescriptor => model !== undefined)
+
+  if (input.currentApi !== undefined) {
+    if (targetModels.some(model => model.api !== input.currentApi)
+      || input.models.some(({ id }) => {
+        const native = nativeById.get(id)
+        return native !== undefined && native.api !== input.currentApi
+      })) {
+      return { state: 'blocked', code: 'NATIVE_MODEL_SYNC_ROUTE_API_CONFLICT', changed: false }
+    }
+    return { state: 'ready', changed: false }
+  }
+
+  const missingNativeModel = input.models.some(({ id }) => !nativeById.has(id))
+  if (!missingNativeModel) return { state: 'ready', changed: false }
+
+  const apis = new Set(targetModels.map(model => model.api))
+  if (apis.size !== 1) return { state: 'blocked', code: 'NATIVE_MODEL_SYNC_ROUTE_API_UNPROVEN', changed: false }
+  const api = targetModels[0]?.api
+  if (api === undefined) return { state: 'blocked', code: 'NATIVE_MODEL_SYNC_ROUTE_API_UNPROVEN', changed: false }
+  if (input.models.some(({ id }) => {
+    const native = nativeById.get(id)
+    return native !== undefined && native.api !== api
+  })) {
+    return { state: 'blocked', code: 'NATIVE_MODEL_SYNC_ROUTE_API_CONFLICT', changed: false }
+  }
+  return { state: 'ready', api, changed: true }
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
@@ -71,30 +97,16 @@ export function emptyNativeCompatibility(value: unknown, depth = 0): boolean {
 }
 
 export function matchesNativeModelProfile(left: Readonly<Record<string, unknown>>, right: NativeModelProfile): boolean {
-  const leftInput = left.input
-  const leftEfforts = left.reasoningEfforts
-  const rightEfforts = right.reasoningEfforts
-  const leftKeys = Object.keys(left).filter(key => key !== 'compat' || !emptyNativeCompatibility(left.compat)).sort()
-  const rightKeys = Object.keys(right).sort()
-  const effortsMatch = leftEfforts === false && rightEfforts === false
-    || isRecord(leftEfforts) && isRecord(rightEfforts)
-      && Object.keys(leftEfforts).length === Object.keys(rightEfforts).length
-      && Object.entries(rightEfforts).every(([key, value]) => leftEfforts[key] === value)
-  return leftKeys.length === rightKeys.length && rightKeys.every((key, index) => leftKeys[index] === key)
-    && left.id === right.id && left.name === right.name
-    && left.contextWindow === right.contextWindow && left.maxTokens === right.maxTokens
-    && Array.isArray(leftInput) && leftInput.length === right.input.length
-    && right.input.every((value, index) => leftInput[index] === value)
-    && effortsMatch
+  return left.id === right.id && Object.keys(left).every(key => key === 'id'
+    || key === 'compat' && emptyNativeCompatibility(left.compat)
+    || key === 'input' && Array.isArray(left.input) && left.input.length === 0)
 }
 
-/** Build a safe one-protocol native model snapshot; unsupported metadata is reported, never guessed. */
+/** Submit enabled account IDs; native configuration owns definitions and validation. */
 export function planNativeModelSync(input: NativeModelSyncInput): NativeModelSyncPreview {
   if (input.nativeCatalog.length > 512) throw new Error('NATIVE_MODEL_SYNC_SETTINGS_INVALID')
   const staticById = new Map(input.nativeCatalog.map(model => [model.id, model]))
   if (staticById.size !== input.nativeCatalog.length) throw new Error('NATIVE_MODEL_SYNC_SETTINGS_INVALID')
-  const catalogApis = new Set(input.nativeCatalog.map(model => model.api))
-  const catalogApi = catalogApis.size === 1 ? [...catalogApis][0] : undefined
   const currentById = new Map<string, Readonly<Record<string, unknown>>>()
   const currentEntries = input.currentModelsUseCatalog
     ? input.nativeCatalog.map(({ id }) => ({ id }))
@@ -107,69 +119,8 @@ export function planNativeModelSync(input: NativeModelSyncInput): NativeModelSyn
     currentById.set(entry.id, entry)
   }
 
-  const models: NativeModelProfile[] = []
-  const skipped: { id: string; code: NativeModelSyncSkipCode }[] = []
   const enabled = input.accountModels.filter(model => !input.excludedModelIds.has(model.id))
-  for (const model of enabled) {
-    const nativeModel = staticById.get(model.id)
-    const nativeApi = input.routeApi ?? nativeModel?.api ?? catalogApi
-    if (nativeApi === undefined) {
-      skipped.push({ id: model.id, code: 'NATIVE_API_UNAVAILABLE' })
-      continue
-    }
-    if (nativeApi !== model.api) {
-      skipped.push({ id: model.id, code: 'NATIVE_API_MISMATCH' })
-      continue
-    }
-    if (nativeModel !== undefined && nativeModel.api !== nativeApi) {
-      skipped.push({ id: model.id, code: 'NATIVE_INHERITED_API_MISMATCH' })
-      continue
-    }
-    if (model.evidence.contextWindowSource !== 'max_context_window_tokens') {
-      skipped.push({ id: model.id, code: 'NATIVE_CONTEXT_LIMIT_UNKNOWN' })
-      continue
-    }
-    if (model.maxInputTokens === undefined) {
-      skipped.push({ id: model.id, code: 'NATIVE_INPUT_LIMIT_UNKNOWN' })
-      continue
-    }
-    if (model.maxInputTokens < model.contextWindow) {
-      skipped.push({ id: model.id, code: 'NATIVE_INPUT_LIMIT_UNSUPPORTED' })
-      continue
-    }
-    if (model.evidence.visionSupportKnown !== true) {
-      skipped.push({ id: model.id, code: 'NATIVE_VISION_SUPPORT_UNKNOWN' })
-      continue
-    }
-    if (model.input.includes('image')) {
-      const supported = model.evidence.visionMediaTypes
-      if (supported === undefined || !Object.keys(nativeImageMediaTypes).every(type => supported.includes(type))) {
-        skipped.push({ id: model.id, code: supported === undefined
-          ? 'NATIVE_VISION_MEDIA_TYPES_UNKNOWN' : 'NATIVE_VISION_MEDIA_TYPES_UNSUPPORTED' })
-        continue
-      }
-    }
-    const reasoning = model.reasoning
-    if (reasoning.advertisedEfforts.length === 0 && model.evidence.reasoningEffortsKnown !== true) {
-      skipped.push({ id: model.id, code: 'NATIVE_REASONING_UNKNOWN' })
-      continue
-    }
-    if (reasoning.unmappedEfforts.length > 0 || reasoning.adaptiveThinking === true
-      || reasoning.minThinkingBudget !== undefined || reasoning.maxThinkingBudget !== undefined
-      || reasoning.advertisedEfforts.length > 0 && reasoning.advertisedEfforts.every(effort => effort === 'off')
-      || model.api !== 'openai-responses' && reasoning.advertisedEfforts.length > 0
-      || input.routeReasoning !== undefined && !(reasoning.advertisedEfforts.length === 0
-        ? input.routeReasoning === 'off' : input.routeReasoning !== 'off' && reasoning.advertisedEfforts.includes(input.routeReasoning))) {
-      skipped.push({ id: model.id, code: 'NATIVE_REASONING_UNSUPPORTED' })
-      continue
-    }
-    // Core's non-Responses defaults differ from the managed adapter when no native entry exists.
-    if (nativeModel === undefined && model.api !== 'openai-responses') {
-      skipped.push({ id: model.id, code: 'NATIVE_COMPATIBILITY_UNPROVEN' })
-      continue
-    }
-    models.push(profileFor(model))
-  }
+  const models = enabled.map(({ id }) => ({ id }))
 
   const targetById = new Map(models.map(model => [model.id, model]))
   const addedIds = models.filter(model => !currentById.has(model.id)).map(model => model.id)
@@ -182,10 +133,11 @@ export function planNativeModelSync(input: NativeModelSyncInput): NativeModelSyn
     enabledCount: enabled.length,
     syncableCount: models.length,
     models,
-    outputTokenDefaults: models.map(({ id, maxTokens }) => ({ id, maxTokens })),
+    outputTokenDefaults: [],
     addedIds,
     removedIds,
     updatedIds,
-    skipped,
+    skipped: [],
+    nativeCatalogMissingIds: models.filter(model => !staticById.has(model.id)).map(model => model.id),
   }
 }

@@ -327,6 +327,8 @@ function json(bytes) {
   catch { throw new AcceptanceError('ACCEPTANCE_INVALID') }
 }
 
+export { readBounded as readAcceptanceFile, json as parseAcceptanceJson }
+
 function cleanHead(root) {
   const git = args => {
     const result = spawnSync('git', ['--no-optional-locks', '-c', 'core.fsmonitor=false', ...args], {

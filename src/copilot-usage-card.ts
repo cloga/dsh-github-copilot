@@ -1,8 +1,6 @@
 import { createElement as h, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { AccountDropdown } from './account-dropdown.ts'
 import { copilotIdentityLabel } from './copilot-login-environment.ts'
-import { createClientDiagnosticsScope } from './diagnostics-client.ts'
-import { diagnosticsReason, diagnosticsOutcome } from './diagnostics-types.ts'
 import type { ChangeEvent, CSSProperties, ReactElement } from 'react'
 import { nativeCompactButtonStyle, nativeSettingsStyle, nativeSettingsCss } from './native-settings-style.ts'
 import { CopilotUsageViewSchema } from './copilot-usage-remote.ts'
@@ -145,8 +143,6 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
   const closeButton = useRef<HTMLButtonElement>(null)
   const switchButton = useRef<HTMLButtonElement>(null)
   const followCheckbox = useRef<HTMLInputElement>(null)
-  const diagnostics = useRef(createClientDiagnosticsScope())
-  useEffect(() => () => diagnostics.current.close(), [props.remote, props.contextKey, props.sessionAccount])
   const lifecycle = useRef<{
     active: boolean; generation: number; busy: boolean; save?: symbol; confirmation?: symbol; controller?: AbortController
   }>({ active: false, generation: 0, busy: false })
@@ -176,7 +172,6 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
     if (!owner.active || owner.busy || owner.save !== undefined || accountPresentationChanges.pending()
       || props.remote === undefined || document.visibilityState === 'hidden') return
     owner.busy = true
-    diagnostics.current.close()
     const generation = ++owner.generation
     const current = () => owner.active && owner.generation === generation
     setBusy(true)
@@ -187,17 +182,9 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
         catch { return undefined }
       })() : undefined
       const identityOperation = props.accountsRemote === undefined ? undefined : (async () => {
-        const observed = diagnostics.current.begin('identity-read')
         try {
-          const result = await (force ? props.accountsRemote!.refreshIdentity() : props.accountsRemote!.ensureIdentity())
-          observed?.stage('response-received')
-          if (!current()) { observed?.finish('interrupted', 'unknown'); return result }
-          const parsed = result.ok ? accountsViewFrom(result.value) : undefined
-          const reason = parsed?.state === 'error' ? diagnosticsReason(new Error(parsed.diagnostic)) : 'none'
-          observed?.finish(parsed === undefined ? 'failed' : reason === 'none' ? 'success' : diagnosticsOutcome(reason),
-            parsed === undefined ? result.ok ? 'decode-invalid' : 'rpc-unavailable' : reason)
-          return result
-        } catch { observed?.finish('failed', 'rpc-unavailable'); return undefined }
+          return await (force ? props.accountsRemote!.refreshIdentity() : props.accountsRemote!.ensureIdentity())
+        } catch { return undefined }
       })()
       const [result, identityResult, sessionResult] = await Promise.all([
         force ? props.remote.refresh() : props.remote.get(),
@@ -314,7 +301,6 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
     setBusy(false)
     setSavingAccount(true)
     setAccountSaveFailed(false)
-    let observed: ReturnType<ReturnType<typeof createClientDiagnosticsScope>['begin']>
     try {
       if (props.beforeAccountChange !== undefined) {
         owner.confirmation = save
@@ -340,20 +326,14 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
         owner.confirmation = undefined
         setConfirmingAccount(false)
       }
-      observed = diagnostics.current.begin(accountId === null ? 'account-session-inherit' : 'account-session-select')
       const result = await props.sessionAccount.set(accountId, revision)
-      observed?.stage('response-received')
-      if (!owner.active || owner.generation !== generation) { observed?.finish('interrupted', 'unknown'); return }
+      if (!owner.active || owner.generation !== generation) return
       const parsed = result.ok ? SessionAccountViewSchema.safeParse(result.value) : undefined
       if (!parsed?.success) {
-        observed?.finish('failed', result.ok ? 'decode-invalid' : 'rpc-unavailable')
         setAccountSaveFailed(true); setView(undefined); setAccounts(undefined); setSessionAccount(undefined)
         return
       }
       setSessionAccount(parsed.data)
-      observed?.stage('client-settled')
-      const reason = parsed.data.accounts.state === 'error' ? diagnosticsReason(new Error(parsed.data.accounts.diagnostic)) : 'none'
-      observed?.finish(parsed.data.accounts.state === 'error' ? diagnosticsOutcome(reason) : 'success', reason)
       setAccounts(parsed.data.accounts)
       setAccountFailed(false)
       setFailed(false)
@@ -366,7 +346,6 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
       setRestoreAccountFocus(focus)
       if (!retainedQuota) void load(false, parsed.data)
     } catch {
-      observed?.finish('failed', 'rpc-unavailable')
       if (owner.active && owner.generation === generation) {
         setAccountSaveFailed(true); setView(undefined); setAccounts(undefined); setSessionAccount(undefined)
       }

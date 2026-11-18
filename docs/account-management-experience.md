@@ -1,5 +1,10 @@
 # Copilot account management and continuation experience
 
+> The managed `github-copilot-preview` route and its continuation controls are
+> retired in production. The historical Models new-Session default is no longer
+> shown; existing settings and histories are preserved. Native account
+> switching is profile-wide.
+
 Approved account switching reference: [dropdown mock](./mockups/copilot-account-dropdown.html).
 The [Chat account selection mock](./mockups/copilot-chat-account-selection.html)
 supersedes its Chat menu: only configured accounts appear in the list, with
@@ -59,8 +64,8 @@ retried by enabling it.
 See the [synthetic composer capture](./images/copilot-session-continuation.png);
 it shows the control's appearance, not a live Session or policy read.
 
-The separate **New Session continuation default** is managed in Models under
-GitHub Copilot → Manage. Full account management belongs in Models; show a
+Earlier releases placed the separate **New Session continuation default** in
+Models; it is no longer shown. Full account management belongs in Models; show a
 "Manage accounts and models" entry only with a working public navigation
 callback. Do not show a disabled link or unavailable-navigation paragraph.
 Opening and closing Settings must not discard the composer draft or change the
@@ -75,7 +80,7 @@ Copilot contribution shows current default identity, model status, cache age and
 one Manage button. Manage expands:
 
 - Account management: current default account, Switch dropdown/add, identity
-  refresh, reauthorization, guarded removal, and new-Session continuation default.
+  refresh, reauthorization, and guarded removal.
 - Model preferences: cross-account shared exclusions, model search and filters,
   account-specific availability, discovery diagnostics and model refresh.
 

@@ -98,9 +98,6 @@ jobs:
       - name: Install native account persistence verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-credentials-local...' --filter '@deepseek-ai/dsh-app-boot...' --filter '@deepseek-ai/dsh-config-editor...' --filter '@deepseek-ai/dsh-settings...' --filter '@deepseek-ai/dsh-authorization...'
-      - name: Install native diagnostic storage verification closure
-        working-directory: dsh-upstream
-        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-storage-domain...' --filter '@deepseek-ai/dsh-storage-json...'
       - name: Install the official pinned system addon outside both source trees
         shell: bash
         run: npm install --prefix "$RUNNER_TEMP/copilot-native-addon" --ignore-scripts --no-save --no-audit --fund=false --registry=https://registry.npmjs.org @deepseek-ai/node-addon-system@0.1.2
@@ -114,7 +111,7 @@ jobs:
         shell: bash
         run: |
           node node_modules/vitest/vitest.mjs run --config "$RUNNER_TEMP/copilot-tagged-core/vitest.config.mts" --reporter=default --reporter=json --outputFile "$RUNNER_TEMP/copilot-tagged-reviewer-results.json"
-          node -e "const r=require(process.argv[1]); const s=r.testResults.find(s=>s.name.endsWith('auto-review-copilot-core.fixture.ts')); if(!s||s.assertionResults.length!==34||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected all 34 native reviewer tests, none skipped'); console.log('Verified 34 executed tagged-source reviewer tests')" "$RUNNER_TEMP/copilot-tagged-reviewer-results.json"
+          node -e "const r=require(process.argv[1]); const s=r.testResults.find(s=>s.name.endsWith('auto-review-copilot-core.fixture.ts')); if(!s||s.assertionResults.length!==37||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected all 37 native reviewer/account tests, none skipped'); console.log('Verified 37 executed tagged-source reviewer/account tests')" "$RUNNER_TEMP/copilot-tagged-reviewer-results.json"
           node -e "const r=require(process.argv[1]); for (const [name,count] of [['subagent-copilot-core.fixture.ts',1],['native-subagent-copilot-core.fixture.ts',3],['native-model-sync-core.fixture.ts',1]]) { const s=r.testResults.find(s=>s.name.endsWith('/'+name)||s.name.endsWith('\\\\'+name)); if(!s||s.assertionResults.length!==count||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected '+count+' '+name+' tests to execute without skips'); } console.log('Verified Copilot subagent and native model sync fixtures')" "$RUNNER_TEMP/copilot-tagged-reviewer-results.json"
       - run: pnpm verify
       - run: mkdir artifacts
@@ -198,10 +195,12 @@ jobs:
           pnpm exec tsdown
           node node_modules/vitest/vitest.mjs run --config vitest.config.ts
           node node_modules/vitest/vitest.mjs run tests/copilot-stream-liveness.spec.ts tests/copilot-stream-adapter.spec.ts tests/config.spec.ts tests/preview-provider.spec.ts tests/pi-provider-bridge.spec.ts tests/preview-route.spec.ts tests/account-model-auth.spec.ts tests/published-core.spec.ts tests/single-route.spec.ts tests/search-routing.spec.ts tests/routed-web.spec.ts tests/deepseek-search-fallback.spec.ts tests/context-usage.spec.ts tests/context-evidence.spec.ts tests/context-evidence-runtime.spec.ts tests/context-evidence-ui.spec.ts tests/background-compaction.spec.ts tests/manual-compaction-recovery.spec.ts tests/fixtures/auto-review-copilot-core.fixture.ts
-          node node_modules/vitest/vitest.mjs run --config vitest.diagnostics-published.config.ts
+          node node_modules/vitest/vitest.mjs run tests/loader-composition.spec.ts tests/client-search-inject.spec.ts tests/remote-codec.spec.ts
           node node_modules/vitest/vitest.mjs run --config vitest.candidate-published.config.ts
           node node_modules/vitest/vitest.mjs run --config vitest.auto-review-published.config.ts --reporter=default --reporter=json --outputFile reviewer-results.json
-          node -e "const r=require('./reviewer-results.json'); const s=r.testResults.find(s=>s.name.endsWith('auto-review-copilot-core.fixture.ts')); if(!s||s.assertionResults.length!==34||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected all 34 native reviewer tests, none skipped'); console.log('Verified 34 executed published-artifact reviewer tests')"
+          node -e "const r=require('./reviewer-results.json'); const s=r.testResults.find(s=>s.name.endsWith('auto-review-copilot-core.fixture.ts')); if(!s||s.assertionResults.length!==37||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected all 37 native reviewer/account tests, none skipped'); console.log('Verified 37 executed published-artifact reviewer/account tests')"
+          node node_modules/vitest/vitest.mjs run tests/native-account-coexistence.spec.ts --reporter=default --reporter=json --outputFile account-marker-results.json
+          node -e "const r=require('./account-marker-results.json'); const s=r.testResults.find(s=>s.name.endsWith('native-account-coexistence.spec.ts')); if(!s||s.assertionResults.length!==1||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected the published native account marker test to execute without skips'); console.log('Verified native account evidence across published LLM marker instances')"
 
   release-ready:
     name: release-ready
@@ -238,7 +237,8 @@ jobs:
 
   release:
     needs: [release-ready]
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.release-ready.result == 'success' }}
+    # A PR-only ancestor is skipped on pushes; keep the explicit green gate without implicit skip propagation.
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.release-ready.result == 'success' }}
     permissions:
       contents: write
       id-token: write

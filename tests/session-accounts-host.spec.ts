@@ -1,7 +1,14 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { CopilotAccountsHost } from '../src/copilot-accounts-host.ts'
+import { GITHUB_COPILOT_CREDENTIAL_KEY } from '../src/copilot-identity.ts'
+import { captureNativeCopilot } from '../src/native-copilot-access.ts'
 import { SessionAccountsHost } from '../src/session-accounts-host.ts'
+
+vi.mock('../src/native-copilot-access.ts', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../src/native-copilot-access.ts')>(),
+  captureNativeCopilot: vi.fn(),
+}))
 
 const A = '11111111-1111-4111-8111-111111111111'
 const B = '22222222-2222-4222-8222-222222222222'
@@ -17,20 +24,180 @@ function fixture() {
     value.sessionAccounts = operations[0]!.value
     revision++
   })
+  const readRecord = vi.fn(async (_key: string): Promise<{
+    kind: 'grant'; payload: { type: 'oauth'; refresh: string; access: string; expires: number }
+  } | undefined> => { throw new Error('Preference operations must not read credentials') })
   ctx.provide('settings', { describe: () => [{ ns: 'github-copilot', revision, value }], mutate })
   ctx.provide('credentials', {
     listRecords: async () => [...records].map(id => ({ key: `github-copilot/account-${id}`, kind: 'grant' })),
-    readRecord: async () => { throw new Error('Preference operations must not read credentials') },
+    readRecord,
+    modifyRecord: async () => { throw new Error('Unexpected credential mutation') },
+    deleteRecord: async () => { throw new Error('Unexpected credential deletion') },
   })
   const host = new CopilotAccountsHost(ctx, { routeDiagnostic: () => undefined })
   vi.spyOn(host, 'ensureIdentityFor').mockImplementation(accountId => host.viewForAccount(accountId))
   ctx.provide('githubCopilotAccounts', { host })
   const owner = new SessionAccountsHost(ctx)
   ctx.provide('githubCopilotSessionAccounts', owner)
-  return { ctx, host, owner, value, mutate, records, revision: () => revision,
+  return { ctx, host, owner, value, mutate, records, readRecord, revision: () => revision,
     selectGlobal(id: string) { value.activeAccountId = id; revision++; host.selectionChanged() } }
 }
+
+function nativeProof(f: ReturnType<typeof fixture>, matches: Promise<boolean>) {
+  vi.mocked(captureNativeCopilot).mockResolvedValue({
+    namespace: 'llm-pi-ai',
+    models: new Map([['native-model', { id: 'native-model', api: 'openai-responses' }]]),
+    accountModelIds: new Set(['native-model']),
+    assertCurrent: () => {},
+  })
+  f.readRecord.mockResolvedValue({ kind: 'grant', payload: {
+    type: 'oauth', refresh: 'synthetic-refresh', access: 'synthetic-access', expires: Date.now() + 60_000,
+  } })
+  return vi.spyOn(f.host, 'nativeCredentialMatches').mockReturnValue(matches)
+}
+
 describe('Session account Host admission and CAS', () => {
+  it('records native evidence only after matching account proof and delivery', async () => {
+    const f = fixture(), agent = { session: { id: 'a' } }, signal = new AbortController().signal
+    nativeProof(f, Promise.resolve(true))
+    f.owner.admitNative(agent, 1, signal, A, 'native-model')
+    expect(f.owner.turns.evidence(agent.session, 1)).toBeUndefined()
+    f.owner.recordNativeRequest(signal, 'other-session', 'native-model')
+    f.owner.recordNativeRequest(signal, 'a', 'other-model')
+    await vi.waitFor(() => expect(f.host.ensureIdentityFor).toHaveBeenCalledOnce())
+    expect(f.owner.turns.evidence(agent.session, 1)).toBeUndefined()
+    f.owner.recordNativeRequest(signal, 'a', 'native-model')
+    await vi.waitFor(() => expect(f.owner.turns.evidence(agent.session, 1)).toMatchObject({ accountId: A, source: 'global' }))
+    f.owner.dispose(); f.host.dispose()
+  })
+  it('records an explicitly configured native model without treating it as protocol-qualified', async () => {
+    const f = fixture(), agent = { session: { id: 'a' } }, signal = new AbortController().signal
+    nativeProof(f, Promise.resolve(true))
+    vi.mocked(captureNativeCopilot).mockResolvedValue({
+      namespace: 'llm-pi-ai', models: new Map(), accountModelIds: new Set(['native-model']), assertCurrent: () => {},
+    })
+    f.owner.admitNative(agent, 1, signal, A, 'native-model')
+    f.owner.recordNativeRequest(signal, 'a', 'native-model')
+    await vi.waitFor(() => expect(f.owner.turns.evidence(agent.session, 1)).toMatchObject({ accountId: A, source: 'global' }))
+    f.owner.dispose(); f.host.dispose()
+  })
+  it('leaves native evidence unknown when the configured model ID cannot be proven', async () => {
+    const f = fixture(), agent = { session: { id: 'a' } }, signal = new AbortController().signal
+    nativeProof(f, Promise.resolve(true))
+    vi.mocked(captureNativeCopilot).mockResolvedValue({
+      namespace: 'llm-pi-ai',
+      models: new Map([['native-model', { id: 'native-model', api: 'openai-responses' }]]),
+      accountModelIds: undefined,
+      assertCurrent: () => {},
+    })
+    const warn = vi.spyOn(f.ctx.logger, 'warn')
+    f.owner.admitNative(agent, 1, signal, A, 'native-model')
+    f.owner.recordNativeRequest(signal, 'a', 'native-model')
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledWith('[github-copilot] %s', 'COPILOT_NATIVE_ACCOUNT_EVIDENCE_UNPROVEN'))
+    expect(f.owner.turns.evidence(agent.session, 1)).toBeUndefined()
+    f.owner.dispose(); f.host.dispose()
+  })
+  it('keeps native evidence separate from managed account admission and identity', async () => {
+    const f = fixture(), agent = { session: { id: 'a' } }, signal = new AbortController().signal
+    f.value.sessionAccounts = [{ sessionId: 'a', accountId: B }]
+    nativeProof(f, Promise.resolve(true))
+    vi.spyOn(f.host, 'cachedIdentity').mockImplementation(accountId =>
+      accountId === B ? { login: 'bob', userId: 2 } : undefined)
+    vi.mocked(f.host.ensureIdentityFor).mockImplementation(() => new Promise(() => {}))
+    f.owner.admitNative(agent, 1, signal, A, 'native-model')
+    f.owner.recordNativeRequest(signal, 'a', 'native-model')
+    await vi.waitFor(() => expect(f.owner.turns.evidence(agent.session, 1)).toMatchObject({ accountId: A, source: 'global' }))
+    expect(f.owner.turns.current(agent.session)).toBeUndefined()
+    expect(f.owner.admit(agent, 1, signal).accountId).toBe(B)
+    f.owner.recordRequest(signal)
+    expect(f.owner.turns.evidence(agent.session, 1)?.identity).toBeUndefined()
+    f.owner.credentialChanged(GITHUB_COPILOT_CREDENTIAL_KEY)
+    expect(f.owner.requestBinding(signal).accountId).toBe(B)
+    f.owner.dispose(); f.host.dispose()
+  })
+  it('leaves native evidence unknown when adapter ownership cannot be proven', async () => {
+    const f = fixture(), agent = { session: { id: 'a' } }, signal = new AbortController().signal
+    nativeProof(f, Promise.resolve(true))
+    vi.mocked(captureNativeCopilot).mockResolvedValue(undefined)
+    const warn = vi.spyOn(f.ctx.logger, 'warn')
+    f.owner.admitNative(agent, 1, signal, A, 'native-model')
+    f.owner.recordNativeRequest(signal, 'a', 'native-model')
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledWith('[github-copilot] %s', 'COPILOT_NATIVE_ACCOUNT_EVIDENCE_UNPROVEN'))
+    expect(f.owner.turns.evidence(agent.session, 1)).toBeUndefined()
+    f.owner.dispose(); f.host.dispose()
+  })
+  it('leaves native evidence unknown when the selected and canonical accounts differ', async () => {
+    const f = fixture(), agent = { session: { id: 'a' } }, signal = new AbortController().signal
+    const matches = nativeProof(f, Promise.resolve(false))
+    const warn = vi.spyOn(f.ctx.logger, 'warn')
+    f.owner.admitNative(agent, 1, signal, A, 'native-model')
+    f.owner.recordNativeRequest(signal, 'a', 'native-model')
+    await vi.waitFor(() => expect(matches).toHaveBeenCalledOnce())
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledWith('[github-copilot] %s', 'COPILOT_NATIVE_ACCOUNT_EVIDENCE_MISMATCH'))
+    expect(f.owner.turns.evidence(agent.session, 1)).toBeUndefined()
+    expect(f.owner.turns.current(agent.session)).toBeUndefined()
+    f.owner.dispose(); f.host.dispose()
+  })
+  it.each([
+    ['canonical change', GITHUB_COPILOT_CREDENTIAL_KEY, false],
+    ['selected account change', `github-copilot/account-${A}`, false],
+    ['unrelated account change', `github-copilot/account-${B}`, true],
+  ])('fences pending native evidence on %s', async (_label, key, retained) => {
+    const f = fixture(), agent = { session: { id: 'a' } }, signal = new AbortController().signal
+    let finish!: (value: boolean) => void
+    const pending = new Promise<boolean>(resolve => { finish = resolve })
+    const matches = nativeProof(f, pending)
+    f.owner.admitNative(agent, 1, signal, A, 'native-model')
+    f.owner.recordNativeRequest(signal, 'a', 'native-model')
+    await vi.waitFor(() => expect(matches).toHaveBeenCalledOnce())
+    f.owner.credentialChanged(key)
+    finish(true)
+    if (retained) {
+      await vi.waitFor(() => expect(f.owner.turns.evidence(agent.session, 1)).toMatchObject({ accountId: A }))
+    } else {
+      await pending
+      await Promise.resolve()
+      expect(f.owner.turns.evidence(agent.session, 1)).toBeUndefined()
+      expect(f.owner.turns.current(agent.session)).toBeUndefined()
+    }
+    f.owner.dispose(); f.host.dispose()
+  })
+  it.each(['credential change', 'route change'])('fences qualified native evidence on %s before delivery', async change => {
+    const f = fixture(), agent = { session: { id: 'a' } }, signal = new AbortController().signal
+    nativeProof(f, Promise.resolve(true))
+    const assertCurrent = vi.fn()
+    vi.mocked(captureNativeCopilot).mockResolvedValue({
+      namespace: 'llm-pi-ai',
+      models: new Map([['native-model', { id: 'native-model', api: 'openai-responses' }]]),
+      accountModelIds: new Set(['native-model']),
+      assertCurrent,
+    })
+    f.owner.admitNative(agent, 1, signal, A, 'native-model')
+    await vi.waitFor(() => expect(f.host.ensureIdentityFor).toHaveBeenCalledOnce())
+    if (change === 'credential change') f.owner.credentialChanged(GITHUB_COPILOT_CREDENTIAL_KEY)
+    else assertCurrent.mockImplementation(() => { throw new Error('route changed') })
+    f.owner.recordNativeRequest(signal, 'a', 'native-model')
+    expect(f.owner.turns.evidence(agent.session, 1)).toBeUndefined()
+    f.owner.dispose(); f.host.dispose()
+  })
+  it.each(['turn end', 'disposal', 'abort'])('ignores native proof after %s', async settlement => {
+    const f = fixture(), agent = { session: { id: 'a' } }, controller = new AbortController(), signal = controller.signal
+    let finish!: (value: boolean) => void
+    const pending = new Promise<boolean>(resolve => { finish = resolve })
+    const matches = nativeProof(f, pending)
+    f.owner.admitNative(agent, 1, signal, A, 'native-model')
+    f.owner.recordNativeRequest(signal, 'a', 'native-model')
+    await vi.waitFor(() => expect(matches).toHaveBeenCalledOnce())
+    if (settlement === 'turn end') f.owner.end(agent.session, 1)
+    else if (settlement === 'disposal') f.owner.dispose()
+    else controller.abort()
+    finish(true)
+    await pending
+    await Promise.resolve()
+    expect(f.owner.turns.evidence(agent.session, 1)).toBeUndefined()
+    expect(f.owner.turns.current(agent.session)).toBeUndefined()
+    f.owner.dispose(); f.host.dispose()
+  })
   it('retains admission identity across cache invalidation without querying or recording before delivery', () => {
     const f = fixture(), agent = { session: { id: 'a' } }, signal = new AbortController().signal
     const cached = vi.spyOn(f.host, 'cachedIdentity').mockReturnValue({ login: 'alice', userId: 1 })

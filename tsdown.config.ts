@@ -36,8 +36,7 @@ function clientBundle(id: string, entry: string): UserConfig {
 export default defineConfig([
   {
     entry: ['lib/types/index.js', 'lib/types/routed-web.js', 'lib/types/web-delegate.js',
-      'lib/types/manual-compaction-recovery.js', 'lib/types/diagnostics-analysis.js',
-      'lib/types/diagnostics-analysis-io.js'],
+      'lib/types/manual-compaction-recovery.js'],
     outDir: 'lib',
     format: ['esm'],
     platform: 'node',

@@ -73,58 +73,70 @@ After the exact compatible release is available and verified, download its
 original asset and checksum in an empty directory:
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.14.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.14.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.14.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.21.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.21.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.21.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 For the `web` profile, install the same Release asset:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.14.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.14.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.21.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.21.dsh.0.2.2.rc.3.tgz
 ```
 
 Choose the intended profile explicitly. Then:
 
-1. In **Settings → Models → GitHub Copilot**, sign in with GitHub.
-2. Choose an account-available Copilot model in the native DSH model picker.
-3. For subagents, use the native DSH model selection flow. Compatibility is
+1. In **Settings → Models**, add the native GitHub Copilot provider if it is
+   not already configured; the plugin does not create that profile.
+2. Use the GitHub Copilot account panel to sign in with GitHub.
+3. Choose an account-available Copilot model in the native DSH model picker.
+4. For subagents, use the native DSH model selection flow. Compatibility is
    limited to account-advertised and tested protocol capabilities.
 
 No manually defined Copilot model, pasted token, external gateway, or
 `copilot2api` service is required. Account and model availability are separate:
 successful sign-in does not guarantee every model or capability is available.
-The plugin's account-discovered models and capabilities apply to the
-`github-copilot-preview` route. DSH's native `github-copilot` route uses its
-own bundled or configured catalog; the two routes do not automatically share
-model discovery.
+The plugin does not register a second `github-copilot-preview` model provider.
+Account-discovered model metadata is available for an explicitly reviewed sync
+into the native `github-copilot` model list; discovery alone does not change the
+native catalog or model selection.
 
-To copy enabled models from the verified account used by the native provider into an existing
+To select enabled model IDs from the verified account used by the native provider in an existing
 native provider, open **Manage → Model preferences**, review the displayed
-additions, updates, removals, skipped models and per-request output defaults,
+additions, updates, removals and any IDs absent from the native catalog,
 then choose **Sync models**. Preparing the display uses the current verified
 account snapshot without forcing discovery; if it is unavailable, use
-**Refresh models**. This one-time snapshot replaces only
-`llm-pi-ai.providers.github-copilot.models` with Settings CAS and readback.
-The nonempty saved list replaces the native built-in catalog and remains after
-the plugin is unloaded or uninstalled. Copying model settings does not transfer
-the managed route's permission-field filtering to native requests, nor prove
-that supplier calls will succeed. Neither route checks the projected image MIME
-against the account model's format list before dispatch.
-The managed route also uses the native Goal update schema without rewriting it.
-Models with unproven or incompatible native catalog protocols, unknown or
-narrower server input caps, unknown context or vision support, or unknown or
-unsupported reasoning controls are skipped rather than guessed.
-New Completions and Anthropic models without a native catalog compatibility
-baseline are also skipped; catalog-backed models retain native compatibility.
-Image models are included only when the account explicitly supports all four
-native request formats: PNG, JPEG, WebP, and GIF. Custom native authentication,
+**Refresh models**. This one-time snapshot writes
+`llm-pi-ai.providers.github-copilot.models` with Settings CAS and readback. It
+may also set a missing route-wide API only under the verified conditions below.
+The submitted list contains all enabled account model IDs as `{ id }` references;
+it is not intersected with the installed native catalog. A successfully saved
+list remains after the plugin is unloaded or uninstalled. Capacities, protocols,
+image support and reasoning controls are resolved by the native adapter,
+not copied or certified from account metadata. Differences
+in account input limits, image formats or reasoning metadata no longer exclude
+a model from this submission. IDs absent from the native catalog are advisory,
+not skipped. If an enabled ID is absent and no route API is configured, the
+preview may propose a provider-wide API only when all enabled account models
+share the same verified protocol and every matching native catalog entry agrees.
+The preview explains that this API applies to the whole route, not just missing
+IDs. Existing route APIs are never overwritten; mixed, incomplete or conflicting
+evidence blocks the sync. The model list and an authorized API change are written
+together with Settings CAS and read back. Native validation remains authoritative;
+a rejected or uncertain write is not reported as successful. Check the saved
+settings before trying again.
+**Sync replaces existing per-model customizations, including configured output
+request defaults, with native definitions.** Review updated and removed entries
+before confirming. Other route-wide settings remain unchanged. This selects a
+model list; it does not prove supplier compatibility or enforce account-specific
+limits. Native requests retain DSH's transport, validation and error behavior.
+Custom native authentication,
 endpoints, headers, nonempty model overrides, or unproven route compatibility
 overrides block sync rather than changing those settings. An existing
 `compat.supportsStrictMode: false` is preserved when at least one synced
 Responses or Completions model supports that native override. An existing native default
-reasoning effort must also be supported by each synced model. Core uses each
-configured `maxTokens` as that model's per-request output default. The sync does
+reasoning effort is preserved for native resolution. ID-only entries do not add
+per-model `maxTokens` request defaults. The sync does
 not change credentials, select a model, alter history, or automatically follow
 later account changes.
 
@@ -136,8 +148,12 @@ OAuth grant as a saved account. In-progress requests are not redirected, and
 the operation does not change model selections, provider settings or history.
 Account switching does not change the native provider's bundled/configured
 model catalog, which is not guaranteed to filter models by account entitlement.
-The existing `github-copilot-preview` route remains a separate plugin-owned
-model route; it is not required for native account switching.
+The plugin does not add a separate Copilot model route. Existing
+`github-copilot-preview` selections are not migrated and may become unavailable;
+stored settings and conversation history remain unchanged. Legacy
+preview-only Session account overrides and continuation controls do not apply
+to native model calls. The old new-Session continuation default is no longer
+shown; existing settings are preserved.
 Starting the plugin or completing sign-in does not automatically repair the
 native provider's settings.
 The plugin registers optional `github-copilot-hosted` search in DSH's existing
@@ -174,12 +190,21 @@ The native route's quota and optional identity display use only the canonical OA
 provider names a credential, endpoint or nonempty headers override, or its configuration
 cannot be verified, quota is shown as unavailable rather than attributed to a
 different account. This is not proof of request-level billing attribution.
+Completed-turn Account evidence is also captured for the native provider, but
+only after an actual native stream chunk for that admitted request. It reflects
+the profile-wide account bound to the canonical credential, not a Session
+override, billing attribution or subagent rollup. A mismatched account,
+unproven native route or credential change before delivery leaves it unknown.
+Explicitly configured native model IDs can qualify for account evidence even
+when absent from the bundled catalog; this does not establish model support or
+qualify them for search or reviewer protocol compatibility.
+Evidence is Host-memory-only;
+older turns and turns missing after a restart or eviction remain unknown.
 Native context-incident diagnostics remain available without the optional
 managed continuation service; they do not replace DSH's context meter.
-Local diagnostics also offers separately opt-in, content-free logical
-observations for native Copilot streams and the optional Copilot search backend.
-They do not expose HTTP details or prove supplier receipt or execution.
-See [local diagnostics](./docs/plugin-diagnostics.md).
+The Local diagnostics feature has been removed. Existing diagnostic data and
+settings are left untouched; older plugin versions may resume collection if
+their saved switches remain enabled. See [retirement details](./docs/plugin-diagnostics.md).
 
 ### Other optional capabilities
 
@@ -189,9 +214,8 @@ See [local diagnostics](./docs/plugin-diagnostics.md).
   enrolled, and enabling it never sends or retries a message.
 - [Segmented compaction recovery](./docs/manual-compaction-recovery.md) requires
   explicit engine selection; installing the plugin does not replace Core's engine.
-- [Local diagnostics](./docs/plugin-diagnostics.md) and managed Responses gzip
-  are default-off; enabling diagnostics does not upload data. GitHub Enterprise
-  Cloud tenant login is supported, while GHES and Enterprise quota are not.
+- Managed Responses gzip is default-off. GitHub Enterprise Cloud tenant login
+  is supported, while GHES and Enterprise quota are not.
 
 ### Removing the enhancement
 
@@ -202,11 +226,11 @@ applied to the canonical credential slot. Removing the plugin is not signing
 out; explicit sign-out or removal of that authorization is a different action
 and can affect native login.
 
-Plugin-only model selections do not become native automatically. Before removal,
-explicitly select native models for Sessions/defaults using
-`github-copilot-preview`. If Web is set to `github-copilot-hosted`, select another
-available backend in native Web settings first. Removing the plugin does not
-rewrite Web settings: a retained missing backend produces
+Existing `github-copilot-preview` model selections are not migrated and may
+become unavailable; explicitly select a native model where needed. If Web is
+set to `github-copilot-hosted`, select another available backend in native Web
+settings before removing the plugin. Removing the plugin does not rewrite Web
+settings: a retained missing backend produces
 `WEB_PROVIDER_CONFIGURED_MISSING`, not an automatic fallback. Additional-account
 management and plugin-specific search require the plugin; the last selected
 native OAuth grant remains in DSH's canonical credential record.
@@ -227,6 +251,8 @@ The exact development target is in `deployment-baseline.json`; follow
 and package/release gates run in GitHub Actions. A successful local source
 check, synthetic fixture, release publication, profile installation, and loaded
 Desktop runtime are different evidence layers; report each accurately.
+The optional [offline autonomy evaluator](./docs/agent-autonomy-evaluation.md)
+analyzes explicitly supplied sanitized traces; it does not run or control agents.
 PRs declare documentation impact; agent or human reviewers still verify semantic
 accuracy and coverage. This adds no human-only approval gate. See
 [contributing](./CONTRIBUTING.md#change-workflow).

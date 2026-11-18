@@ -61,53 +61,66 @@ node scripts/select-core-release.mjs 0.2.2-rc.3
 精确兼容版本发布且通过验证后，在空目录下载原始制品并校验：
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.14.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.14.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.14.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.21.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.21.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.21.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 例如安装到 `web` profile：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.14.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.14.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.21.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.21.dsh.0.2.2.rc.3.tgz
 ```
 
 请明确选择目标 profile，然后：
 
-1. 打开**设置 → 模型 → GitHub Copilot**，使用 GitHub 登录。
-2. 在 DSH 原生模型选择器中选择该账号实际可用的 Copilot 模型。
-3. 子代理使用 DSH 原生模型选择流程；兼容范围以账号公布且经过测试的协议能力为准。
+1. 打开**设置 → 模型**；如果尚未配置原生 GitHub Copilot provider，请先添加。
+   插件不会自动创建此 profile。
+2. 在 GitHub Copilot 账号面板中使用 GitHub 登录。
+3. 在 DSH 原生模型选择器中选择该账号实际可用的 Copilot 模型。
+4. 子代理使用 DSH 原生模型选择流程；兼容范围以账号公布且经过测试的协议能力为准。
 
 无需手工定义 Copilot 模型、粘贴 token、使用外部网关或安装
 `copilot2api`。账号登录成功不代表所有模型及其能力都可用。
-插件自动发现的账号模型及能力适用于 `github-copilot-preview` 路线；DSH 原生
-`github-copilot` 路线使用自己的内置或用户配置目录，两条路线不会自动共享模型发现结果。
+插件不再注册第二个 `github-copilot-preview` 模型 provider。
+自动发现的账号模型元数据可用于显式审核后同步到原生 `github-copilot` 模型列表；
+仅发现元数据不会更改原生目录或模型选择。
 
-如需将原生 provider 所用的已验证账号的启用模型复制到已配置的原生 provider，请打开
-**Manage → Model preferences**，查看显示的新增、更新、移除、跳过项和每次请求的输出
-默认值，然后选择 **Sync models**。页面使用当前已验证的账号快照准备这些信息，不强制
+如需在已配置的原生 provider 中选择当前已验证账号的启用模型 ID，请打开
+**Manage → Model preferences**，查看显示的新增、更新、移除以及原生目录未收录的 ID，
+然后选择 **Sync models**。页面使用当前已验证的账号快照准备这些信息，不强制
 重新发现；如果快照不可用，请使用 **Refresh models**。此显式单次快照只通过
-Settings CAS 和回读替换 `llm-pi-ai.providers.github-copilot.models`。原生 profile
-中保存的非空列表会替代原生内置目录，卸载或停用插件后仍然保留。复制模型设置不会将
-托管路线的权限参数过滤迁移到原生请求，也不能证明供应商调用成功。两条路线均不会在
-发送前将实际投影的图片 MIME 与账号模型的格式清单进行对照检查。
-托管路线也直接使用原生 Goal 更新 schema，不再改写。
-无法证明或与原生目录不兼容的协议、未知或更窄的服务端输入上限、未知上下文或图像支持，
-以及未知或不支持的推理控制会被跳过，不会猜测。缺少原生目录兼容性基线的新 Completions 和
-Anthropic 模型也会被跳过；已有目录模型保留原生兼容性。只有账号明确支持 PNG、JPEG、WebP、GIF 四种原生请求图像格式时，
-才会同步图像模型。原生 provider 存在自定义认证、端点、请求头、非空模型覆盖或无法验证的
+通过 Settings CAS 和回读写入 `llm-pi-ai.providers.github-copilot.models`；
+只有满足下述验证条件时，才会同时设置缺失的 route API。
+提交的列表包含账号中所有启用模型的 `{ id }` 引用，不再与原生内置目录取交集。
+成功保存的列表在卸载或停用插件后仍然保留。容量、协议、图像能力和推理控制
+交由原生解析，不再复制或认证账号元数据中的能力。
+账号输入上限、图像格式或推理元数据的差异不再成为排除模型的条件。
+原生目录未收录的 ID 只做提示，不会跳过；如果原生无法解析某个模型的协议，
+原生设置校验可能拒绝整次更新。如果启用 ID 不在原生目录且尚未配置 route API，
+只有所有启用账号模型都具有相同且已验证的协议、并且目录中匹配的原生模型协议一致时，
+预览才会建议设置 provider 级 API。预览会说明它影响整条路由，而非仅影响缺失 ID。
+已有 route API 不会被覆盖；协议混合、证据缺失或冲突时会阻止同步。模型列表及获准的
+API 变更会在同一次 Settings CAS 中写入并分别读回。原生校验仍是最终依据；失败或结果
+不确定时不会报告成功，请检查已保存设置后再重试。
+**同步会用原生定义替换已有的模型自定义参数，包括单次请求输出默认值。**
+确认前请检查更新和移除项。其他路线级设置保持不变。这只是模型列表选择，不代表供应商
+兼容性已经验证，也不会强制执行账号特有的限制；传输、校验和错误处理仍由原生拥有。
+原生 provider 存在自定义认证、端点、请求头、非空模型覆盖或无法验证的
 路线兼容性覆盖时，同步会停止，不会修改这些设置。已有的 `compat.supportsStrictMode: false`
 会保留，但至少一个同步模型必须使用支持该设置的 Responses 或 Completions 协议。已有的
-原生默认推理级别也必须受模型支持。Core 会将配置的
-`maxTokens` 同时作为模型的单次请求输出默认值。同步不修改凭据、选择或历史，也不会自动
+原生默认推理级别会保留并交由原生解析。仅含 ID 的条目不添加模型级 `maxTokens`
+请求默认值。同步不修改凭据、选择或历史，也不会自动
 跟随后续账号变化。
 
 在原生 GitHub Copilot 账号面板的 **Manage → 账号管理 → 切换** 中选择账号，
 会将该账号应用到 DSH canonical 凭据槽 `llm-pi-ai/github-copilot`，供此 profile
 后续的原生请求使用。首次切换会将原有原生 OAuth 授权保留为已保存账号。
 切换不会重定向正在进行的请求，也不会更改模型选择、provider 设置或历史。
-原生 provider 的内置/配置模型目录不会因此按账号权限过滤。现有
-`github-copilot-preview` 仍是独立的插件模型路线，但原生账号切换不依赖它。
+原生 provider 的内置/配置模型目录不会因此按账号权限过滤。插件不再添加单独的 Copilot
+模型路线。已有的 `github-copilot-preview` 选择不会自动迁移，可能变为不可用；已保存的设置和
+对话历史保持不变。旧 preview 路线专用的 Session 账号覆盖和续接控件不适用于原生模型请求；
+旧的“新 Session 续接默认项”不再显示，已有设置会保留。
 启动插件或完成登录时，不会自动修复原生 provider 设置。
 插件在 DSH 现有 Web 服务中注册可选的 `github-copilot-hosted` 搜索后端。
 请在原生 Web 设置中明确选择，并按需启用原生搜索工具；安装不会改变默认后端。
@@ -136,10 +149,15 @@ alpha.13 发布版本修复了该资格判断；实际运行状态仍需单独�
 原生路线的额度和可选身份显示只使用 canonical OAuth 账号；如果 provider 指定了其他凭据、
 端点或非空请求头，或无法确认其配置，则显示额度不可用，不会将其他账号的额度归到原生路线。
 这不证明单次请求实际计费的账号。
+原生 provider 的已完成轮次也会记录账号证据，但仅在对应请求实际返回原生流数据后记录。
+记录的是绑定到 canonical 凭据的 profile 全局账号，不是 Session 覆盖、计费归属或子 Agent 汇总。
+账号不匹配、原生路线无法确认，或返回数据前凭据发生变化时，账号证据显示未知。
+已明确配置的原生模型 ID 即使不在内置目录中，也可用于账号证据；这不证明模型可用，
+也不会放宽搜索或 reviewer 的协议资格要求。
+证据仅保留在 Host 内存中；更早的历史，以及重启或淘汰后缺失的记录仍显示未知。
 原生上下文异常诊断不依赖可选的托管续接服务，也不会替代 DSH 的上下文计量。
-Local diagnostics 可另行启用不含内容的原生 Copilot 逻辑流和可选 Copilot 搜索观察；
-它不显示 HTTP 细节，也不证明供应商收到请求或执行成功。参见
-[本地诊断说明](./docs/plugin-diagnostics.md)。
+Local diagnostics 已移除；现有诊断数据和设置均不改动。若旧版插件重新加载，且原有开关仍开启，
+它可能恢复采集。参见[功能退役说明](./docs/plugin-diagnostics.md)。
 
 ### 其他可选能力
 
@@ -148,8 +166,7 @@ Local diagnostics 可另行启用不含内容的原生 Copilot 逻辑流和可�
   不会静默为已有 Session 开启，也不会自动发送或重试。
 - [分段压缩恢复](./docs/manual-compaction-recovery.md)需要明确选择对应引擎；
   安装插件不会替换 Core 的引擎。
-- [本地诊断](./docs/plugin-diagnostics.md)和托管 Responses gzip 默认关闭；
-  开启诊断不会上传数据。支持 GitHub Enterprise Cloud 租户登录，
+- 托管 Responses gzip 默认关闭。支持 GitHub Enterprise Cloud 租户登录，
   不支持 GHES 和 Enterprise 额度查询。
 
 ### 移除增强
@@ -158,9 +175,9 @@ Local diagnostics 可另行启用不含内容的原生 Copilot 逻辑流和可�
 原生 **GitHub Copilot** 继续使用最近一次明确应用到 canonical 凭据槽的账号。卸载不是退出登录；
 显式退出或移除原始授权是另一项操作，会影响原生登录。
 
-依赖插件的选择不会自动变成原生选择。卸载前，请明确将使用 `github-copilot-preview`
-的 Session／默认模型切回原生模型。如果 Web 选中了 `github-copilot-hosted`，
-请先在原生 Web 设置中选择其他可用后端。卸载不会改写 Web 设置；
+已有的 `github-copilot-preview` 模型选择不会自动迁移，可能变为不可用；需要时请显式选择原生模型。
+如果 Web 选中了 `github-copilot-hosted`，请先在原生 Web 设置中选择其他可用后端。
+卸载不会改写 Web 设置；
 保留已缺失的后端会返回 `WEB_PROVIDER_CONFIGURED_MISSING`，不会自动回退。
 附加账号管理和插件专属搜索仍然依赖插件；最近选中的原生 OAuth 授权会保留在 DSH canonical 凭据记录中。
 
@@ -177,6 +194,8 @@ rc.2 的证据不能证明 rc.3 的行为。安装不会自动运行预检：
 [AGENTS.md](./AGENTS.md)。完整验证及打包／发布门禁由 GitHub Actions 执行。
 本地源码检查、合成 fixture、发布、profile 安装和 Desktop 实际加载属于不同的证据层级，
 应分别如实报告。
+可选的[离线自主性评测工具](./docs/agent-autonomy-evaluation.md)仅分析明确提供的脱敏轨迹，
+不会运行或控制 agent。
 PR 需要说明文档影响，由 agent 或人工审阅者核实语义准确性和覆盖范围，不额外要求人工审批；
 见[贡献指南](./CONTRIBUTING.md#change-workflow)。
 提交归因必须用 `Assisted-by` 标记实际使用的工具；不得虚构共同作者身份。

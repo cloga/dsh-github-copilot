@@ -23,9 +23,12 @@ export function verifyDocumentationReview(policy, template, workflow) {
     || JSON.stringify(policy.impact) !== JSON.stringify(['user-facing', 'unchanged'])
     || JSON.stringify(policy.requiredDocuments) !== JSON.stringify(['README.md', 'README.zh.md', 'docs/*.md'])
     || policy.detailsRequired !== true || policy.versionOnlyInsufficient !== true
+    || JSON.stringify(policy.deliveryClasses) !== JSON.stringify(['repository-only', 'plugin-update', 'explicit-plugin-artifact', 'release-recovery'])
     || policy.rerunOnBodyEdit !== true || policy.semanticReview !== 'agent-or-human-required'
     || !template.includes('### Documentation impact') || !template.includes('- Behavior:')
     || !template.includes('- Docs:') || !template.includes('- Details:')
+    || !template.includes('## Release delivery') || !template.includes('- Classification:')
+    || !template.includes('- Authorization:')
     || !workflow.includes('types: [opened, synchronize, reopened, edited]')
     || !workflow.includes('node scripts/verify-documentation-impact.mjs')
     || !workflow.includes('needs: [verify, published-adapter, documentation-impact]')
@@ -49,6 +52,7 @@ export function verifyCurrentTaskStatus(contract) {
   })
     || typeof contract.tasks?.continuation?.accountUiBoundary !== 'string'
     || !contract.tasks.continuation.accountUiBoundary.includes('no add-only OAuth entry in Chat')
+    || !contract.tasks.continuation.accountUiBoundary.includes('no new-Session default in Models')
     || !contract.tasks.search.read?.includes('src/native-copilot-search.ts')
     || !contract.tasks.search.tests?.includes('tests/native-copilot-search.spec.ts')
     || !contract.tasks.client.read?.includes('src/native-search-model-card.ts')) {
@@ -77,8 +81,9 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && productScope.desktopCandidateQualified === false
     && productScope.desktopCandidateQualificationScope === 'desktop-artifact-and-live-acceptance'
     && JSON.stringify(productScope.retirePluginOwned) === JSON.stringify([
-      'auto', 'parent-model-follow', 'hosted-search-routing',
+      'auto', 'parent-model-follow', 'hosted-search-routing', 'managed-model-route',
     ])
+    && JSON.stringify(productScope.productionCopilotModelProviders) === JSON.stringify(['github-copilot'])
     && productScope.preserve.includes('native-copilot-oauth')
     && productScope.preserve.includes('account-isolation')
     && productScope.preserve.includes('account-advertised-model-capabilities')
@@ -103,18 +108,23 @@ export async function verifyAgentContract(root = repositoryRoot) {
   require(implementation.unsupportedCapability === 'report-limitation-and-plugin-local-alternative', 'plugin-only missing capabilities must not trigger Core patches')
   require(implementation.scopeException === 'separate-explicit-human-request-only', 'plugin-only scope must not expand from an inferred compatibility task')
   const nativeSync = contract.tasks?.models
-  require(nativeSync?.nativeModelSyncBoundary?.includes('one explicit confirmation')
+  require(nativeSync?.nativeModelSyncBoundary?.includes('One explicit confirmation')
+    && nativeSync.nativeModelSyncBoundary.includes('ID-only account model submission, not capability qualification')
+    && nativeSync.nativeModelSyncBoundary.includes('Missing native IDs are advisory, not skipped')
     && nativeSync.nativeModelSyncBoundary.includes('non-forcing preview')
     && nativeSync.nativeModelSyncBoundary.includes('native adapter-owned pi-ai catalog')
+    && nativeSync.nativeModelSyncBoundary.includes('For missing native IDs with no configured route API')
+    && nativeSync.nativeModelSyncBoundary.includes('every enabled account model has one identical supported API and every matching native catalog entry agrees')
+    && nativeSync.nativeModelSyncBoundary.includes('Disclose the route-wide effect in the preview; preserve an existing route API')
     && nativeSync.nativeModelSyncBoundary.includes('preserve supportsStrictMode: false only when at least one synced Responses or Completions model supports it')
     && nativeSync.nativeModelSyncBoundary.includes('unproven route compatibility')
-    && nativeSync.nativeModelSyncBoundary.includes('CAS only llm-pi-ai.providers.github-copilot.models')
-    && nativeSync.nativeModelSyncBoundary.includes('read back user and effective values')
+    && nativeSync.nativeModelSyncBoundary.includes('CAS the model list and only the conditionally authorized route API together')
+    && nativeSync.nativeModelSyncBoundary.includes('read back both user and effective values')
     && nativeSync.nativeModelSyncBoundary.includes('No profile creation, automatic sync')
     && nativeSync.read?.includes('src/native-model-sync.ts')
     && nativeSync.tests?.includes('tests/native-model-sync.spec.ts')
     && nativeSync.tests?.includes('tests/fixtures/native-model-sync-core.fixture.ts'),
-  'native model sync must retain explicit confirmation, adapter proof, one-path CAS, readback and bounded tests')
+  'native model sync must retain ID-only account submission, explicit confirmation, conditional route API proof, narrow CAS, readback and bounded tests')
   require(!contract.boundaries?.approvalRequired?.includes('merge'), 'merge must not require a separate approval')
   require(!contract.boundaries?.approvalRequired?.includes('release'), 'release delivery must not require a second blanket release approval')
   for (const boundary of ['install into a user profile', 'sign-out', 'worktree checkout']) {
@@ -123,10 +133,25 @@ export async function verifyAgentContract(root = repositoryRoot) {
   const release = contract.boundaries?.releaseDelivery
   require(release?.mode === 'important-update-follow-through' && release.repeatApprovalRequired === false, 'release delivery follow-through is missing')
   require(release.userRestrictionsTakePrecedence === true && release.otherChangesRequireExplicitReleaseRequest === true, 'release delivery must respect user scope and exclude implicit unrelated releases')
+  const deliveryClassification = {
+    basis: 'consumer-impact-before-package-or-version-changes',
+    repositoryOnlyCompletion: 'reviewed-merge-and-green-required-ci',
+    repositoryOnlyArtifacts: 'no-new-version-no-whitelist-expansion',
+    explicitArtifactRequest: 'plugin-artifact-specific-not-generic-publish',
+    shippedArtifacts: 'preserve-existing-release-policy-and-immutable-bytes',
+    installation: 'no-runtime-benefit-no-local-upgrade',
+    reporting: 'separate-repository-release-installation-runtime',
+  }
+  require(release.deliveryClassification
+    && Object.keys(release.deliveryClassification).length === Object.keys(deliveryClassification).length
+    && Object.entries(deliveryClassification).every(([key, value]) => release.deliveryClassification[key] === value),
+  'delivery classification must separate repository engineering from plugin artifacts and local upgrades')
   require(JSON.stringify(release.importantChanges) === JSON.stringify(['user-visible-feature', 'behavior-fix', 'compatibility-fix', 'security-fix', 'stability-fix']), 'release delivery change classes differ')
   require(JSON.stringify(release.requiredConditions) === JSON.stringify(['reviewed-merge', 'green-required-ci', 'fresh-annotated-tag', 'verified-release-assets']), 'release delivery prerequisites differ')
   require(release.localGateWhenRegistryBlocked === 'record-environment-blocker-and-require-complete-github-ci', 'blocked local gate must require full GitHub CI')
   const agentGuide = await readFile(resolve(root, 'AGENTS.md'), 'utf8')
+  require(agentGuide.includes('### Classify delivery before packaging (#502)'),
+    'delivery classification guidance is missing')
   const workspace = contract.boundaries?.workspaceIsolation
   const workspaceRequirements = {
     default: 'app-managed-worktree-when-authorized',
@@ -184,6 +209,17 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && contract.tasks.accounts?.risk?.includes('No durable account events')
     && agentGuide.includes('Approved multi-account ownership extension (#297, #474)'),
   'account ownership must preserve native authorization, shared storage, Session turn freezing and bounded historical evidence')
+  const nativeAccountEvidence = contract.tasks.accounts?.nativeTurnEvidenceBoundary
+  require(nativeAccountEvidence?.includes('explicitly configured native IDs')
+    && nativeAccountEvidence.includes('never qualifies reviewer/search protocols')
+    && nativeAccountEvidence.includes('canonical OAuth and selected-account equality')
+    && nativeAccountEvidence.includes('same Session/turn/signal/model and marked ordinary stream delivery')
+    && nativeAccountEvidence.includes('Credential/configuration changes, cancellation, turn end and disposal')
+    && nativeAccountEvidence.includes('not billing or reconstruction')
+    && contract.tasks.accounts?.read?.includes('src/native-copilot-access.ts')
+    && contract.tasks.accounts?.tests?.includes('tests/native-copilot-access.spec.ts')
+    && contract.tasks.accounts?.tests?.includes('tests/fixtures/auto-review-copilot-core.fixture.ts'),
+  'native account evidence must keep account-only model membership separate from protocol qualification and preserve delivery fences')
   require(contract.tasks.accounts?.read?.includes('src/copilot-login-environment.ts')
     && contract.tasks.accounts?.tests?.includes('tests/scripts/copilot-login-environment.test.mjs')
     && contract.tasks.accounts?.loginEnvironmentBoundary?.includes('tenant.ghe.com')
@@ -209,12 +245,17 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && task.requestBodyEvidenceBoundary?.includes('supplier receipt')
     && task.requestBodyEvidenceBoundary?.includes('dispose subscriptions')),
   'request upload diagnostics must retain scoped lifecycle ownership and local-only evidence limits')
-  require(contract.tasks.diagnostics?.read?.includes('src/request-body-composition.ts')
+  require(contract.tasks.diagnostics?.runtimeStatus === 'retired-no-collection'
+    && contract.tasks.diagnostics?.read?.includes('src/request-body-composition.ts')
+    && contract.tasks.diagnostics?.tests?.includes('tests/loader-composition.spec.ts')
+    && contract.tasks.diagnostics?.tests?.includes('tests/client-search-inject.spec.ts')
+    && contract.tasks.diagnostics?.tests?.includes('tests/remote-codec.spec.ts')
     && contract.tasks.diagnostics?.tests?.includes('tests/request-body-composition.spec.ts')
     && contract.tasks.diagnostics?.compositionBoundary?.includes('Keep replay validation/recovery at 16 MiB')
-    && contract.tasks.diagnostics?.compositionBoundary?.includes('without delaying ordinary native delivery')
-    && contract.tasks.diagnostics?.compositionBoundary?.includes('original consent generation, clear, retention and eviction fences'),
-  'large-request composition must remain bounded diagnostic-only work with consent fences and unchanged replay/transport')
+    && contract.tasks.diagnostics?.risk?.includes('existing data untouched')
+    && contract.tasks.diagnostics?.risk?.includes('true settings never enable collection')
+    && agentGuide.includes('Local diagnostics is retired (#499)'),
+  'retired Local diagnostics must preserve data and settings without collection or changes to immediate 408 guidance')
   require(contract.tasks.compatibility?.responsesCompressionBoundary?.includes('defaults false')
     && contract.tasks.compatibility?.responsesCompressionBoundary?.includes('original JSON admission/replay/evidence')
     && contract.tasks.compatibility?.responsesCompressionBoundary?.includes('no identity resend')
@@ -285,6 +326,17 @@ export async function verifyAgentContract(root = repositoryRoot) {
   }), 'live UI acceptance must retain bounded navigation, exact-head CI and unverified report semantics')
   await file(acceptance.policy)
   await file(acceptance.implementation)
+  require(JSON.stringify(contract.localDelivery) === JSON.stringify({
+    mode: 'reported-state-only',
+    policy: 'docs/agent-acceptance.md',
+    implementation: 'scripts/local-delivery.mjs',
+    command: ['node', 'scripts/agent.mjs', 'local-delivery', '--state', 'STATE_FILE'],
+    executesActions: false,
+    writesState: false,
+    authorizationVerified: false,
+    acceptanceVerified: false,
+  }), 'local delivery must remain a read-only reported-state aid, not authorization or acceptance')
+  await file(contract.localDelivery.implementation)
   const executionPolicy = JSON.parse(await readFile(resolve(root, 'agent-execution-policy.json'), 'utf8'))
   require(executionPolicy.schemaVersion === 1 && executionPolicy.repository === 'cloga/dsh-github-copilot'
     && executionPolicy.ownerTask === 'tooling' && executionPolicy.maxTaskScopes === 128
@@ -296,7 +348,7 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && executionPolicy.operations['scripts-test'].maxFailures === 2
     && JSON.stringify(executionPolicy.operations['scripts-test'].argv) === JSON.stringify([
       'node', '--test', 'tests/scripts/agent.test.mjs', 'tests/scripts/acceptance.test.mjs',
-      'tests/scripts/environment-guardrails.test.mjs',
+      'tests/scripts/environment-guardrails.test.mjs', 'tests/scripts/autonomy-evaluation.test.mjs',
     ])
     && executionPolicy.operations?.['ci-evidence']?.environment === 'github-actions-evidence'
     && executionPolicy.operations['ci-evidence'].maxFailures === 2
@@ -313,9 +365,13 @@ export async function verifyAgentContract(root = repositoryRoot) {
   await file('agent-execution-policy.json')
   await file('docs/environment-evidence-guardrails.md')
   require(contract.tasks.tooling.read.includes('agent-execution-policy.json')
+    && contract.tasks.tooling.read.includes('scripts/local-delivery.mjs')
+    && contract.tasks.tooling.read.includes('scripts/autonomy-evaluation.mjs')
+    && contract.tasks.tooling.read.includes('docs/agent-autonomy-evaluation.md')
     && contract.tasks.tooling.read.includes('scripts/environment-guard.mjs')
     && contract.tasks.tooling.read.includes('docs/environment-evidence-guardrails.md')
     && contract.tasks.tooling.tests.includes('tests/scripts/environment-guardrails.test.mjs')
+    && contract.tasks.tooling.tests.includes('tests/scripts/autonomy-evaluation.test.mjs')
     && contract.tasks.tooling.risk.includes('cannot prevent direct shell bypass')
     && agentGuide.includes('cannot prevent direct shell bypass')
     && agentGuide.includes('Do not retry local dependency restoration'),

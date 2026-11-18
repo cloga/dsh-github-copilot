@@ -5,6 +5,48 @@ release tags do not update this file after publication. Check the exact
 [GitHub Release](https://github.com/cloga/dsh-github-copilot/releases) and npm
 version separately rather than treating an old `prepared` label as current status.
 
+## 0.1.0-alpha.21.dsh.0.2.2.rc.3 (prepared)
+
+- Include a conditionally verified provider-wide API in confirmed native model sync when enabled account models share one protocol and matching native catalog entries agree (#510).
+- Disclose the route-wide effect before confirmation; preserve existing route APIs and block mixed, missing or conflicting protocol evidence.
+
+## 0.1.0-alpha.20.dsh.0.2.2.rc.3 (prepared)
+
+- Record native turn-account evidence for valid explicitly configured Copilot model IDs even when absent from the native built-in catalog (#488).
+- Preserve canonical account ownership, actual ordinary stream delivery and Host-lifetime retention requirements; reviewer and hosted-search eligibility remain unchanged.
+
+## 0.1.0-alpha.19.dsh.0.2.2.rc.3 (prepared)
+
+- Submit all enabled account model IDs directly instead of copying account capabilities or filtering against the native catalog (#508).
+- Stop excluding native entries because of narrower input limits, restricted image formats or account reasoning metadata. The native adapter keeps its definitions and request behavior; this is not a compatibility certification.
+- Sync submits only `{ id }` references, replacing existing per-model customizations and output defaults after the visible preview and explicit confirmation. IDs absent from the native catalog are advisory, not skipped; native validation may reject the entire update.
+- Preserve canonical-account verification, existing route settings, Settings CAS/readback, history and model selections. No automatic profile update or installation.
+
+## 0.1.0-alpha.18.dsh.0.2.2.rc.3 (prepared)
+
+- Stop registering the separate `github-copilot-preview` model provider while retaining account metadata for explicitly confirmed native model sync (#500).
+- Keep native provider settings, account grants and conversation history unchanged. Existing preview-route selections may require an explicit native model selection.
+- If no native Copilot provider is configured, add one in DSH Models; the plugin does not create its profile.
+- Remove the retired route's new-Session continuation default from Models without rewriting saved settings.
+
+## 0.1.0-alpha.17.dsh.0.2.2.rc.3 (prepared)
+
+- Remove Local diagnostics collection, controls, storage access, Remotes and the offline analyzer (#499).
+- Leave existing data and hidden legacy settings untouched; older releases may resume collection if their saved switches are enabled.
+- Preserve native Usage, account and search behavior, credential-refresh safeguards and immediate request error guidance.
+
+## 0.1.0-alpha.16.dsh.0.2.2.rc.3 (prepared)
+
+- Record native Copilot turn-account evidence only after an ordinary native stream chunk is yielded for the admitted account (#488).
+- Exclude auxiliary calls and require native route and canonical-account proof; mismatches and credential changes leave evidence unknown.
+- Retain bounded, Host-memory-only history; never infer older turns from current settings.
+
+## 0.1.0-alpha.15.dsh.0.2.2.rc.3 (prepared)
+
+- Include an optional, bounded offline multi-turn autonomy trace evaluator and synthetic examples (#494).
+- Detect repeated approval/blocker requests, unconsented protected actions and unverified outcomes while preserving explicit task-scoped authorization across tool-state changes.
+- Keep this as a repository analysis aid, not runtime agent enforcement or proof of improved autonomy; no profile, account or model calls are changed.
+
 ## 0.1.0-alpha.14.dsh.0.2.2.rc.3
 
 - Add independently enabled, content-free native Copilot logical stream and hosted-search aggregates (#486).

@@ -4,6 +4,9 @@ import { strictRemoteCodec } from '../src/remote-codec.ts'
 import remote from '../src/remote.ts'
 
 describe('strict Remote factory compatibility', () => {
+  it('does not expose the retired local diagnostics namespace', () => {
+    expect(remote.descriptors.some(value => value.namespace === 'githubCopilotDiagnostics')).toBe(false)
+  })
   it('preserves one strict parser for alpha.2 factories and legacy gateways', () => {
     const schema = z.object({ value: z.string() }).strict()
     const codec = strictRemoteCodec('fixture#Value', schema)
@@ -28,7 +31,7 @@ describe('strict Remote factory compatibility', () => {
         checked++
       }
     }
-    expect(checked).toBe(116)
+    expect(checked).toBe(104)
   })
   it('keeps explicit replay recovery arguments and output strict', () => {
     const descriptors = remote.descriptors.filter(value => value.namespace === 'githubCopilotReplayRecovery')
@@ -62,8 +65,23 @@ describe('strict Remote factory compatibility', () => {
       const result = descriptor.result as ReturnType<typeof strictRemoteCodec>
       expect(descriptor.parameters).toEqual([])
       expect(result.create().parse(preview)).toEqual(preview)
+      expect(result.create().parse({ ...preview, nativeCatalogMissingIds: ['future-model'] }))
+        .toEqual({ ...preview, nativeCatalogMissingIds: ['future-model'] })
+      expect(() => result.create().parse({ ...preview, nativeCatalogMissingIds: Array(513).fill('future-model') })).toThrow()
       expect(() => result.create().parse({ ...preview, credentials: 'private' })).toThrow()
       expect(() => result.create().parse({ ...preview, skipped: [{ id: 'model', code: 'invented' }] })).toThrow()
     }
+  })
+  it('accepts only known route APIs in a native model sync preview', () => {
+    const descriptor = remote.descriptors.find(value => value.method === 'prepareNativeModelSync')!
+    const result = descriptor.result as ReturnType<typeof strictRemoteCodec>
+    const preview = {
+      state: 'ready', planId: '12345678-1234-4234-8234-123456789012',
+      enabledCount: 1, syncableCount: 1, outputTokenDefaults: [],
+      addedIds: ['future-model'], removedIds: [], updatedIds: [], skipped: [],
+      routeApiChange: 'openai-responses',
+    }
+    expect(result.create().parse(preview)).toEqual(preview)
+    expect(() => result.create().parse({ ...preview, routeApiChange: 'invented-api' })).toThrow()
   })
 })

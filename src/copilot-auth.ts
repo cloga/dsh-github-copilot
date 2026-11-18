@@ -20,7 +20,11 @@ import { readCopilotCatalog } from './model-protocol.ts'
 import type { CopilotAccountBinding } from './copilot-accounts-types.ts'
 import type {} from './copilot-accounts-host.ts'
 import { readSettingsNamespace } from './settings-reader.ts'
-import type { CredentialChangeReason } from './request-diagnostics.ts'
+
+export type CredentialChangeReason =
+  | 'qualified' | 'unknown-source' | 'account-changed' | 'endpoint-changed' | 'entitlements-changed'
+  | 'expired' | 'auth-mismatch' | 'duplicate-notification' | 'missing-notification'
+  | 'commit-mismatch' | 'write-failed' | 'write-conflict'
 
 export { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 

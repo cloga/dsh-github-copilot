@@ -4,7 +4,6 @@ import { formatRequestBodyEvidence, requestBodyEvidence, REQUEST_BODY_EVIDENCE_L
 import { requestBodyComposition } from './request-body-composition.ts'
 import type { RequestBodyDispatchEvidence } from './request-body-evidence.ts'
 import { formatRequestUploadEvidence } from './request-upload-evidence.ts'
-import { RequestDiagnosticSchema } from './request-diagnostics.ts'
 
 const observedMessage = 'Timed out reading request body. Try again, or use a smaller request size.'
 
@@ -13,7 +12,8 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 function correlation(response: Response, dispatch?: RequestBodyDispatchEvidence): string {
-  const model = RequestDiagnosticSchema.shape.model.safeParse(dispatch?.model)
+  const model = dispatch?.model
+  const validModel = typeof model === 'string' && model.length <= 128 && /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(model)
   const at = dispatch?.observedAt
   const time = at !== undefined && Number.isSafeInteger(at) && at >= 0 && at <= 8_640_000_000_000_000
     ? `response observed at ${new Date(at).toISOString()}` : 'observation time unavailable'
@@ -26,7 +26,7 @@ function correlation(response: Response, dispatch?: RequestBodyDispatchEvidence)
     const value = response.headers.get(header)
     if (value !== null && value.length <= 128 && format.test(value)) ids.push(`${header}=${value}`)
   }
-  return `Observed request: model ${model.success ? model.data : 'unavailable'}; protocol ${dispatch?.protocol ?? 'unavailable'}; ${time}. ${ids.length ? `Supplier request IDs: ${ids.join(', ')} (correlation only, not receipt or execution proof).` : 'Supplier request IDs unavailable (missing or unrecognized format).'}`
+  return `Observed request: model ${validModel ? model : 'unavailable'}; protocol ${dispatch?.protocol ?? 'unavailable'}; ${time}. ${ids.length ? `Supplier request IDs: ${ids.join(', ')} (correlation only, not receipt or execution proof).` : 'Supplier request IDs unavailable (missing or unrecognized format).'}`
 }
 
 /** Verified provider evidence, not guessed capabilities, token limits or network cause. */

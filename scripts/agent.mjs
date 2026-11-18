@@ -22,6 +22,7 @@ export async function describeRepository(root = repositoryRoot) {
     entrypoints: contract.entrypoints,
     boundaries: contract.boundaries,
     acceptance: contract.acceptance,
+    localDelivery: contract.localDelivery,
     tasks: contract.tasks,
     scripts: pkg.scripts,
     admittedReleases: baseline.supportedBaselines.dsh.admittedReleases,
@@ -63,8 +64,9 @@ export async function planTask(task, root = repositoryRoot) {
     }] : [],
     commands: commands.map(argv => ({ argv, executed: false })),
     acceptance: description.acceptance,
+    localDelivery: description.localDelivery,
     executionPolicy: description.executionPolicy,
-    delivery: 'Issue -> feature branch -> focused tests -> complete gate -> reviewed merge without a separate approval prompt; important updates continue to verified Release and npm integrity without a second release prompt, unless user scope excludes it. Other changes need an explicit release request. Check existing scoped authorization before asking about profile installation or interrupting restart; obey tool consent and report an unchanged blocker only once.',
+    delivery: 'Classify consumer impact before package/version edits. Repository-only engineering completes at reviewed merge and green required CI, without a plugin version or local upgrade. Never expand the package whitelist to manufacture a release obligation. Issue -> feature branch -> focused tests -> complete gate -> reviewed merge without a separate approval prompt; important plugin updates continue to verified Release and npm integrity without a second release prompt, unless user scope excludes it. Engineering artifact distribution needs an explicit plugin-artifact request, not a generic publish/status question. Preserve existing shipped-file release gates. Report repository delivery, plugin publication, installation and loaded runtime separately. Check existing scoped authorization before asking about profile installation or interrupting restart; obey tool consent and report an unchanged blocker only once.',
     boundaries: description.boundaries,
   }
 }
@@ -111,6 +113,10 @@ export async function main(args = process.argv.slice(2)) {
   const json = args.includes('--json')
   const rest = args.filter(arg => arg !== '--json')
   const [command, value, extra] = rest
+  if (command === 'local-delivery') {
+    const { localDeliveryMain } = await import('./local-delivery.mjs')
+    return localDeliveryMain(rest.slice(1), repositoryRoot)
+  }
   if (command === 'accept') {
     const { acceptanceMain } = await import('./acceptance.mjs')
     return acceptanceMain(rest.slice(1))
@@ -130,7 +136,7 @@ export async function main(args = process.argv.slice(2)) {
     else if (command === 'doctor' && value === undefined) result = await doctor()
     else if (command === 'plan' && value !== undefined) result = await planTask(value)
     else if (command === 'attribution' && value !== undefined) result = { schemaVersion: 1, trailer: attribution(value) }
-    else throw new Error('Usage: node scripts/agent.mjs describe|doctor|plan <task>|attribution "Actual Tool"|accept --contract FILE --report FILE [--json]|guard --task TASK_ID --environment local-auxiliary|github-actions-evidence --operation NAME [--head SHA]')
+    else throw new Error('Usage: node scripts/agent.mjs describe|doctor|plan <task>|attribution "Actual Tool"|accept --contract FILE --report FILE [--json]|local-delivery --state FILE [--json]|guard --task TASK_ID --environment local-auxiliary|github-actions-evidence --operation NAME [--head SHA]')
     if (json || command !== 'attribution') console.log(JSON.stringify(result, null, 2))
     else console.log(result.trailer)
     return result.ok === false ? 1 : 0

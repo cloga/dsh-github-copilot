@@ -23,7 +23,6 @@ import * as timeoutDiagnostics from '../src/request-body-timeout.ts'
 import type { PreviewRouteConfig } from '../src/preview-route.ts'
 import { ACCOUNT_MODEL_AUTH_MIN_VALIDITY_MS } from '../src/account-model-auth.ts'
 import { createGitHubCopilotTokenResolver } from '../src/copilot-auth.ts'
-import { DiagnosticsController } from '../src/diagnostics-host.ts'
 import type { AccountModelSnapshot, AccountModelSource } from '../src/account-model-source.ts'
 import type { CopilotAccountBinding } from '../src/copilot-accounts-types.ts'
 import {
@@ -84,7 +83,7 @@ async function runtime(initial: RecordValue | undefined = grant(), config: Previ
   } })
   await ctx.plugin(LlmRuntime)
   const registration = vi.spyOn(ctx.llm, 'registerAdapter')
-  const fiber = ctx.plugin(previewPlugin, config)
+  const fiber = ctx.plugin(previewPlugin, { ...config, registerLegacyProvider: true })
   await fiber
   await ctx.get('githubCopilotPreview')!.refresh()
   const adapter = registration.mock.calls[0]![1]
@@ -459,7 +458,7 @@ describe('account-local managed runtimes', () => {
     } })
     await ctx.plugin(LlmRuntime)
     const registrations = vi.spyOn(ctx.llm, 'registerAdapter')
-    await ctx.plugin(previewPlugin, { accountModelFailureCooldownMs: 0, ...config })
+    await ctx.plugin(previewPlugin, { registerLegacyProvider: true, accountModelFailureCooldownMs: 0, ...config })
     expect(registrations).toHaveBeenCalledTimes(1)
     const adapter = registrations.mock.calls[0]![1]
     registrations.mockRestore()
@@ -2157,9 +2156,6 @@ describe('plugin-owned account Copilot route', () => {
     }, true)
     try {
       const harness = await runtime(grant({ access: old, expires: start + 400_000, availableModelIds: [MODEL] }))
-      let diagnostics!: DiagnosticsController
-      await harness.ctx.plugin({ apply(ctx) { diagnostics = new DiagnosticsController(ctx) } })
-      diagnostics.collector.setRequestEnabled(true)
       const a = call(harness.ctx)
       await vi.waitFor(() => expect(pending).toHaveLength(1))
       const b = call(harness.ctx)
@@ -2170,10 +2166,6 @@ describe('plugin-owned account Copilot route', () => {
       } else expect((await call(harness.ctx)).assembler.finish).toEqual({ kind: 'stop' })
       expect(harness.modify).toHaveBeenCalledTimes(1)
       expect(pending.every(wire => !wire.signal.aborted)).toBe(true)
-      expect(diagnostics.collector.snapshot().requests?.credentialChanges?.rows).toMatchObject([
-        { phase: 'notification', reason: 'qualified', dispatched: 2, preserved: 2, revoked: 0 },
-        { phase: 'commit', reason: 'qualified', revoked: 0 },
-      ])
       for (const wire of pending) wire.finish(response())
       expect((await a).assembler.finish).toEqual({ kind: 'stop' })
       expect((await b).assembler.finish).toEqual({ kind: 'stop' })
@@ -2212,9 +2204,6 @@ describe('plugin-owned account Copilot route', () => {
       try {
         harness = await runtime(grant({ access: 'tid=old;proxy-ep=proxy.individual.githubcopilot.com;',
           expires: start + 400_000, availableModelIds: [MODEL] }))
-        let diagnostics!: DiagnosticsController
-        await harness.ctx.plugin({ apply(ctx) { diagnostics = new DiagnosticsController(ctx) } })
-        diagnostics.collector.setRequestEnabled(true)
         const ongoing = call(harness.ctx)
         await vi.waitFor(() => expect(wireSignal).toBeDefined())
         if (mode === 'unchanged-notification') harness.replace(harness.current())
@@ -2226,17 +2215,6 @@ describe('plugin-owned account Copilot route', () => {
         expect((await ongoing).assembler.finish).toMatchObject({
           kind: 'aborted', failure: { message: 'COPILOT_PREVIEW_CREDENTIAL_CHANGED' },
         })
-        const decisions = diagnostics.collector.snapshot().requests?.credentialChanges?.rows
-        expect(decisions?.[0]).toMatchObject({
-          phase: 'notification', reason: mode === 'endpoint' ? 'endpoint-changed'
-            : mode === 'entitlements' ? 'entitlements-changed' : 'unknown-source',
-          dispatched: 1, preserved: 0, revoked: 1,
-        })
-        if (mode === 'external') expect(decisions?.slice(1)).toMatchObject([
-          { phase: 'notification', reason: 'qualified', dispatched: 0, revoked: 0 },
-          { phase: 'commit', reason: 'qualified', dispatched: 0, revoked: 0 },
-        ])
-        else expect(decisions).toHaveLength(1)
       } finally { release?.(response()); clock.mockRestore() }
     },
   )
@@ -2982,7 +2960,7 @@ describe('plugin-owned account Copilot route', () => {
     stubFetch(fetch)
     expect((await call(harness.ctx)).assembler.finish).toEqual({ kind: 'stop' })
     await harness.fiber.dispose()
-    await harness.ctx.plugin(previewPlugin, { reasoning: 'max' })
+    await harness.ctx.plugin(previewPlugin, { registerLegacyProvider: true, reasoning: 'max' })
     const dropped = new BlockAssembler()
     for await (const chunk of old.stream({ ...old.config, messages: [] })) dropped.push(chunk)
     expect(dropped.finish.kind).not.toBe('stop')
@@ -3014,7 +2992,7 @@ describe('plugin-owned account Copilot route', () => {
     const harness = await runtime()
     const service = harness.ctx.get('githubCopilotPreview')
     await expect(harness.ctx.plugin({ name: 'duplicate-preview-test', inject: ['llm', 'credentials'],
-      apply(owner: Context) { previewPlugin.apply(owner) },
+      apply(owner: Context) { previewPlugin.apply(owner, { registerLegacyProvider: true }) },
     })).rejects.toThrow(/already registered|has been registered|DUPLICATE_ADAPTER/)
     expect(harness.ctx.get('githubCopilotPreview')).toBe(service)
     expect(harness.ctx.llm.listProviders().filter(provider => provider.id === PREVIEW)).toHaveLength(1)
@@ -3025,7 +3003,7 @@ describe('plugin-owned account Copilot route', () => {
     const harness = await runtime()
     await harness.fiber.dispose()
     await expect(harness.ctx.plugin({ name: 'unsafe-preview-config-test', inject: ['llm', 'credentials'],
-      apply(owner: Context) { previewPlugin.apply(owner, { apiKeyEnv: 'DO_NOT_USE', baseURL: 'https://private.invalid' } as never) },
+      apply(owner: Context) { previewPlugin.apply(owner, { registerLegacyProvider: true, apiKeyEnv: 'DO_NOT_USE', baseURL: 'https://private.invalid' } as never) },
     })).rejects.toThrow('COPILOT_PREVIEW_CONFIG_UNSUPPORTED')
     expect(harness.ctx.llm.listProviders().some(provider => provider.id === PREVIEW)).toBe(false)
     expect(harness.ctx.get('githubCopilotPreview')).toBeUndefined()
