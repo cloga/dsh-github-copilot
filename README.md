@@ -73,15 +73,15 @@ After the exact compatible release is available and verified, download its
 original asset and checksum in an empty directory:
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.20.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.20.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.20.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.21.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.21.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.21.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 For the `web` profile, install the same Release asset:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.20.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.20.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.21.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.21.dsh.0.2.2.rc.3.tgz
 ```
 
 Choose the intended profile explicitly. Then:
@@ -106,8 +106,9 @@ native provider, open **Manage → Model preferences**, review the displayed
 additions, updates, removals and any IDs absent from the native catalog,
 then choose **Sync models**. Preparing the display uses the current verified
 account snapshot without forcing discovery; if it is unavailable, use
-**Refresh models**. This one-time snapshot replaces only
-`llm-pi-ai.providers.github-copilot.models` with Settings CAS and readback.
+**Refresh models**. This one-time snapshot writes
+`llm-pi-ai.providers.github-copilot.models` with Settings CAS and readback. It
+may also set a missing route-wide API only under the verified conditions below.
 The submitted list contains all enabled account model IDs as `{ id }` references;
 it is not intersected with the installed native catalog. A successfully saved
 list remains after the plugin is unloaded or uninstalled. Capacities, protocols,
@@ -115,14 +116,19 @@ image support and reasoning controls are resolved by the native adapter,
 not copied or certified from account metadata. Differences
 in account input limits, image formats or reasoning metadata no longer exclude
 a model from this submission. IDs absent from the native catalog are advisory,
-not skipped. The native settings validator may reject the entire update when
-it cannot resolve a model's protocol; the plugin does not guess a protocol or
-change the route API to force it through. A rejected write is not reported as
-successful; check the saved settings before trying again.
+not skipped. If an enabled ID is absent and no route API is configured, the
+preview may propose a provider-wide API only when all enabled account models
+share the same verified protocol and every matching native catalog entry agrees.
+The preview explains that this API applies to the whole route, not just missing
+IDs. Existing route APIs are never overwritten; mixed, incomplete or conflicting
+evidence blocks the sync. The model list and an authorized API change are written
+together with Settings CAS and read back. Native validation remains authoritative;
+a rejected or uncertain write is not reported as successful. Check the saved
+settings before trying again.
 **Sync replaces existing per-model customizations, including configured output
 request defaults, with native definitions.** Review updated and removed entries
-before confirming. Route-wide settings remain unchanged. This selects a model
-list; it does not prove supplier compatibility or enforce account-specific
+before confirming. Other route-wide settings remain unchanged. This selects a
+model list; it does not prove supplier compatibility or enforce account-specific
 limits. Native requests retain DSH's transport, validation and error behavior.
 Custom native authentication,
 endpoints, headers, nonempty model overrides, or unproven route compatibility

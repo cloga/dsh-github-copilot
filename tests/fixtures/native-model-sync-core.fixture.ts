@@ -59,7 +59,7 @@ function model(id: string): AccountModelDescriptor {
   }
 }
 
-it('syncs a confirmed snapshot through real native Settings and model resolution across restart using synthetic catalog proof', async () => {
+it('syncs a confirmed snapshot and conditional route API through real native Settings and model resolution across restart using synthetic catalog proof', async () => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
   expect(process.env.DSH_PUBLISHED_CORE_RELEASE).toBe('0.2.2-rc.3')
   const home = await mkdtemp(join(tmpdir(), 'copilot-native-sync-'))
@@ -130,23 +130,15 @@ it('syncs a confirmed snapshot through real native Settings and model resolution
       addedIds: [synced, future], removedIds: [previous],
       outputTokenDefaults: [],
       skipped: [], nativeCatalogMissingIds: [future],
+      routeApiChange: 'openai-responses',
     })
     expect((await ctx.llm.listModels(provider)).map(entry => entry.id)).toEqual([previous])
     if (preview.planId === undefined) throw new Error('fixture preview lacks a plan')
-    const before = structuredClone(ctx.settings.describe().find(row => row.ns === 'llm-pi-ai')!.user)
-    expect(await controller.applyNativeModelSync(preview.planId)).toEqual({
-      state: 'error', code: 'NATIVE_MODEL_SYNC_SAVE_FAILED', modelCount: 0,
-    })
-    expect(ctx.settings.describe().find(row => row.ns === 'llm-pi-ai')?.user).toEqual(before)
-    expect((await ctx.llm.listModels(provider)).map(entry => entry.id)).toEqual([previous])
-    await ctx.settings.mutate('llm-pi-ai', [{
-      op: 'set', path: ['providers', provider, 'api'], value: 'openai-responses',
-    }], ctx.settings.describe().find(row => row.ns === 'llm-pi-ai')!.revision)
-    preview = await controller.prepareNativeModelSync()
-    if (preview.planId === undefined) throw new Error('fixture refreshed preview lacks a plan')
     expect(await controller.applyNativeModelSync(preview.planId)).toEqual({ state: 'ready', modelCount: 2 })
     const settings = ctx.settings.describe().find(row => row.ns === 'llm-pi-ai')!
-    expect(settings.value).toMatchObject({ providers: { [provider]: { compat: { supportsStrictMode: false } } } })
+    expect(settings.value).toMatchObject({ providers: { [provider]: {
+      api: 'openai-responses', compat: { supportsStrictMode: false },
+    } } })
     await vi.waitFor(async () => expect((await ctx.llm.listModels(provider)).map(entry => entry.id)).toEqual([synced, future]))
     expect(await ctx.llm.resolveModelInfo(provider, synced)).toMatchObject({
       id: synced, context: { contextWindow: nativeModel.contextWindow },
@@ -156,6 +148,7 @@ it('syncs a confirmed snapshot through real native Settings and model resolution
     expect((await ctx.llm.resolveModelInfo(provider, synced)).reasoning?.efforts.map(effort => effort.id))
       .toEqual(getSupportedThinkingLevels(nativeModel))
     expect(settings.user).toMatchObject({ providers: { [provider]: { models: [{ id: synced }, { id: future }] } } })
+    expect(settings.user).toMatchObject({ providers: { [provider]: { api: 'openai-responses' } } })
     host.dispose()
     await ctx.fiber.dispose()
     ;({ ctx, host } = await start())
@@ -165,7 +158,7 @@ it('syncs a confirmed snapshot through real native Settings and model resolution
     })
     expect(await ctx.llm.resolveModelInfo(provider, synced)).not.toHaveProperty('defaultMaxTokens')
     expect(ctx.settings.describe().find(row => row.ns === 'llm-pi-ai')?.value).toMatchObject({
-      providers: { [provider]: { compat: { supportsStrictMode: false } } },
+      providers: { [provider]: { api: 'openai-responses', compat: { supportsStrictMode: false } } },
     })
 
     const known = getBuiltinModels(provider)[0]

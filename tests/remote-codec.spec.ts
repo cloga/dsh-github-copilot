@@ -72,4 +72,16 @@ describe('strict Remote factory compatibility', () => {
       expect(() => result.create().parse({ ...preview, skipped: [{ id: 'model', code: 'invented' }] })).toThrow()
     }
   })
+  it('accepts only known route APIs in a native model sync preview', () => {
+    const descriptor = remote.descriptors.find(value => value.method === 'prepareNativeModelSync')!
+    const result = descriptor.result as ReturnType<typeof strictRemoteCodec>
+    const preview = {
+      state: 'ready', planId: '12345678-1234-4234-8234-123456789012',
+      enabledCount: 1, syncableCount: 1, outputTokenDefaults: [],
+      addedIds: ['future-model'], removedIds: [], updatedIds: [], skipped: [],
+      routeApiChange: 'openai-responses',
+    }
+    expect(result.create().parse(preview)).toEqual(preview)
+    expect(() => result.create().parse({ ...preview, routeApiChange: 'invented-api' })).toThrow()
+  })
 })

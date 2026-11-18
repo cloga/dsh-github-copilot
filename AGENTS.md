@@ -107,15 +107,21 @@ live installation and restarts are separate from synthetic CI acceptance.
 
 The user-authorized native model sync (#466, #479) is a narrow exception to the
 no-settings-rewrite rule: after a visible preview and one explicit confirmation, one
-revision-checked write may replace only
-`llm-pi-ai.providers.github-copilot.models` in an existing canonical profile.
+revision-checked write may replace
+`llm-pi-ai.providers.github-copilot.models` in an existing canonical profile and,
+only under the #510 condition below, set its route-wide `api`.
 Prove current canonical-account metadata and the native adapter-owned catalog.
 The explicit #508 direction changes this operation to ID-only account model
 submission, not capability qualification: submit all enabled account IDs as
 `{ id }` references without intersecting them with the native catalog. Do not copy,
 correct or certify account capacity, input, image or reasoning facts here.
-Unknown native IDs are advisory only, not skipped; do not invent definitions
-or rewrite route defaults. Native validation may reject the entire update.
+Unknown native IDs are advisory only, not skipped; do not invent definitions.
+The user-authorized #510 exception may set a missing provider-wide `api` only
+when every enabled account model has the same verified supported protocol and
+every matching native catalog entry agrees. Disclose that route-wide change in
+the preview; preserve an existing route API and block on missing, mixed or
+conflicting evidence. Never set per-model protocols or guess a route default.
+Native validation may reject the entire update.
 The native adapter owns inherited definitions, validation,
 requests and their limitations. This does not weaken account capability proof
 for search or other plugin-owned request paths. Disclose additions, updates,
@@ -126,8 +132,9 @@ Prepare the preview without forced discovery from existing verified evidence.
 An existing `compat.supportsStrictMode: false` may be preserved only when at
 least one synced Responses or Completions model supports it; block other unproven
 compatibility overrides. Recheck account/catalog/preferences and Settings evidence
-before the one-shot write, then read back both user and effective values. Never create a profile,
-change other paths or perform this sync automatically.
+before the one-shot write, then atomically CAS the model list and any authorized
+route API together and read back both user and effective values. Never create a
+profile, change other paths or perform this sync automatically.
 
 The user-confirmed direction on 2026-11-14 supersedes conflicting legacy feature
 requirements below: this plugin is a lightweight GitHub Copilot model integration
@@ -209,7 +216,7 @@ which runtime registrations, UI, and settings remain active:
 1. A conditional authorization-service bootstrap plus Host controller that joins DSH authorization, credentials, and settings.
 2. A Client Models provider-card contribution with one shared account-state owner, Client-safe Remote descriptors and a nested plugin-owned model-preferences disclosure; embed in an existing configured canonical row, suppress its separate footer controller, and retain footer/old-Core section fallback when no such row is mounted.
 3. Strict JSON normalization of pi-ai's provider-owned Copilot OAuth grant.
-4. Preserve intentional absence of `llm-pi-ai.providers.github-copilot`; reconcile only existing legacy profiles and verified ownership journals. The confirmed #466 models-only sync is the narrow explicit exception above; never create or remove a native profile automatically.
+4. Preserve intentional absence of `llm-pi-ai.providers.github-copilot`; reconcile only existing legacy profiles and verified ownership journals. The explicitly confirmed native model sync is the narrow exception above; never create or remove a native profile automatically.
 5. Direct provider-hosted search using the same Host-side credential lifecycle.
 6. Provider-scoped tool-schema compatibility for Copilot payload behaviors; Core remains the tool and execution owner.
 7. A bounded account-discovery route that supplies validated endpoint/capability metadata to the published native adapter, including explicit managed Responses sampling compatibility, plus exact plugin-owned model exclusions enforced across its directory, Auto pools and direct admission, without maintaining model-ID routing rules or changing Core's catalog.

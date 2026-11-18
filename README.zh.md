@@ -61,15 +61,15 @@ node scripts/select-core-release.mjs 0.2.2-rc.3
 精确兼容版本发布且通过验证后，在空目录下载原始制品并校验：
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.20.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.20.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.20.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.21.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.21.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.21.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 例如安装到 `web` profile：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.20.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.20.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.21.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.21.dsh.0.2.2.rc.3.tgz
 ```
 
 请明确选择目标 profile，然后：
@@ -90,16 +90,21 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 **Manage → Model preferences**，查看显示的新增、更新、移除以及原生目录未收录的 ID，
 然后选择 **Sync models**。页面使用当前已验证的账号快照准备这些信息，不强制
 重新发现；如果快照不可用，请使用 **Refresh models**。此显式单次快照只通过
-Settings CAS 和回读替换 `llm-pi-ai.providers.github-copilot.models`。
+通过 Settings CAS 和回读写入 `llm-pi-ai.providers.github-copilot.models`；
+只有满足下述验证条件时，才会同时设置缺失的 route API。
 提交的列表包含账号中所有启用模型的 `{ id }` 引用，不再与原生内置目录取交集。
 成功保存的列表在卸载或停用插件后仍然保留。容量、协议、图像能力和推理控制
 交由原生解析，不再复制或认证账号元数据中的能力。
 账号输入上限、图像格式或推理元数据的差异不再成为排除模型的条件。
 原生目录未收录的 ID 只做提示，不会跳过；如果原生无法解析某个模型的协议，
-原生设置校验可能拒绝整次更新。插件不会猜测协议或自动更改路线 API 来绕过拒绝。
-失败写入不会显示为成功，请检查已保存设置后再重试。
+原生设置校验可能拒绝整次更新。如果启用 ID 不在原生目录且尚未配置 route API，
+只有所有启用账号模型都具有相同且已验证的协议、并且目录中匹配的原生模型协议一致时，
+预览才会建议设置 provider 级 API。预览会说明它影响整条路由，而非仅影响缺失 ID。
+已有 route API 不会被覆盖；协议混合、证据缺失或冲突时会阻止同步。模型列表及获准的
+API 变更会在同一次 Settings CAS 中写入并分别读回。原生校验仍是最终依据；失败或结果
+不确定时不会报告成功，请检查已保存设置后再重试。
 **同步会用原生定义替换已有的模型自定义参数，包括单次请求输出默认值。**
-确认前请检查更新和移除项。路线级设置保持不变。这只是模型列表选择，不代表供应商
+确认前请检查更新和移除项。其他路线级设置保持不变。这只是模型列表选择，不代表供应商
 兼容性已经验证，也不会强制执行账号特有的限制；传输、校验和错误处理仍由原生拥有。
 原生 provider 存在自定义认证、端点、请求头、非空模型覆盖或无法验证的
 路线兼容性覆盖时，同步会停止，不会修改这些设置。已有的 `compat.supportsStrictMode: false`
