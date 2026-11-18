@@ -643,7 +643,7 @@
         {"file": "package.json", "marker": "\"external\": ["}
       ],
       "tests": [
-        {"file": "tests/scripts/desktop-package-graph.test.mjs", "name": "audits the current installed graph while retaining historical projections"},
+        {"file": "tests/scripts/desktop-package-graph.test.mjs", "name": "audits the current installer graph while retaining historical projections"},
         {"file": "tests/scripts/desktop-package-graph.test.mjs", "name": "shared graph gate rejects bundled, optional, incompatible, or unaudited host ownership"},
         {"file": "tests/scripts/desktop-package-graph.test.mjs", "name": "client externals stay outside the strict Node peer graph"}
       ]
