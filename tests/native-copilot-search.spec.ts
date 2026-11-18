@@ -87,6 +87,44 @@ describe('optional native Copilot hosted search', () => {
     await expect(fixture.ctx.web.search({ query: 'still native' })).resolves.toMatchObject({ content: 'native' })
     expect(nativeSearch).toHaveBeenCalledTimes(2)
   })
+
+  it('preserves native route-specific search preferences when Copilot search is not selected', async () => {
+    const fixture = setup()
+    delete fixture.webSettings.searchProvider
+    await fixture.ctx.plugin(WebRuntime, { searchProvider: undefined, fetchProvider: undefined })
+    const messages = vi.fn(async () => ({ content: 'messages', sources: [], truncated: false }))
+    const api = vi.fn(async () => ({ content: 'api', sources: [], truncated: false }))
+    fixture.ctx.web.registerSearchProvider({ id: 'deepseek-official', available: () => true, search: messages })
+    fixture.ctx.web.registerSearchProvider({ id: 'deepseek-search-api', available: () => true, search: api })
+    fixture.ctx.web.registerSearchProvider(fixture.provider)
+
+    for (const [llmProvider, expected] of [
+      ['deepseek-official', 'messages'], ['deepseek-account', 'messages'], ['github-copilot', 'api'],
+    ] as const) {
+      await expect(fixture.ctx.web.searchReady(llmProvider)).resolves.toBe(true)
+      await expect(fixture.ctx.web.search({ query: 'native', llmProvider })).resolves.toMatchObject({ content: expected })
+    }
+    await expect(fixture.ctx.web.search({ query: 'outside a request' })).resolves.toMatchObject({ content: 'api' })
+    expect(messages).toHaveBeenCalledTimes(2)
+    expect(api).toHaveBeenCalledTimes(2)
+    expect(fixture.fetch).not.toHaveBeenCalled()
+  })
+
+  it('honors explicit Copilot search selection over the native route preference', async () => {
+    const fixture = setup()
+    await fixture.ctx.plugin(WebRuntime, { searchProvider: 'github-copilot-hosted', fetchProvider: undefined })
+    const nativeSearch = vi.fn(async () => ({ content: 'native', sources: [], truncated: false }))
+    fixture.ctx.web.registerSearchProvider({ id: 'deepseek-official', available: () => true, search: nativeSearch })
+    fixture.ctx.web.registerSearchProvider({ id: 'deepseek-search-api', available: () => true, search: nativeSearch })
+    fixture.ctx.web.registerSearchProvider(fixture.provider)
+
+    await expect(fixture.ctx.web.searchReady('deepseek-account')).resolves.toBe(true)
+    await expect(fixture.ctx.web.search({ query: 'explicit selection', llmProvider: 'deepseek-account' }))
+      .resolves.toMatchObject({ content: 'A sourced answer.' })
+    expect(fixture.requests).toHaveLength(2)
+    expect(nativeSearch).not.toHaveBeenCalled()
+  })
+
   it('registers without I/O and checks readiness without discovery or refresh', async () => {
     const fixture = setup()
     expect(fixture.fetch).not.toHaveBeenCalled()

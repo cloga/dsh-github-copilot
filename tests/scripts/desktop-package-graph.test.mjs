@@ -7,20 +7,26 @@ import {
 } from '../../scripts/verify-desktop-package-graph.mjs'
 
 const manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'))
+const baseline = JSON.parse(await readFile(new URL('../../deployment-baseline.json', import.meta.url), 'utf8'))
 const contracts = await readDesktopSharedPackageContracts()
 const rc2 = contracts.find(contract => contract.runtimeVersion === '0.2.0-rc.2')
 assert.ok(rc2, 'retain the independently audited signed rc.2 graph')
-const historicalContracts = contracts.filter(contract => contract.runtimeVersion !== manifest.engines.dsh)
+const historicalContracts = contracts.filter(contract => contract.runtimeVersion !== manifest.engines.dsh
+  && !Object.hasOwn(contract.auditedPackages, '@deepseek-ai/dsh-tool-executor-native'))
 const { '@deepseek-ai/dsh-tool-executor-native': _nativeExecutor, ...historicalPeers } = manifest.peerDependencies
 // Synthetic subject for historical validator regressions, not current Desktop evidence.
 const historicalManifest = { ...manifest, engines: { ...manifest.engines, dsh: rc2.runtimeVersion },
   peerDependencies: Object.fromEntries(Object.entries(historicalPeers).map(([name, range]) =>
     [name, rc2.auditedPackages[name] ?? range])) }
 
-test('audits the current installed graph while retaining historical projections', () => {
+test('audits the current installer graph while retaining historical projections', () => {
   const evidence = verifyDesktopPackageGraph(manifest, contracts)
-  assert.deepEqual(evidence.map(item => item.packageCount), [241, 336, 246, 287])
-  assert.deepEqual(evidence.map(item => item.compatibilityChecked), [false, true, false, false])
+  assert.deepEqual(evidence.map(item => item.packageCount), [241, 336, 246, 287, 336])
+  assert.deepEqual(evidence.map(item => item.compatibilityChecked), [false, false, false, false, true])
+  const current = evidence.find(item => item.compatibilityChecked)
+  const recorded = baseline.supportedBaselines.desktopSharedPackageContracts.find(item => item.id === current.id)
+  assert.equal(current.sourceSha256, recorded.sourceSha256)
+  assert.equal(current.packageCount, recorded.packageCount)
   assert.deepEqual(verifyDesktopPackageGraph(historicalManifest, historicalContracts).map(item => item.compatibilityChecked),
     [false, false, true])
   assert.throws(() => verifyDesktopPackageGraph(manifest, historicalContracts), /Exactly one current Desktop/)

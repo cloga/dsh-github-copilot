@@ -8,8 +8,8 @@ catalog, selection strategy, or agent runtime. Follow the
 
 ## Exact target and evidence
 
-Current source target: official DSH `0.2.2-rc.3` at
-`38a6a5c965aa99ab525161efb7cc5cf1fe62fced`, with exact dependency versions
+Current source target: official DSH `0.2.2-rc.5` at
+`9c2670d3bce5275e0d1610272958121af87787bb`, with exact dependency versions
 in `package.json`.
 
 Plugin `0.1.0-alpha.14.dsh.0.2.2.rc.3` at
@@ -25,6 +25,27 @@ Use the exact published source and package graphs in the Windows/Linux CI
 fixtures. Do not patch Core or dependencies. The fixtures use synthetic
 credentials and local synthetic HTTP only; they prove no live account,
 endpoint, supplier behavior, publication, installation, or Desktop activation.
+
+### Official-first rc.5 review
+
+The [official Windows nightly mirror](https://github.com/cloga/dsh-github-copilot/releases/tag/desktop-v0.2.2-rc.5)
+contains the unchanged, hash- and signature-verified installer. It is not the
+different stable-channel build. Its `dsh/desktop-runtime.json` descriptor is
+4,738,750 bytes (SHA-256
+`bc7390d0088b9a4e850e3e3bf3c4bf7e3eaf09752c0505d20b6f8215640ee0e8`)
+and lists 336 shared packages. Its peer ownership is checked against the
+plugin manifest; this does not establish effective profile resolution, a loaded
+plugin, or a live request.
+
+| Area | Evidence and decision |
+|---|---|
+| Web search | **Partial:** [rc.5 Web](https://github.com/deepseek-ai/deepseek-harness/blob/9c2670d3bce5275e0d1610272958121af87787bb/packages/web/web/src/index.ts) prefers a usable native DeepSeek search backend according to the initiating model route when no backend is configured. Keep native selection; the plugin backend is available only when explicitly selected. Exact-source and published-artifact regressions must cover route preference, explicit selection and native tool context. |
+| Native adapter and reviewer | **Partial:** the native catalog/configuration, model-selection and [reviewer entry](https://github.com/deepseek-ai/deepseek-harness/blob/9c2670d3bce5275e0d1610272958121af87787bb/packages/experimental/auto-review/src/index.ts) are unchanged from rc.3, and pi-ai remains `1.3.0`. Retain exact rc.5 package/callback and account proof; synthetic runtime qualification is still required. |
+| Native errors and other features | **Unverified live:** rc.5 adds `CONTENT_REFUSED` to native LLM failures. Core remains the error and retry owner; the plugin does not add a fallback. Model, subagent, image and account behavior require the exact-version matrix, not a source-diff inference. |
+
+Retire reviewer sampling or optional hosted search only after an official
+equivalent and its configuration, account isolation and migration are verified.
+Neither metadata nor this source comparison proves live supplier support.
 
 ## Required behavior
 

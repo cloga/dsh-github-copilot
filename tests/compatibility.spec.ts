@@ -33,14 +33,14 @@ function context(overrides: Record<string, unknown> = {}): Context {
 
 describe('assertDshCompatibility', () => {
   it('admits only the exact current official release', () => {
-    expect(DSH_COMPATIBILITY.release).toBe('0.2.2-rc.3')
-    expect(DSH_COMPATIBILITY.developmentRelease).toBe('0.2.2-rc.3')
-    expect(DSH_COMPATIBILITY.supportedReleases).toEqual(['0.2.2-rc.3'])
-    expect(DSH_COMPATIBILITY.peerRange).toBe('0.2.2-rc.3')
+    expect(DSH_COMPATIBILITY.release).toBe('0.2.2-rc.5')
+    expect(DSH_COMPATIBILITY.developmentRelease).toBe('0.2.2-rc.5')
+    expect(DSH_COMPATIBILITY.supportedReleases).toEqual(['0.2.2-rc.5'])
+    expect(DSH_COMPATIBILITY.peerRange).toBe('0.2.2-rc.5')
     expect(() => assertDshCompatibility(context({ authorization: {} })))
       .toThrow('authorization.describe')
     expect(() => assertDshCompatibility(context({ authorization: {} })))
-      .toThrow('0.2.2-rc.3')
+      .toThrow('0.2.2-rc.5')
   })
 
   it('declares the current and retained exact contract targets without claiming live Desktop validation', () => {
@@ -48,8 +48,8 @@ describe('assertDshCompatibility', () => {
     const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
     const current = baseline.supportedBaselines.dsh
     expect(current.admittedReleases).toEqual(DSH_COMPATIBILITY.supportedReleases)
-    expect(current.baselines).toHaveLength(15)
-    expect(current).toMatchObject({ release: '0.2.2-rc.3', tag: 'dsh-v0.2.2-rc.3', commit: '38a6a5c965aa99ab525161efb7cc5cf1fe62fced' })
+    expect(current.baselines).toHaveLength(16)
+    expect(current).toMatchObject({ release: '0.2.2-rc.5', tag: 'dsh-v0.2.2-rc.5', commit: '9c2670d3bce5275e0d1610272958121af87787bb' })
     expect(current.baselines.at(-1)).toMatchObject({
       release: current.release, tag: current.tag, commit: current.commit,
       source: 'https://github.com/deepseek-ai/deepseek-harness',
@@ -60,7 +60,8 @@ describe('assertDshCompatibility', () => {
       clientSessionContext: 'multiple-session-owner-isolation',
       evidenceScope: 'unchanged-tagged-source-target',
       standaloneNpmArtifacts: 'not-tested',
-      desktopRelease: 'local-installed-version-only', desktopPackageSet: 'not-materialized',
+      desktopRelease: 'official-windows-nightly-mirror-hash-signature-verified',
+      desktopPackageSet: 'signed-installer-runtime-descriptor-audited-not-effective-profile',
     })
     expect(current.baselines.at(-1).runtimeTests).toEqual(expect.arrayContaining([
       'tests/fixtures/alpha2-contracts-core.fixture.ts',

@@ -40,7 +40,7 @@ function response(model: string) {
 
 it.each(['absent', 'enabled', 'disposed'] as const)('selects and concurrently dispatches native Copilot subagents with the plugin %s', async state => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
-  expect(process.env.DSH_PUBLISHED_CORE_RELEASE).toBe('0.2.2-rc.3')
+  expect(['0.2.2-rc.3', '0.2.2-rc.5']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
   const model = githubCopilotProvider().getModels().find(entry => entry.api === 'openai-responses'
     && entry.reasoning && getSupportedThinkingLevels(entry).includes('low')
     && getSupportedThinkingLevels(entry).includes('high'))

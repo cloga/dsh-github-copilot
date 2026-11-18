@@ -64,7 +64,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           repository: deepseek-ai/deepseek-harness
-          ref: 38a6a5c965aa99ab525161efb7cc5cf1fe62fced
+          ref: 9c2670d3bce5275e0d1610272958121af87787bb
           path: dsh-upstream
           persist-credentials: false
       - uses: pnpm/action-setup@v6
@@ -127,7 +127,7 @@ jobs:
       - name: Verify current unchanged tagged runtime before packing
         shell: bash
         run: |
-          node scripts/verify-tagged-core.mjs prepare --root . --core dsh-upstream --target "$RUNNER_TEMP/copilot-tagged-release" --release 0.2.2-rc.3 --native-addon "$RUNNER_TEMP/copilot-native-addon"
+          node scripts/verify-tagged-core.mjs prepare --root . --core dsh-upstream --target "$RUNNER_TEMP/copilot-tagged-release" --release 0.2.2-rc.5 --native-addon "$RUNNER_TEMP/copilot-native-addon"
           node node_modules/vitest/vitest.mjs run --config "$RUNNER_TEMP/copilot-tagged-release/vitest.config.mts"
       - name: Verify plugin package
         run: pnpm verify

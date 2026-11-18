@@ -24,6 +24,7 @@ test('admits the exact 0.2.0-rc.2 source pin while retaining prior tagged baseli
     '0.2.1-alpha.5': '1517a4dbca0a2789ff1d41ba439600f8547d23fa',
     '0.2.1-rc.3': '1f81c047fc48fa190a683e469daa699857e9afe8',
     '0.2.2-rc.3': '38a6a5c965aa99ab525161efb7cc5cf1fe62fced',
+    '0.2.2-rc.5': '9c2670d3bce5275e0d1610272958121af87787bb',
   })
 })
 
@@ -52,7 +53,7 @@ async function fixture(release = '0.1.3-alpha.1') {
   await mkdir(join(root, 'tests'), { recursive: true })
   await mkdir(core)
   await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'dsh-github-copilot', dependencies: {
-    '@earendil-works/pi-ai': release === '0.2.2-rc.3' ? '1.3.0'
+    '@earendil-works/pi-ai': ['0.2.2-rc.3', '0.2.2-rc.5'].includes(release) ? '1.3.0'
       : release === '0.2.1-alpha.5' || release === '0.2.1-rc.3' ? '1.1.0' : '0.87.1',
   } }))
   await writeFile(join(root, 'tests/preview-route.spec.ts'), 'export {}')
@@ -210,9 +211,9 @@ test('maps import-condition mjs vendor exports without aliasing the plugin vendo
   assert.equal(resolver.resolveId('@deepseek-ai/schemastery', join(value.root, 'src/config.ts')), null)
 }))
 
-for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3']) {
+for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3', '0.2.2-rc.5']) {
   test(`selects the actual adapter, Session and Remote regression suite for ${release}`, async () => {
-    const recent = ['0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3'].includes(release)
+    const recent = ['0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3', '0.2.2-rc.5'].includes(release)
     const modern = release.startsWith('0.2.0-') || recent
     const current = release === '0.2.0-rc.2' || recent
     const value = await fixture(release)
@@ -249,7 +250,7 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
         await writeFile(join(value.root, 'tests/fixtures/alpha4-contracts-core.fixture.ts'), 'export {}')
         await writeFile(join(value.root, 'tests/fixtures/copilot-usage-selector-core.fixture.ts'), 'export {}')
       }
-      if (release === '0.2.2-rc.3') {
+      if (['0.2.2-rc.3', '0.2.2-rc.5'].includes(release)) {
         await writeFile(join(value.root, 'tests/native-web-composition.spec.ts'), 'export {}')
         await writeFile(join(value.root, 'tests/dual-model-host.spec.ts'), 'export {}')
         await writeFile(join(value.root, 'tests/loader-composition.spec.ts'), 'export {}')
@@ -257,6 +258,9 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
         await writeFile(join(value.root, 'tests/fixtures/subagent-copilot-core.fixture.ts'), 'export {}')
         await writeFile(join(value.root, 'tests/fixtures/native-subagent-copilot-core.fixture.ts'), 'export {}')
         await writeFile(join(value.root, 'tests/fixtures/native-model-sync-core.fixture.ts'), 'export {}')
+        if (release === '0.2.2-rc.5') {
+          await writeFile(join(value.root, 'tests/native-copilot-search.spec.ts'), 'export {}')
+        }
         value.nativeAddon = join(value.base, 'native-addon')
         const addon = join(value.nativeAddon, 'node_modules/@deepseek-ai/node-addon-system')
         await mkdir(addon, { recursive: true })
@@ -275,7 +279,7 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
       const config = (await import(pathToFileURL(report.configPath).href)).default
       assert.equal(report.commit, TAGGED_CORE_RELEASES[release])
       assert.equal(config.test.env.DSH_PUBLISHED_CORE_RELEASE, release)
-      if (release === '0.2.2-rc.3') {
+      if (['0.2.2-rc.3', '0.2.2-rc.5'].includes(release)) {
         const guard = config.plugins.find(item => item.name === 'tagged-core-public-import-guard')
         const addon = join(value.nativeAddon, 'node_modules/@deepseek-ai/node-addon-system/flock.js')
         assert.equal(guard.resolveId('@deepseek-ai/node-addon-system/flock', join(value.core, 'packages/session/session-persistence-jsonl/src/lease.ts')), addon)
@@ -304,10 +308,11 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
         ...current ? ['tests/fixtures/auto-review-copilot-core.fixture.ts'] : [],
         'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts',
         ...recent ? ['tests/fixtures/alpha4-contracts-core.fixture.ts', 'tests/fixtures/copilot-usage-selector-core.fixture.ts'] : [],
-        ...release === '0.2.2-rc.3' ? ['tests/native-web-composition.spec.ts', 'tests/dual-model-host.spec.ts',
+        ...['0.2.2-rc.3', '0.2.2-rc.5'].includes(release) ? ['tests/native-web-composition.spec.ts', 'tests/dual-model-host.spec.ts',
           'tests/loader-composition.spec.ts',
           'tests/fixtures/tool-schema-core.fixture.ts', 'tests/fixtures/subagent-copilot-core.fixture.ts',
-          'tests/fixtures/native-subagent-copilot-core.fixture.ts', 'tests/fixtures/native-model-sync-core.fixture.ts'] : []])
+          'tests/fixtures/native-subagent-copilot-core.fixture.ts', 'tests/fixtures/native-model-sync-core.fixture.ts'] : [],
+        ...release === '0.2.2-rc.5' ? ['tests/native-copilot-search.spec.ts'] : []])
     } finally { await rm(value.base, { recursive: true, force: true }) }
   })
 }

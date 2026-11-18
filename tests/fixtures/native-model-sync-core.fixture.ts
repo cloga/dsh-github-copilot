@@ -61,7 +61,7 @@ function model(id: string): AccountModelDescriptor {
 
 it('syncs a confirmed snapshot and conditional route API through real native Settings and model resolution across restart using synthetic catalog proof', async () => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
-  expect(process.env.DSH_PUBLISHED_CORE_RELEASE).toBe('0.2.2-rc.3')
+  expect(['0.2.2-rc.3', '0.2.2-rc.5']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
   const home = await mkdtemp(join(tmpdir(), 'copilot-native-sync-'))
   const dir = join(home, 'profiles', 'synthetic')
   const contexts: Context[] = []

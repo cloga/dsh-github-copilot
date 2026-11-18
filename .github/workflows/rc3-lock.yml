@@ -1,9 +1,9 @@
-name: Rc3 exact dependency recovery
+name: Rc5 exact dependency resolution
 
 on:
   push:
     branches:
-      - cloga-assess-dsh-core-upgrade
+      - cloga-docs-freshness-gates
 
 permissions:
   contents: read
@@ -23,13 +23,12 @@ jobs:
           package-manager-cache: false
       - name: Read exact official package metadata
         run: |
-          npm view @deepseek-ai/dsh-agent@0.2.1-rc.3 version dist.integrity --registry=https://registry.npmjs.org
-          npm view @deepseek-ai/dsh-permission-presets@0.2.1-rc.3 version dist.integrity --registry=https://registry.npmjs.org
-          npm view @deepseek-ai/dsh-agent time --json --registry=https://registry.npmjs.org
+          npm view @deepseek-ai/dsh-agent@0.2.2-rc.5 version dist.integrity --registry=https://registry.npmjs.org
+          npm view @deepseek-ai/dsh-permission-presets@0.2.2-rc.5 version dist.integrity --registry=https://registry.npmjs.org
       - name: Resolve unchanged exact dependencies with the existing age policy
         run: pnpm install --lockfile-only --ignore-scripts --strict-peer-dependencies --registry=https://registry.npmjs.org
       - uses: actions/upload-artifact@v4
         with:
-          name: rc3-exact-lock
+          name: rc5-exact-lock
           path: pnpm-lock.yaml
           if-no-files-found: error

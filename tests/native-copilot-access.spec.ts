@@ -41,7 +41,7 @@ async function independentCatalogFixture() {
   await writeFile(catalogPath, `export function getBuiltinModels() {
     return ${JSON.stringify([{ ...model, api: 'openai-completions' }])}
   }`)
-  const adapter = { name: '@deepseek-ai/dsh-llm-pi-ai', version: '0.2.2-rc.3',
+  const adapter = { name: '@deepseek-ai/dsh-llm-pi-ai', version: '0.2.2-rc.5',
     manifestPath: join(directory, 'adapter', 'package.json') }
   const nativePi = { name: '@earendil-works/pi-ai', version: '1.3.0', manifestPath: nativeManifest,
     manifest: { exports: { './providers/*': { import: './dist/providers/*.js' } } } }
@@ -70,7 +70,7 @@ async function independentCatalogFixture() {
       : name === nativePi.name ? importer === pathToFileURL(adapter.manifestPath).href ? nativePi : localPi
         : undefined,
   })
-  return { ctx, model, nativePi, localPi, fiber, state, catalogPath }
+  return { ctx, model, adapter, nativePi, localPi, fiber, state, catalogPath }
 }
 
 describe('native Copilot protocol qualification', () => {
@@ -181,6 +181,15 @@ describe('native Copilot protocol qualification', () => {
     const route = await captureNativeCopilot(fixture.ctx, code => reasons.push(code))
     expect(reasons).toEqual([])
     expect(route?.models.get(fixture.model.id)?.api).toBe('openai-completions')
+  })
+
+  it('revokes an rc.5 native route when the adapter package version changes', async () => {
+    const fixture = await independentCatalogFixture()
+    const route = await captureNativeCopilot(fixture.ctx)
+    expect(route).toBeDefined()
+    fixture.adapter.version = '0.2.2-rc.3'
+    expect(() => route!.assertCurrent()).toThrow('COPILOT_NATIVE_ROUTE_CHANGED')
+    await expect(captureNativeCopilot(fixture.ctx)).resolves.toBeUndefined()
   })
 
   it('exposes the proven unfiltered adapter catalog independently of the configured model list', async () => {

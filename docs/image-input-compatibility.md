@@ -1,6 +1,6 @@
 # Image input compatibility
 
-Current source target: official DSH `0.2.2-rc.3`. Image projection, offload,
+Current source target: official DSH `0.2.2-rc.5`. Image projection, offload,
 the native adapter and supplier errors remain Core-owned. DSH owns model
 selection and Auto; the old plugin Auto picker and its filtering are retired.
 
