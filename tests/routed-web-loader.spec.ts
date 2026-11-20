@@ -23,7 +23,11 @@ const base = [
 ]
 
 function selection(provider: string): Agent {
-  return { id: provider, session: { requestHeader: () => ({ config: { provider, model: 'synthetic-model' } }) } } as unknown as Agent
+  const model = 'synthetic-model'
+  return { id: provider, session: {
+    requestHeader: () => ({ config: { provider, model } }),
+    requestContext: () => ({ provider, model }),
+  } } as unknown as Agent
 }
 
 describe('native web bundle with the public Loader', () => {

@@ -7,6 +7,10 @@
 > setting, not the old routing controls. See the [current README](../README.md#use)
 > and historical qualification issue [#483](https://github.com/cloga/dsh-github-copilot/issues/483).
 
+Current DSH may omit `web_search` from a model step when its selected backend
+reports it cannot authenticate. A backend selection error remains a native
+error, not permission for the plugin to choose a different backend.
+
 Historical target: official DSH / Windows Desktop `0.2.0-rc.2`. At that revision
 the routed facade and configuration page were shipped, not a pending proposal.
 

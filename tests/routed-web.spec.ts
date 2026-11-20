@@ -27,7 +27,11 @@ const webConfig = (searchProvider: string | undefined, fetchProvider: string | u
 
 function owner(provider: string, id: string): Agent {
   // Minimal Session projection; this suite executes real tool/web/scope services, not the Agent loop.
-  return { id, session: { requestHeader: () => ({ config: { provider, model: `${id}-model` } }) } } as unknown as Agent
+  const model = `${id}-model`
+  return { id, session: {
+    requestHeader: () => ({ config: { provider, model } }),
+    requestContext: () => ({ provider, model }),
+  } } as unknown as Agent
 }
 
 async function harness(fallback: 'none' | 'deepseek' = 'none', selectedProvider?: string, captured = false) {

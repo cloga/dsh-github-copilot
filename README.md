@@ -173,6 +173,9 @@ Web service. Select it explicitly in native Web settings and enable the native
 search tool as needed; installation does not change the selected backend.
 Without an explicit backend, DSH rc.5 applies its own model-route search
 preference; the optional Copilot backend does not participate in that choice.
+DSH may omit `web_search` from a model step when the selected backend reports
+that it cannot authenticate. Backend selection errors remain native errors;
+the plugin does not silently select another backend.
 Search uses only the canonical OAuth account and models shared by the native
 configured catalog and current account metadata. In **Plugins → dsh-github-copilot
 → details → Copilot search model**, choose **Automatic** (the default) or one

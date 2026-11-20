@@ -129,7 +129,7 @@ async function fixture({ mountController = true } = {}) {
     getView: forbidden, ensureModels: forbidden, routeFacts: forbidden,
   })
 
-  // The rc.3 Agent owns the exported selection projection; older controllers install theirs.
+  // The current Agent owns the exported selection projection; older controllers install theirs.
   // Optional UI/file/skill plugins remain dependency-gated in this isolated ctx.
   const controller = mountController ? new SessionController(ctx, { nativeOpen: false }, {
     canOpenPath: () => false, openPath: forbidden,

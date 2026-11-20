@@ -78,7 +78,7 @@ jobs:
           test "$(pnpm config get minimumReleaseAge)" = 0
           test "$(cd dsh-upstream && pnpm config get minimumReleaseAge)" = 0
       - run: pnpm install --frozen-lockfile
-      - name: Install rc.3 Core pi-ai closure
+      - name: Install pinned Core pi-ai closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-llm-pi-ai...'
       - run: pnpm verify:upstream -- dsh-upstream
@@ -86,7 +86,7 @@ jobs:
       - name: Install tagged Session and Remote verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-api-session-controller...'
-      - name: Install rc.3 compaction recovery verification closure
+      - name: Install pinned compaction recovery verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-agent-loop...' --filter '@deepseek-ai/dsh-compaction-basic...'
       - name: Install native Auto reviewer verification closure
@@ -98,13 +98,13 @@ jobs:
       - name: Install isolated preset compaction verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-agent-preset-registry...' --filter '@deepseek-ai/cordis-plugin-group...'
-      - name: Install rc.3 subagent descriptor verification closure
+      - name: Install pinned subagent descriptor verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-subagent...'
       - name: Install native subagent model invocation verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-agent-loop-testkit...' --filter '@deepseek-ai/dsh-tool-subagent...' --filter '@deepseek-ai/dsh-subagent-spawn-in-process...' --filter '@deepseek-ai/dsh-session-persistence-jsonl...'
-      - name: Install rc.3 image-offload verification closure
+      - name: Install pinned image-offload verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-compaction-image-offload...'
       - name: Install tagged search verification closure

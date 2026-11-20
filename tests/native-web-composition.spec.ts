@@ -113,9 +113,11 @@ describe('native web ownership', () => {
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(NativeToolExecutor)
     await ctx.plugin(WebRuntime, { searchProvider: 'native', fetchProvider: undefined })
+    let searchReady = true
+    const ready = vi.fn(async () => searchReady)
     const search = vi.fn(async () => ({ content: 'native answer', sources: [], truncated: false }))
     await ctx.plugin({ inject: ['web'], apply(owner) {
-      owner.web.registerSearchProvider({ id: 'native', available: () => true, search })
+      owner.web.registerSearchProvider({ id: 'native', available: () => true, ready, search })
     } })
     const session = Session.create(SessionId('copilot-agent'))
     session.append('request/header', { header: {
@@ -127,9 +129,7 @@ describe('native web ownership', () => {
     } as unknown as Agent
     const scope = createScope(ctx, agent)
     await ctx.plugin({ inject: ['tools', 'web', 'systemPrompt'], apply(owner) {
-      const toolScope = createScope(owner, agent)
-      applyWebSearchTool(toolScope.ctx, 2, 2, 800, 60_000, false)
-      return () => toolScope.dispose()
+      applyWebSearchTool(owner, 2, 2, 800, 60_000, false)
     } })
     const plugin = ctx.plugin(Copilot, config)
     await plugin
@@ -163,6 +163,15 @@ describe('native web ownership', () => {
     }, reason: 'initial' })
     nativeSession.append('request/context', { provider: GITHUB_COPILOT_PROVIDER_ID, model: 'native-model' })
     const nativeAgent = { id: 'native-copilot-agent', session: nativeSession } as unknown as Agent
+    searchReady = false
+    const disabled = await ctx.tools.resolve({
+      agent: nativeAgent, signal: new AbortController().signal, modelSelection: nativeSession.requestHeader()!.config,
+    })
+    expect(ctx.tools.get('web_search', nativeAgent, disabled)).toBeUndefined()
+    expect(ready).toHaveBeenLastCalledWith(GITHUB_COPILOT_PROVIDER_ID)
+    disabled.dispose()
+    expect(search).not.toHaveBeenCalled()
+    searchReady = true
     const run = (callId: string, targetAgent: Agent = agent) => ctx.agents.withInitiator(targetAgent, async () => {
       const requestSignal = new AbortController().signal
       const toolSet = await ctx.tools.resolve({ agent: targetAgent, signal: requestSignal, modelSelection: targetAgent.session.requestHeader()!.config })
