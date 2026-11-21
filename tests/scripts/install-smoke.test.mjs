@@ -10,8 +10,9 @@ import { assertSmokeCoreRelease, hostDependencies, missingDependencyProbe, versi
 test('install smoke admits the current exact Core and rejects older or missing pins', async () => {
   const manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'))
   assert.doesNotThrow(() => assertSmokeCoreRelease(manifest.engines.dsh))
-  assert.throws(() => assertSmokeCoreRelease('0.2.1-rc.3'), /pinned to DSH 0\.2\.2-rc\.3/)
-  assert.throws(() => assertSmokeCoreRelease(undefined), /pinned to DSH 0\.2\.2-rc\.3/)
+  assert.throws(() => assertSmokeCoreRelease('0.2.1-rc.3'), /pinned to DSH 0\.2\.2-rc\.5/)
+  assert.throws(() => assertSmokeCoreRelease('0.2.2-rc.3'), /pinned to DSH 0\.2\.2-rc\.5/)
+  assert.throws(() => assertSmokeCoreRelease(undefined), /pinned to DSH 0\.2\.2-rc\.5/)
 })
 
 test('generated missing-dependency probe executes and rejects unexpected success or another missing package', () => {

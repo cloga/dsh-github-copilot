@@ -56,7 +56,7 @@ function response(model: string) {
 
 it('routes native Copilot children across a confirmed account switch', async () => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
-  expect(process.env.DSH_PUBLISHED_CORE_RELEASE).toBe('0.2.2-rc.3')
+  expect(['0.2.2-rc.3', '0.2.2-rc.5']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
   const directory = await mkdtemp(join(tmpdir(), 'copilot-subagent-fixture-'))
   const ctx = new Context()
   const release = Promise.withResolvers<void>()

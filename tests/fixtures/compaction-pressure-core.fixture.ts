@@ -48,7 +48,7 @@ const oldSentinel = 'OLD_HISTORY_SENTINEL'
 const currentSentinel = 'CURRENT_REQUEST_SENTINEL'
 const checkpoint = 'RECOVERY_CHECKPOINT'
 const contexts: Context[] = []
-const expectedSessionFormatVersion = ['0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '') ? 4 : 3
+const expectedSessionFormatVersion = ['0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3', '0.2.2-rc.5'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '') ? 4 : 3
 type SummaryMode = 'stop' | 'max-tokens' | 'await-abort' | 'reject-overflow' | 'slow'
 
 vi.mock('@earendil-works/pi-ai/utils/estimate', async importOriginal => {
@@ -287,7 +287,7 @@ describe('native background compaction lifetime', () => {
 
 beforeAll(() => {
   expect(['tagged-source-runtime', 'installed-artifact-runtime']).toContain(process.env.DSH_CORE_EVIDENCE)
-  expect(['0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
+  expect(['0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3', '0.2.2-rc.5']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
   expect(SESSION_FORMAT_VERSION).toBe(expectedSessionFormatVersion)
 })
 
@@ -367,7 +367,7 @@ async function fixture(mode: SummaryMode = 'stop', recovery = false, nativeAdmis
   let model = 'fixture-model-A'
   let inputBudgetTokens: number | undefined
   let autoLoads = 0
-  const nativeSelection = process.env.DSH_PUBLISHED_CORE_RELEASE === '0.2.2-rc.3'
+  const nativeSelection = ['0.2.2-rc.3', '0.2.2-rc.5'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '')
   const removeAuto = nativeAdmission || nativeSelection ? () => {} : installAutoModelRouting(ctx, {
     async loadModels() {
       autoLoads++
@@ -853,7 +853,7 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
 
     expect(f.agent.options.model).toBe('fixture-model-A')
     expect(f.agent.session.requestHeader()?.config.model).toBe('fixture-model-B')
-    if (process.env.DSH_PUBLISHED_CORE_RELEASE === '0.2.2-rc.3') {
+    if (['0.2.2-rc.3', '0.2.2-rc.5'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '')) {
       expect(f.agent.model.current()).toMatchObject({ provider, model: 'fixture-model-B' })
     } else {
       expect(f.autoLoads()).toBe(2)

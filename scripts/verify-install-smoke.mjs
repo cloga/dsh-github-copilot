@@ -275,8 +275,8 @@ console.log('EXPECTED_MISSING_RUNTIME_DEPENDENCY:' + ${JSON.stringify(packageNam
 }
 
 export function assertSmokeCoreRelease(coreRelease) {
-  if (coreRelease !== '0.2.2-rc.3') {
-    throw new Error(`Install smoke is pinned to DSH 0.2.2-rc.3; got ${JSON.stringify(coreRelease)}`)
+  if (coreRelease !== '0.2.2-rc.5') {
+    throw new Error(`Install smoke is pinned to DSH 0.2.2-rc.5; got ${JSON.stringify(coreRelease)}`)
   }
 }
 

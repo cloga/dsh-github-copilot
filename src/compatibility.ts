@@ -8,10 +8,10 @@
 import type { Context } from '@deepseek-ai/cordis'
 
 export const DSH_COMPATIBILITY = {
-  release: '0.2.2-rc.3',
-  developmentRelease: '0.2.2-rc.3',
-  peerRange: '0.2.2-rc.3',
-  supportedReleases: ['0.2.2-rc.3'],
+  release: '0.2.2-rc.5',
+  developmentRelease: '0.2.2-rc.5',
+  peerRange: '0.2.2-rc.5',
+  supportedReleases: ['0.2.2-rc.5'],
   requiredApis: [
     'agentDefaultModel.currentSelection',
     'authorization.describe',

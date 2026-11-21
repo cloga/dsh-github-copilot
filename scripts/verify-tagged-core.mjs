@@ -19,10 +19,12 @@ export const TAGGED_CORE_RELEASES = Object.freeze({
   '0.2.1-alpha.5': '1517a4dbca0a2789ff1d41ba439600f8547d23fa',
   '0.2.1-rc.3': '1f81c047fc48fa190a683e469daa699857e9afe8',
   '0.2.2-rc.3': '38a6a5c965aa99ab525161efb7cc5cf1fe62fced',
+  '0.2.2-rc.5': '9c2670d3bce5275e0d1610272958121af87787bb',
 })
 const tests = ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts',
   'tests/search-routing.spec.ts', 'tests/routed-web.spec.ts', 'tests/deepseek-search-fallback.spec.ts']
 function runtimeTests(release) {
+  if (release === '0.2.2-rc.5') return [...runtimeTests('0.2.2-rc.3'), 'tests/native-copilot-search.spec.ts']
   if (release === '0.2.2-rc.3') return [...runtimeTests('0.2.1-rc.3'),
     'tests/native-web-composition.spec.ts', 'tests/dual-model-host.spec.ts',
     'tests/loader-composition.spec.ts',
@@ -132,7 +134,7 @@ export async function taggedCoreAliases(core, trackedPaths, release) {
 /** Keep the renderer, its external CJS selector shim and ReactDOM on one installed React. */
 export function taggedRendererRuntimeAliases(packages, release) {
   if (!release.startsWith('0.1.6-') && !release.startsWith('0.2.0-')
-    && !['0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3'].includes(release)) return []
+    && !['0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3', '0.2.2-rc.5'].includes(release)) return []
   const renderer = packages.find(item => item.name === '@deepseek-ai/dsh-client-ui-renderer')
   if (renderer === undefined) throw new Error('tagged selector fixture lacks the public renderer package')
   const require = createRequire(renderer.manifestPath)
@@ -167,7 +169,7 @@ export async function prepareTaggedCoreFixture({ root, core, target, release, na
   await physicalDirectory(dirname(scratch))
   if (await exists(scratch)) throw new Error('tagged fixture target already exists')
   const plugin = JSON.parse(await readFile(join(pluginRoot, 'package.json'), 'utf8'))
-  const piAi = release === '0.2.2-rc.3' ? '1.3.0'
+  const piAi = ['0.2.2-rc.3', '0.2.2-rc.5'].includes(release) ? '1.3.0'
     : release === '0.2.1-alpha.5' || release === '0.2.1-rc.3' ? '1.1.0' : '0.87.1'
   if (plugin.name !== 'dsh-github-copilot' || plugin.dependencies?.['@earendil-works/pi-ai'] !== piAi) throw new Error(`tagged fixture requires the plugin own pi-ai ${piAi}`)
   const commit = git(coreRoot, ['rev-parse', '--verify', 'HEAD']).trim()
@@ -177,7 +179,7 @@ export async function prepareTaggedCoreFixture({ root, core, target, release, na
   if (!tracked.includes('vitest.shared.ts')) throw new Error('tagged Core standard decorator test helper is missing')
   const inventory = await taggedCoreAliases(coreRoot, tracked, release)
   if (nativeAddon !== undefined) {
-    if (release !== '0.2.2-rc.3') throw new Error('native addon fixture is only supported for rc.3')
+    if (!['0.2.2-rc.3', '0.2.2-rc.5'].includes(release)) throw new Error('native addon fixture is only supported for the 0.2.2 rc.3 and rc.5 baselines')
     const addonRoot = await physicalDirectory(nativeAddon)
     if (inside(pluginRoot, addonRoot) || inside(coreRoot, addonRoot)) throw new Error('native addon fixture must be outside both source trees')
     const requireAddon = createRequire(join(addonRoot, 'package.json'))

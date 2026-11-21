@@ -43,7 +43,7 @@ function response(tool: boolean) {
 
 it('preserves frozen native requests and conditional tool execution while adapting managed wire schemas', async () => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
-  expect(process.env.DSH_PUBLISHED_CORE_RELEASE).toBe('0.2.2-rc.3')
+  expect(['0.2.2-rc.3', '0.2.2-rc.5']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
   const ctx = new Context()
   contexts.push(ctx)
   const wire: Array<{ tools?: Array<{ name: string; parameters: { properties?: Record<string, unknown> } }> }> = []

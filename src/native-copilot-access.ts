@@ -4,6 +4,7 @@ import type {} from '@deepseek-ai/dsh-app-boot'
 import type {} from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-settings'
 import { pathToFileURL } from 'node:url'
+import { DSH_COMPATIBILITY } from './compatibility.ts'
 
 const NATIVE = '@deepseek-ai/dsh-llm-pi-ai'
 const PI = '@earendil-works/pi-ai'
@@ -160,7 +161,7 @@ export async function captureNativeCopilotCatalog(
   if (!fiber || fiber.uid === null || entry.options.name !== NATIVE || !base) return unproven('COPILOT_NATIVE_FIBER_UNPROVEN')
   const owner = packages.packageOf(NATIVE, base)
   const importedOwner = packages.packageOf(NATIVE, import.meta.url)
-  if (owner?.version !== '0.2.2-rc.3' || owner.manifestPath !== importedOwner?.manifestPath) return unproven('COPILOT_NATIVE_PACKAGE_UNPROVEN')
+  if (owner?.version !== DSH_COMPATIBILITY.release || owner.manifestPath !== importedOwner?.manifestPath) return unproven('COPILOT_NATIVE_PACKAGE_UNPROVEN')
   const nativePi = packages.packageOf(PI, pathToFileURL(owner.manifestPath).href)
   const localPi = packages.packageOf(PI, import.meta.url)
   if (nativePi?.name !== PI || nativePi.version !== '1.3.0'
@@ -207,8 +208,8 @@ export async function captureNativeCopilotCatalog(
     return fiber.uid !== null && entry.fiber?.ctx.fiber === fiber
       && fiber.runtime?.callback === module.apply && entry.options.name === NATIVE
       && currentSettings.describe({ redactSecrets: true }).find(value => value.ns === directory.settingsNs)?.revision === captured.revision
-      && nativeOwner?.manifestPath === ownerPath && nativeOwner.version === '0.2.2-rc.3'
-      && importedOwner?.manifestPath === ownerPath && importedOwner.version === '0.2.2-rc.3'
+      && nativeOwner?.manifestPath === ownerPath && nativeOwner.version === DSH_COMPATIBILITY.release
+      && importedOwner?.manifestPath === ownerPath && importedOwner.version === DSH_COMPATIBILITY.release
       && nativeCatalog?.manifestPath === nativePiPath && nativeCatalog.version === '1.3.0'
       && pluginCatalog?.manifestPath === localPiPath && pluginCatalog.version === '1.3.0'
       && currentLlm.listProviders().some(value => value.id === NATIVE_COPILOT)

@@ -122,9 +122,9 @@ test('pins rc.3 source and framework artifacts without widening other compatibil
 }))
 
 test('requires the current candidate pi-ai and framework versions without substituting them', async () => withSource(async ({ root, target, manifest }) => {
-  const release = '0.2.2-rc.3'
+  const release = '0.2.2-rc.5'
   assert.deepEqual(CANDIDATE_CORE_RELEASES[release], {
-    commit: '38a6a5c965aa99ab525161efb7cc5cf1fe62fced', piAi: '1.3.0',
+    commit: '9c2670d3bce5275e0d1610272958121af87787bb', piAi: '1.3.0',
     cordis: '4.1.0', loader: '1.1.0', schemastery: '3.19.0', zod: '4.6.6',
   })
   await assert.rejects(preparePublishedCoreFixture({ root, target, release, candidate: true }), /exact own pi-ai 1\.3\.0/)

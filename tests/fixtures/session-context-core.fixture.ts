@@ -40,12 +40,12 @@ const managedPending: MigrationSelection = {
 }
 const defaultC: MigrationSelection = { provider: 'fixture-default', model: 'fixture-C' }
 const contexts: Context[] = []
-const expectedSessionFormatVersion = ['0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '') ? 4 : 3
+const expectedSessionFormatVersion = ['0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3', '0.2.2-rc.5'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '') ? 4 : 3
 
 beforeAll(() => {
   // Fail rather than silently substitute the installed peer or another baseline.
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
-  expect(['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3'])
+  expect(['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3', '0.2.2-rc.5'])
     .toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
   expect(SESSION_FORMAT_VERSION).toBe(expectedSessionFormatVersion)
 })
@@ -84,7 +84,7 @@ async function fixture({ mountController = true } = {}) {
   await ctx.plugin(SessionStore)
   const agents = new AgentRegistry(ctx)
   const created = new Set<string>()
-  if (['0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '')) {
+  if (['0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3', '0.2.2-rc.5'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '')) {
     Reflect.apply(ctx.on, ctx, ['agent/created', async (payload: {
       agent: Agent
       source: string
@@ -95,7 +95,7 @@ async function fixture({ mountController = true } = {}) {
     }])
   }
   const projections = new SessionProjectionRegistry(ctx)
-  if (mountController && process.env.DSH_PUBLISHED_CORE_RELEASE === '0.2.2-rc.3') {
+  if (mountController && ['0.2.2-rc.3', '0.2.2-rc.5'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '')) {
     await projections.register(modelSelectionProjectionDefinition)
   }
   let selectedDefault = defaultC
@@ -129,7 +129,7 @@ async function fixture({ mountController = true } = {}) {
     getView: forbidden, ensureModels: forbidden, routeFacts: forbidden,
   })
 
-  // The rc.3 Agent owns the exported selection projection; older controllers install theirs.
+  // The current Agent owns the exported selection projection; older controllers install theirs.
   // Optional UI/file/skill plugins remain dependency-gated in this isolated ctx.
   const controller = mountController ? new SessionController(ctx, { nativeOpen: false }, {
     canOpenPath: () => false, openPath: forbidden,
@@ -146,7 +146,7 @@ async function fixture({ mountController = true } = {}) {
     // public id/session/status/ctx leaves are used by registration and these reads.
     const agent = shell as Agent
     await agents.register(agent)
-    if (['0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '')) {
+    if (['0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3', '0.2.2-rc.5'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '')) {
       expect(created.has(agent.id)).toBe(true)
     }
     shells.push(shell)
@@ -470,7 +470,7 @@ describe('tagged Core public Session context (actual controller projection)', ()
     expect(header?.adapterDefaults).toEqual({ reasoningEffort: true })
     expect(Object.isFrozen(header)).toBe(true)
     expect(Object.isFrozen(header?.config)).toBe(true)
-    const lastUsed = process.env.DSH_PUBLISHED_CORE_RELEASE === '0.2.2-rc.3'
+    const lastUsed = ['0.2.2-rc.3', '0.2.2-rc.5'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '')
       ? { provider: nativeA.provider, model: nativeA.model } : nativeA
     expect(f.projections.stateOf(a.session, 'modelSelection')).toEqual({ lastUsed, pending: null })
     expect(f.observe().sessions).toEqual([

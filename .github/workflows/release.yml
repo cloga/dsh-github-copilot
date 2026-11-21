@@ -64,7 +64,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           repository: deepseek-ai/deepseek-harness
-          ref: 38a6a5c965aa99ab525161efb7cc5cf1fe62fced
+          ref: 9c2670d3bce5275e0d1610272958121af87787bb
           path: dsh-upstream
           persist-credentials: false
       - uses: pnpm/action-setup@v6
@@ -78,7 +78,7 @@ jobs:
           test "$(pnpm config get minimumReleaseAge)" = 0
           test "$(cd dsh-upstream && pnpm config get minimumReleaseAge)" = 0
       - run: pnpm install --frozen-lockfile
-      - name: Install rc.3 Core pi-ai closure
+      - name: Install pinned Core pi-ai closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-llm-pi-ai...'
       - run: pnpm verify:upstream -- dsh-upstream
@@ -86,7 +86,7 @@ jobs:
       - name: Install tagged Session and Remote verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-api-session-controller...'
-      - name: Install rc.3 compaction recovery verification closure
+      - name: Install pinned compaction recovery verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-agent-loop...' --filter '@deepseek-ai/dsh-compaction-basic...'
       - name: Install native Auto reviewer verification closure
@@ -98,13 +98,13 @@ jobs:
       - name: Install isolated preset compaction verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-agent-preset-registry...' --filter '@deepseek-ai/cordis-plugin-group...'
-      - name: Install rc.3 subagent descriptor verification closure
+      - name: Install pinned subagent descriptor verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-subagent...'
       - name: Install native subagent model invocation verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-agent-loop-testkit...' --filter '@deepseek-ai/dsh-tool-subagent...' --filter '@deepseek-ai/dsh-subagent-spawn-in-process...' --filter '@deepseek-ai/dsh-session-persistence-jsonl...'
-      - name: Install rc.3 image-offload verification closure
+      - name: Install pinned image-offload verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-compaction-image-offload...'
       - name: Install tagged search verification closure
@@ -127,7 +127,7 @@ jobs:
       - name: Verify current unchanged tagged runtime before packing
         shell: bash
         run: |
-          node scripts/verify-tagged-core.mjs prepare --root . --core dsh-upstream --target "$RUNNER_TEMP/copilot-tagged-release" --release 0.2.2-rc.3 --native-addon "$RUNNER_TEMP/copilot-native-addon"
+          node scripts/verify-tagged-core.mjs prepare --root . --core dsh-upstream --target "$RUNNER_TEMP/copilot-tagged-release" --release 0.2.2-rc.5 --native-addon "$RUNNER_TEMP/copilot-native-addon"
           node node_modules/vitest/vitest.mjs run --config "$RUNNER_TEMP/copilot-tagged-release/vitest.config.mts"
       - name: Verify plugin package
         run: pnpm verify

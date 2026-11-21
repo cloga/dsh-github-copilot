@@ -161,11 +161,12 @@ it('applies confirmed account switches to native credentials and retains the nat
       sessionId: SessionId(nativeAgent.session.id), purpose: 'auto-review', messages: [] }))) {}
     expect(ctx.get('githubCopilotSessionAccounts')?.turns.evidence(nativeAgent.session, 1)).toBeUndefined()
     if (process.env.DSH_CORE_EVIDENCE === 'published-artifact-runtime') {
-      expect(process.env.DSH_PUBLISHED_CORE_RELEASE).toBe('0.2.2-rc.3')
+      const release = process.env.DSH_PUBLISHED_CORE_RELEASE
+      expect(['0.2.2-rc.3', '0.2.2-rc.5']).toContain(release)
       const require = createRequire(import.meta.url)
       const manifest = realpathSync(require.resolve('@deepseek-ai/dsh-llm/package.json'))
       expect(JSON.parse(readFileSync(manifest, 'utf8'))).toMatchObject({
-        name: '@deepseek-ai/dsh-llm', version: '0.2.2-rc.3',
+        name: '@deepseek-ai/dsh-llm', version: release,
       })
       const packageRoot = dirname(manifest)
       markerFixture = mkdtempSync(join(tmpdir(), 'copilot-llm-marker-'))

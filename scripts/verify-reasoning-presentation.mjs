@@ -23,6 +23,7 @@ const supported = new Set([
   '1517a4dbca0a2789ff1d41ba439600f8547d23fa',
   '1f81c047fc48fa190a683e469daa699857e9afe8',
   '38a6a5c965aa99ab525161efb7cc5cf1fe62fced',
+  '9c2670d3bce5275e0d1610272958121af87787bb',
 ])
 const gitOptions = { cwd: core, encoding: 'utf8', timeout: 15000 }
 const commit = execFileSync('git', ['rev-parse', '--verify', 'HEAD'], gitOptions).trim()

@@ -5,6 +5,12 @@ release tags do not update this file after publication. Check the exact
 [GitHub Release](https://github.com/cloga/dsh-github-copilot/releases) and npm
 version separately rather than treating an old `prepared` label as current status.
 
+## 0.1.0-alpha.1.dsh.0.2.2.rc.5 (prepared)
+
+- Target the exact official DSH rc.5 source and published package graph with native adapter and reviewer ownership checks.
+- Preserve rc.5's native route-specific Web search preference and explicit Copilot backend selection; add synthetic regressions for both.
+- The signed Windows nightly Desktop mirror is separate from pending plugin qualification, publication, installation, and live runtime acceptance.
+
 ## 0.1.0-alpha.22.dsh.0.2.2.rc.3 (prepared)
 
 - Fill missing native Copilot IDE request headers for ID-only models through the public header hook, using published provider values rather than a static model list (#512).

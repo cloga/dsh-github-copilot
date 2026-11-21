@@ -44,11 +44,15 @@ The plugin does not inspect or enforce the user's DeepSeek account status.
 
 ## Compatibility status
 
-This line targets official DSH `0.2.2-rc.3`. A source checkout or pending
+This line targets official DSH `0.2.2-rc.5`. A source checkout or pending
 mapping is not proof of qualification or publication. Before installing,
 confirm that the exact version has passed the required gates and its Release
 and npm artifacts are available. Published, installed, and loaded states are
 distinct.
+
+The [Windows nightly Desktop mirror](https://github.com/cloga/dsh-github-copilot/releases/tag/desktop-v0.2.2-rc.5)
+contains the unmodified official installer with verified hash and signature.
+It does not establish plugin compatibility, installation, or runtime loading.
 
 Plugin `0.1.0-alpha.14.dsh.0.2.2.rc.3` passed the Windows/Linux source and
 published-artifact [CI](https://github.com/cloga/dsh-github-copilot/actions/runs/43691055529)
@@ -59,7 +63,7 @@ Use the read-only exact-Core selector from a verified source checkout to check
 the release mapping:
 
 ```sh
-node scripts/select-core-release.mjs 0.2.2-rc.3
+node scripts/select-core-release.mjs 0.2.2-rc.5
 ```
 
 The selector checks Release/npm metadata and named assets; it does not run CI,
@@ -73,15 +77,15 @@ After the exact compatible release is available and verified, download its
 original asset and checksum in an empty directory:
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.22.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.22.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.22.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1.dsh.0.2.2.rc.5/dsh-github-copilot-0.1.0-alpha.1.dsh.0.2.2.rc.5.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1.dsh.0.2.2.rc.5/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 For the `web` profile, install the same Release asset:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.22.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.22.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1.dsh.0.2.2.rc.5/dsh-github-copilot-0.1.0-alpha.1.dsh.0.2.2.rc.5.tgz
 ```
 
 Choose the intended profile explicitly. Then:
@@ -167,6 +171,11 @@ native provider's settings.
 The plugin registers optional `github-copilot-hosted` search in DSH's existing
 Web service. Select it explicitly in native Web settings and enable the native
 search tool as needed; installation does not change the selected backend.
+Without an explicit backend, DSH rc.5 applies its own model-route search
+preference; the optional Copilot backend does not participate in that choice.
+DSH may omit `web_search` from a model step when the selected backend reports
+that it cannot authenticate. Backend selection errors remain native errors;
+the plugin does not silently select another backend.
 Search uses only the canonical OAuth account and models shared by the native
 configured catalog and current account metadata. In **Plugins → dsh-github-copilot
 → details → Copilot search model**, choose **Automatic** (the default) or one

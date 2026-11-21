@@ -88,7 +88,7 @@ does not bypass tool approvals, plugin-only ownership, required reviews or CI.
 
 ### Confirmed product scope (#455, #456)
 
-Current source target: official DSH `0.2.2-rc.3`. The exact source commit and
+Current source target: official DSH `0.2.2-rc.5`. The exact source commit and
 dependency versions are recorded in `deployment-baseline.json` and `package.json`.
 
 The native enhancement request (#460/#461) adds only reviewer-scoped Responses
@@ -149,7 +149,7 @@ from live supplier acceptance.
 The user-confirmed direction on 2026-11-14 supersedes conflicting legacy feature
 requirements below: this plugin is a lightweight GitHub Copilot model integration
 for DSH Desktop, not a second agent product. The qualification target is the exact
-official DSH `0.2.2-rc.3` source and published package graph. Each new revision
+official DSH `0.2.2-rc.5` source and published package graph. Each new revision
 requires its own CI and release evidence; a previous release does not qualify it.
 
 DSH owns application login, AgentLoop, model selection, Auto, parent-model
@@ -205,9 +205,12 @@ at `5d82df760683eeae7bb0413c946e4d25daef2049` passed the Windows/Linux
 source/artifact CI in [run 43691055529](https://github.com/cloga/dsh-github-copilot/actions/runs/43691055529)
 and was published to GitHub Releases and npm. This evidence is limited to that
 revision; later changes require their own CI and publication evidence.
-Desktop signatures, installation, loaded state, OAuth and supplier calls are not
-established. The `desktopCandidateQualified: false` contract
-tracks the unverified Desktop artifact/live-acceptance layer, not a failed CI.
+That CI did not establish Desktop signatures, installation, loaded state,
+OAuth or supplier calls. The independent signed rc.5 Windows nightly mirror
+and its extracted shared-package descriptor provide artifact and advertised
+peer evidence only, not installation or runtime acceptance. The
+`desktopCandidateQualified: false` contract tracks the remaining Desktop
+artifact/live-acceptance layer, not a failed CI.
 Earlier pins are historical evidence, not current support gates. A prerelease
 is not a production Core upgrade recommendation. DSH's built-in `llm-pi-ai`
 owns the canonical GitHub Copilot provider, OAuth, grant format, token exchange,
@@ -486,7 +489,8 @@ The retained upstream baselines and current qualification target are:
 - Official tag `dsh-v0.2.1-alpha.4`, commit `86a402200d95fecef4529d969836f1fe13c6cb0d`; historical alpha.16 source/npm qualification only.
 - Official tag `dsh-v0.2.1-alpha.5`, commit `1517a4dbca0a2789ff1d41ba439600f8547d23fa`; exact source/npm qualification is separate from unverified candidate Desktop artifacts/signatures.
 - Official tag `dsh-v0.2.1-rc.3`, commit `1f81c047fc48fa190a683e469daa699857e9afe8`; historical prerelease with a public `WebRuntime` Volatile-provider contract change.
-- Official tag `dsh-v0.2.2-rc.3`, commit `38a6a5c965aa99ab525161efb7cc5cf1fe62fced`; current source and published-package qualification target.
+- Official tag `dsh-v0.2.2-rc.3`, commit `38a6a5c965aa99ab525161efb7cc5cf1fe62fced`; historical source and published-package qualification target.
+- Official tag `dsh-v0.2.2-rc.5`, commit `9c2670d3bce5275e0d1610272958121af87787bb`; current source and published-package qualification target.
 
 Release admission, development dependencies and CI target the exact current
 Core in `package.json`; prior pins are historical. The exact pi-ai,

@@ -47,7 +47,7 @@ test('current user guides retain task-oriented entry points and qualification li
   for (const path of ['README.md', 'README.zh.md']) {
     const text = await doc(path)
     assert.ok(text.includes(pkg.version), path)
-    for (const marker of ['0.2.2-rc.3', '--profile web', 'scripts/select-core-release.mjs',
+    for (const marker of [pkg.engines.dsh, '--profile web', 'scripts/select-core-release.mjs',
       'scripts/check-search-composition.mjs', './docs/model-compatibility-acceptance.md',
       './docs/copilot-accounts.md']) assert.ok(text.includes(marker), `${path}: ${marker}`)
   }
@@ -99,9 +99,10 @@ test('historical screenshot provenance covers every packaged capture', async () 
 })
 
 test('README contracts stay bilingual and keep native ownership explicit', async () => {
+  const pkg = JSON.parse(await doc('package.json'))
   const texts = await Promise.all(['README.md', 'README.zh.md'].map(doc))
   for (const text of texts) {
-    for (const marker of ['0.2.2-rc.3', 'HydraFusion', 'Auto', 'Usage',
+    for (const marker of [pkg.engines.dsh, 'HydraFusion', 'Auto', 'Usage',
       './docs/npm-distribution.md', './docs/model-compatibility-acceptance.md'])
       assert.ok(text.includes(marker), marker)
     assert.doesNotMatch(text, /prepared.*0\.4\.0-alpha\.130|0\.4\.0-alpha\.88/i)

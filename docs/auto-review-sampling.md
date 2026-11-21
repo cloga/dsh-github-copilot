@@ -1,6 +1,6 @@
 # Native Auto reviewer sampling compatibility
 
-## Canonical native route (DSH 0.2.2-rc.3)
+## Canonical native route (DSH 0.2.2-rc.5)
 
 The same reviewer-only policy also covers `github-copilot` when the public
 Loader root, native adapter package callback, configurable-provider directory,
@@ -94,7 +94,7 @@ Unqualified canonical Copilot, other providers/protocols, aliases, descendants,
 impostor callbacks and unresolved identity remain native. Unqualified reviewer
 identity reports bounded fixed-code Host diagnostics, not a broad omission
 fallback. Missing optional reviewer packages do not prevent ordinary startup.
-The `0.2.2-rc.3` candidate remains subject to its exact-source and
+The `0.2.2-rc.5` candidate remains subject to its exact-source and
 published-artifact qualification; future versions also require qualification.
 
 The independent legacy `responsesOmitTemperature` setting remains default false.

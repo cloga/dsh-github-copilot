@@ -36,9 +36,12 @@ GitHub Copilot 模型。插件不会读取或强制检查用户的 DeepSeek 账�
 
 ## 兼容状态
 
-当前版本线的目标是官方 DSH `0.2.2-rc.3`。源码 checkout 或待发布的版本映射
+当前版本线的目标是官方 DSH `0.2.2-rc.5`。源码 checkout 或待发布的版本映射
 不能证明资格验证或发布已完成。安装前请确认精确版本已通过必要门禁，且
 Release 与 npm 制品均已发布。已发布、已安装、已加载是不同状态。
+
+[Windows nightly Desktop 镜像](https://github.com/cloga/dsh-github-copilot/releases/tag/desktop-v0.2.2-rc.5)
+保留官方安装包原始字节，已验证哈希和签名；这不代表插件已兼容、安装或加载。
 
 插件 `0.1.0-alpha.14.dsh.0.2.2.rc.3` 已通过 Windows/Linux 源码及已发布制品
 [CI](https://github.com/cloga/dsh-github-copilot/actions/runs/43691055529)，
@@ -48,7 +51,7 @@ Release 与 npm 制品均已发布。已发布、已安装、已加载是不同�
 可在经过验证的源码 checkout 中，用只读的精确 Core 选择器检查发布映射：
 
 ```sh
-node scripts/select-core-release.mjs 0.2.2-rc.3
+node scripts/select-core-release.mjs 0.2.2-rc.5
 ```
 
 选择器只检查 Release／npm 元数据和指定资产；不会运行 CI、校验下载字节，
@@ -61,15 +64,15 @@ node scripts/select-core-release.mjs 0.2.2-rc.3
 精确兼容版本发布且通过验证后，在空目录下载原始制品并校验：
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.22.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.22.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.22.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1.dsh.0.2.2.rc.5/dsh-github-copilot-0.1.0-alpha.1.dsh.0.2.2.rc.5.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1.dsh.0.2.2.rc.5/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 例如安装到 `web` profile：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.22.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.22.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1.dsh.0.2.2.rc.5/dsh-github-copilot-0.1.0-alpha.1.dsh.0.2.2.rc.5.tgz
 ```
 
 请明确选择目标 profile，然后：
@@ -130,6 +133,10 @@ API 变更会在同一次 Settings CAS 中写入并分别读回。原生校验�
 启动插件或完成登录时，不会自动修复原生 provider 设置。
 插件在 DSH 现有 Web 服务中注册可选的 `github-copilot-hosted` 搜索后端。
 请在原生 Web 设置中明确选择，并按需启用原生搜索工具；安装不会改变默认后端。
+未明确选择后端时，DSH rc.5 按自身的模型路线规则选择搜索后端；
+可选的 Copilot 搜索不会参与该默认选择。
+如果所选后端报告无法认证，DSH 可能不会在当前模型步骤提供 `web_search`。
+后端选择错误仍由原生服务报告；插件不会静默切换后端。
 搜索只使用 canonical OAuth 账号，以及原生配置目录与当前账号元数据共同支持的模型。
 在 **插件 → dsh-github-copilot → 详情 → Copilot search model** 中可选择“Automatic”（默认）
 或指定一个符合条件的模型。打开或重新加载此控件会获取账号模型元数据，可能刷新原生 OAuth；
