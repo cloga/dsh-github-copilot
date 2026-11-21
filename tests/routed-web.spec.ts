@@ -298,8 +298,12 @@ describe('plugin-owned web facade with the real official consumer', () => {
     const [a, b] = await Promise.all([h.run(h.a, { queries: ['A'] }), h.run(h.b, { queries: ['B'] })])
     expect(a.isError).toBe(false)
     expect(b.isError).toBe(false)
-    expect(h.copilot.search).toHaveBeenCalledExactlyOnceWith({ query: 'A', maxResults: 2 }, expect.any(AbortSignal))
-    expect(h.search).toHaveBeenCalledExactlyOnceWith({ query: 'B', maxResults: 2 }, expect.any(AbortSignal))
+    expect(h.copilot.search).toHaveBeenCalledExactlyOnceWith({
+      query: 'A', maxResults: 2, llmProvider: 'github-copilot',
+    }, expect.any(AbortSignal))
+    expect(h.search).toHaveBeenCalledExactlyOnceWith({
+      query: 'B', maxResults: 2, llmProvider: 'deepseek-official',
+    }, expect.any(AbortSignal))
     await h.ctx.get('web')!.fetch({ url: 'https://example.com' })
     expect(h.fetch).toHaveBeenCalledOnce()
   })
